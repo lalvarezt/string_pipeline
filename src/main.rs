@@ -768,5 +768,43 @@ mod tests {
             "foo:bar:baz"
         );
     }
+
+    #[test]
+    fn test_empty_operations() {
+        // Empty template should be handled
+        assert!(process("test", "{}").is_ok());
+    }
+
+    #[test]
+    fn test_invalid_range_edge_cases() {
+        // Test what happens with very large indices
+        assert_eq!(process("a,b,c", "{split:,:100}").unwrap(), "c");
+        // Test empty range
+        assert_eq!(process("a,b,c", "{split:,:3..1}").unwrap(), "");
+    }
+
+    #[test]
+    fn test_join_without_prior_split() {
+        // What happens when you join a string?
+        assert_eq!(process("hello", "{join:-}").unwrap(), "hello");
+    }
+
+    #[test]
+    fn test_strip_empty_chars() {
+        // Edge case: strip with empty character set
+        assert_eq!(process("hello", "{strip:}").unwrap(), "hello");
+    }
+
+    #[test]
+    fn test_invalid_regex() {
+        // Should handle invalid regex gracefully
+        assert!(process("test", "{replace:s/[/replacement/}").is_err());
+    }
+
+    #[test]
+    fn test_slice_empty_string() {
+        assert_eq!(process("", "{slice:0}").unwrap(), "");
+        assert_eq!(process("", "{slice:-1}").unwrap(), "");
+    }
 }
 
