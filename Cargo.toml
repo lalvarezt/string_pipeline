@@ -1,8 +1,8 @@
 [package]
 name = "string_processor"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
-description = "POC for television template parser"
+description = "String Template Processor"
 license = "MIT"
 
 [dependencies]
