@@ -314,6 +314,42 @@ fn apply_range<T: Clone>(items: &[T], range: &RangeSpec) -> Vec<T> {
     }
 }
 
+/// Unescape \n, \t, \r, in argument strings
+fn unescape(s: &str) -> String {
+    let mut out = String::new();
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            match chars.peek() {
+                Some('n') => {
+                    out.push('\n');
+                    chars.next();
+                }
+                Some('t') => {
+                    out.push('\t');
+                    chars.next();
+                }
+                Some('r') => {
+                    out.push('\r');
+                    chars.next();
+                }
+                Some(&next) => {
+                    // Leave as-is: keep the backslash and the next char
+                    out.push('\\');
+                    out.push(next);
+                    chars.next();
+                }
+                None => {
+                    out.push('\\');
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 fn apply_ops(input: &str, ops: &[StringOp]) -> Result<String, String> {
     let mut val = Value::Str(input.to_string());
     let mut last_split_sep: Option<String> = None;
@@ -351,7 +387,7 @@ fn apply_ops(input: &str, ops: &[StringOp]) -> Result<String, String> {
             },
             StringOp::Join { sep } => match &val {
                 Value::List(list) => {
-                    val = Value::Str(list.join(sep));
+                    val = Value::Str(list.join(&unescape(sep)));
                 }
                 Value::Str(s) => {
                     val = Value::Str(s.clone());
@@ -463,7 +499,7 @@ fn main() {
     let input = match cli.input {
         Some(input) => input,
         None => match read_stdin() {
-            Ok(input) => input,
+            Ok(input) => input.trim_end().to_string(),
             Err(e) => {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
@@ -483,6 +519,12 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_join_newline() {
+        let input = "a,b,c";
+        assert_eq!(process(input, r"{split:,:..:join:\\n}").unwrap(), "a\nb\nc");
+    }
 
     #[test]
     fn test_split_index() {
@@ -921,4 +963,3 @@ mod tests {
         );
     }
 }
-
