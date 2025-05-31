@@ -1,12 +1,13 @@
 use clap::Parser;
 use regex::Regex;
+use std::io::{self, Read};
 
 #[derive(Parser)]
 struct Cli {
-    /// The input string
-    input: String,
     /// The template string
     template: String,
+    /// The input string (if not provided, reads from stdin)
+    input: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -447,9 +448,30 @@ fn process(input: &str, template: &str) -> Result<String, String> {
     apply_ops(input, &ops)
 }
 
+fn read_stdin() -> Result<String, String> {
+    let mut buffer = String::new();
+    io::stdin()
+        .read_to_string(&mut buffer)
+        .map_err(|e| format!("Failed to read from stdin: {}", e))?;
+    Ok(buffer)
+}
+
 fn main() {
     let cli = Cli::parse();
-    match process(&cli.input, &cli.template) {
+
+    // Get input from argument or stdin
+    let input = match cli.input {
+        Some(input) => input,
+        None => match read_stdin() {
+            Ok(input) => input,
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        },
+    };
+
+    match process(&input, &cli.template) {
         Ok(result) => println!("{}", result),
         Err(e) => {
             eprintln!("Error: {}", e);
