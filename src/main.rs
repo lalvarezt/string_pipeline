@@ -282,8 +282,12 @@ fn apply_range<T: Clone>(items: &[T], range: &RangeSpec) -> Vec<T> {
     let len = items.len();
     match range {
         RangeSpec::Index(idx) => {
+            // Handle empty collections
+            if len == 0 {
+                return vec![];
+            }
             let mut i = resolve_index(*idx, len);
-            if i >= len && len > 0 {
+            if i >= len {
                 i = len - 1;
             }
             items.get(i).cloned().map_or(vec![], |v| vec![v])
@@ -429,6 +433,9 @@ fn apply_ops(input: &str, ops: &[StringOp]) -> Result<String, String> {
             },
         }
     }
+
+    // Note: If the final value is a List, we join using the last split separator
+    // or a space if no split operation was performed
     Ok(match val {
         Value::Str(s) => s,
         Value::List(list) => list.join(last_split_sep.as_deref().unwrap_or(" ")),
@@ -769,18 +776,21 @@ mod tests {
         );
     }
 
+    // New edge case tests
     #[test]
     fn test_empty_operations() {
-        // Empty template should be handled
-        assert!(process("test", "{}").is_ok());
+        // Empty template should return the input as-is
+        assert_eq!(process("test", "{}").unwrap(), "test");
     }
 
     #[test]
     fn test_invalid_range_edge_cases() {
         // Test what happens with very large indices
         assert_eq!(process("a,b,c", "{split:,:100}").unwrap(), "c");
-        // Test empty range
+        // Test empty range (start > end)
         assert_eq!(process("a,b,c", "{split:,:3..1}").unwrap(), "");
+        // Test range that starts beyond bounds
+        assert_eq!(process("a,b,c", "{split:,:10..20}").unwrap(), "");
     }
 
     #[test]
@@ -796,15 +806,97 @@ mod tests {
     }
 
     #[test]
-    fn test_invalid_regex() {
-        // Should handle invalid regex gracefully
-        assert!(process("test", "{replace:s/[/replacement/}").is_err());
-    }
-
-    #[test]
     fn test_slice_empty_string() {
         assert_eq!(process("", "{slice:0}").unwrap(), "");
         assert_eq!(process("", "{slice:-1}").unwrap(), "");
+        assert_eq!(process("", "{slice:1..3}").unwrap(), "");
+        assert_eq!(process("", "{slice:..}").unwrap(), "");
+    }
+
+    #[test]
+    fn test_slice_empty_list() {
+        // Split an empty string creates empty list
+        assert_eq!(process("", "{split:,:..:slice:0}").unwrap(), "");
+        assert_eq!(process("", "{split:,:..:slice:1..3}").unwrap(), "");
+    }
+
+    #[test]
+    fn test_invalid_regex() {
+        // Should handle invalid regex gracefully
+        assert!(process("test", "{replace:s/[/replacement/}").is_err());
+        assert!(process("test", "{replace:s/*/replacement/}").is_err());
+    }
+
+    #[test]
+    fn test_malformed_sed_strings() {
+        // Missing closing slash
+        assert!(process("test", "{replace:s/pattern/replacement}").is_err());
+        // No pattern
+        assert!(process("test", "{replace:s//replacement/}").is_err());
+        // Wrong format entirely
+        assert!(process("test", "{replace:pattern/replacement}").is_err());
+    }
+
+    #[test]
+    fn test_invalid_template_format() {
+        // Missing braces
+        assert!(process("test", "split:,:0").is_err());
+        // Missing opening brace
+        assert!(process("test", "split:,:0}").is_err());
+        // Missing closing brace
+        assert!(process("test", "{split:,:0").is_err());
+    }
+
+    #[test]
+    fn test_unknown_operation() {
+        assert!(process("test", "{unknown}").is_err());
+        assert!(process("test", "{badop:arg}").is_err());
+    }
+
+    #[test]
+    fn test_invalid_range_strings() {
+        // Invalid range formats
+        assert!(process("a,b,c", "{split:,:abc}").is_err());
+        assert!(process("a,b,c", "{split:,:1..abc}").is_err());
+        assert!(process("hello", "{slice:xyz}").is_err());
+    }
+
+    #[test]
+    fn test_large_indices_handling() {
+        let input = "a,b,c";
+        // Very large positive index should clamp to last element
+        assert_eq!(process(input, "{split:,:999999}").unwrap(), "c");
+        // Very large negative index should clamp to first element
+        assert_eq!(process(input, "{split:,:-999999}").unwrap(), "a");
+    }
+
+    #[test]
+    fn test_operations_on_empty_list() {
+        // Create empty list and apply operations
+        let input = "";
+        assert_eq!(process(input, "{split:,:..:upper}").unwrap(), "");
+        assert_eq!(process(input, "{split:,:..:lower}").unwrap(), "");
+        assert_eq!(process(input, "{split:,:..:trim}").unwrap(), "");
+        assert_eq!(process(input, "{split:,:..:append:!}").unwrap(), "!");
+        assert_eq!(process(input, "{split:,:..:prepend:_}").unwrap(), "_");
+    }
+
+    #[test]
+    fn test_final_output_behavior() {
+        // Test documented behavior: List joins with last split separator or space
+        let input = "a,b,c";
+
+        // With split operation - should use comma
+        assert_eq!(process(input, "{split:,:..:upper}").unwrap(), "A,B,C");
+
+        // Without split operation - should use space (no split occurred)
+        assert_eq!(process("hello world", "{upper}").unwrap(), "HELLO WORLD");
+
+        // Multiple splits - should use last split separator
+        assert_eq!(
+            process(input, "{split:,:..:join:-:split:-:..:upper}").unwrap(),
+            "A-B-C"
+        );
     }
 }
 
