@@ -1,7 +1,7 @@
 use pest::Parser;
 use pest_derive::Parser;
 
-use super::{RangeSpec, StringOp};
+use super::{RangeSpec, StringOp, unescape};
 
 #[derive(Parser)]
 #[grammar = "pipeline/template.pest"]
@@ -126,30 +126,4 @@ fn parse_range_spec(pair: pest::iterators::Pair<Rule>) -> Result<RangeSpec, Stri
         }
         _ => Err(format!("Unknown range spec: {:?}", inner.as_rule())),
     }
-}
-
-fn unescape(s: &str) -> String {
-    let mut out = String::new();
-    let mut chars = s.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c == '\\' {
-            match chars.next() {
-                Some('|') => out.push('|'),
-                Some(':') => out.push(':'),
-                Some('\\') => out.push('\\'),
-                Some('n') => out.push('\n'),
-                Some('t') => out.push('\t'),
-                Some('r') => out.push('\r'),
-                Some('/') => out.push('/'),
-                Some(next) => {
-                    out.push('\\');
-                    out.push(next);
-                }
-                None => out.push('\\'),
-            }
-        } else {
-            out.push(c);
-        }
-    }
-    out
 }

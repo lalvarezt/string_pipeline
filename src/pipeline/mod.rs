@@ -49,15 +49,20 @@ pub fn parse_template(template: &str) -> Result<Vec<StringOp>, String> {
 }
 
 fn resolve_index(idx: isize, len: usize) -> usize {
-    let len = len as isize;
-    let mut i = if idx < 0 { len + idx } else { idx };
-    if i < 0 {
-        i = 0;
+    if len == 0 {
+        return 0;
     }
-    if i > len {
-        i = len;
+
+    let len_i = len as isize;
+    let resolved = if idx < 0 { len_i + idx } else { idx };
+
+    if resolved < 0 {
+        0
+    } else if resolved > len_i {
+        len - 1
+    } else {
+        resolved as usize
     }
-    i as usize
 }
 
 fn apply_range<T: Clone>(items: &[T], range: &RangeSpec) -> Vec<T> {
@@ -128,14 +133,15 @@ fn unescape(s: &str) -> String {
                     out.push('/');
                     chars.next();
                 }
+                Some('|') => {
+                    out.push('|');
+                    chars.next();
+                }
                 Some(&next) => {
-                    // For any other escaped character, just output the character without the backslash
                     out.push(next);
                     chars.next();
                 }
-                None => {
-                    out.push('\\');
-                }
+                None => out.push('\\'),
             }
         } else {
             out.push(c);
@@ -146,7 +152,7 @@ fn unescape(s: &str) -> String {
 
 pub fn apply_ops(input: &str, ops: &[StringOp]) -> Result<String, String> {
     let mut val = Value::Str(input.to_string());
-    let mut last_split_sep: Option<String> = None;
+    let mut default_sep = " ".to_string(); // Clear default
     for op in ops {
         match op {
             StringOp::Split { sep, range } => {
@@ -157,7 +163,7 @@ pub fn apply_ops(input: &str, ops: &[StringOp]) -> Result<String, String> {
                         .flat_map(|s| s.split(sep).map(|s| s.to_string()))
                         .collect(),
                 };
-                last_split_sep = Some(sep.clone());
+                default_sep = sep.clone(); // Track for final output
                 let result = apply_range(&parts, range);
                 val = Value::List(result);
             }
@@ -188,7 +194,7 @@ pub fn apply_ops(input: &str, ops: &[StringOp]) -> Result<String, String> {
                         list.join(&unescaped_sep)
                     };
                     val = Value::Str(joined);
-                    last_split_sep = Some(unescaped_sep); // Keep track of the join separator
+                    default_sep = unescaped_sep.clone(); // Update default
                 }
                 Value::Str(s) => {
                     val = Value::Str(s.clone());
@@ -304,7 +310,7 @@ pub fn apply_ops(input: &str, ops: &[StringOp]) -> Result<String, String> {
                 Value::Str(s) => val = Value::Str(format!("{}{}", s, suffix)),
                 Value::List(list) => {
                     if list.is_empty() {
-                        val = Value::Str(suffix.clone());
+                        val = Value::List(vec![suffix.clone()]); // Create single-item list
                     } else {
                         val =
                             Value::List(list.iter().map(|s| format!("{}{}", s, suffix)).collect());
@@ -315,7 +321,7 @@ pub fn apply_ops(input: &str, ops: &[StringOp]) -> Result<String, String> {
                 Value::Str(s) => val = Value::Str(format!("{}{}", prefix, s)),
                 Value::List(list) => {
                     if list.is_empty() {
-                        val = Value::Str(prefix.clone());
+                        val = Value::List(vec![prefix.clone()]); // Create single-item list
                     } else {
                         val =
                             Value::List(list.iter().map(|s| format!("{}{}", prefix, s)).collect());
@@ -333,7 +339,7 @@ pub fn apply_ops(input: &str, ops: &[StringOp]) -> Result<String, String> {
             if list.is_empty() {
                 String::new()
             } else {
-                list.join(last_split_sep.as_deref().unwrap_or(" "))
+                list.join(&default_sep)
             }
         }
     })
@@ -828,5 +834,163 @@ mod tests {
         assert_eq!(process("word", "{..}").unwrap(), "word");
         assert_eq!(process("word", "{0..}").unwrap(), "word");
         assert_eq!(process("word", "{..1}").unwrap(), "word");
+    }
+
+    #[test]
+    fn test_empty_list_append_consistency() {
+        // Create empty list through split of empty string
+        let result = process("", "{split:,:..|append:!}").unwrap();
+        assert_eq!(result, "!");
+
+        // Create empty list through split with no matches
+        let result = process("abc", "{split:xyz:..|append:!}").unwrap();
+        assert_eq!(result, "abc!");
+    }
+
+    #[test]
+    fn test_empty_list_prepend_consistency() {
+        // Create empty list through split of empty string
+        let result = process("", "{split:,:..|prepend:!}").unwrap();
+        assert_eq!(result, "!");
+
+        // Create empty list through split with no matches
+        let result = process("abc", "{split:xyz:..|prepend:!}").unwrap();
+        assert_eq!(result, "!abc");
+    }
+
+    #[test]
+    fn test_empty_list_vs_other_operations_consistency() {
+        // Test how other operations handle empty lists for comparison
+
+        // Upper on empty list
+        let upper_result = process("", "{split:,:..|upper}").unwrap();
+        assert_eq!(upper_result, ""); // Consistent: empty string
+
+        // Lower on empty list
+        let lower_result = process("", "{split:,:..|lower}").unwrap();
+        assert_eq!(lower_result, ""); // Consistent: empty string
+
+        // Trim on empty list
+        let trim_result = process("", "{split:,:..|trim}").unwrap();
+        assert_eq!(trim_result, ""); // Consistent: empty string
+
+        // Strip on empty list
+        let strip_result = process("", "{split:,:..|strip:x}").unwrap();
+        assert_eq!(strip_result, ""); // Consistent: empty string
+
+        // Replace on empty list
+        let replace_result = process("", "{split:,:..|replace:s/a/b/}").unwrap();
+        assert_eq!(replace_result, ""); // Consistent: empty string
+
+        // Slice on empty list
+        let slice_result = process("", "{split:,:..|slice:0..1}").unwrap();
+        assert_eq!(slice_result, ""); // Consistent: empty string
+    }
+
+    #[test]
+    fn test_empty_list_chain_with_append_prepend() {
+        // Test chaining operations after append/prepend on empty list
+
+        // Chain after append on empty list
+        let chain_after_append = process("", "{split:,:..|append:!|upper}").unwrap();
+        assert_eq!(chain_after_append, "!");
+
+        // Chain after prepend on empty list
+        let chain_after_prepend = process("", "{split:,:..|prepend:_|lower}").unwrap();
+        assert_eq!(chain_after_prepend, "_");
+
+        // But what if we try to split again after append/prepend?
+        let split_after_append = process("", "{split:,:..|append:a,b|split:,:..|join:-}").unwrap();
+        assert_eq!(split_after_append, "a-b");
+    }
+
+    #[test]
+    fn test_empty_list_multiple_appends_prepends() {
+        // Test multiple append/prepend operations on empty list
+
+        let multiple_appends = process("", "{split:,:..|append:!|append:?}").unwrap();
+        assert_eq!(multiple_appends, "!?");
+
+        let multiple_prepends = process("", "{split:,:..|prepend:_|prepend:#}").unwrap();
+        assert_eq!(multiple_prepends, "#_");
+
+        let mixed = process("", "{split:,:..|append:!|prepend:_}").unwrap();
+        assert_eq!(mixed, "_!");
+    }
+
+    #[test]
+    fn test_empty_list_join_behavior() {
+        // Test join operation on empty list
+        let join_empty = process("", "{split:,:..|join:-}").unwrap();
+        assert_eq!(join_empty, ""); // Should return empty string
+
+        // Test join after operations that might create empty list
+        let join_after_range = process("a,b,c", "{split:,:10..20|join:-}").unwrap();
+        assert_eq!(join_after_range, ""); // Should return empty string
+    }
+
+    #[test]
+    fn test_expected_consistent_behavior_for_empty_lists() {
+        // EXPECTED: append/prepend on empty list should maintain list type consistency
+        // but since it's empty, the final join should use the operation result appropriately
+        let result1 = process("", "{split:,:..|append:a|append:b}").unwrap();
+        let result2 = process("a", "{append:b}").unwrap();
+        assert_eq!(result1, "ab"); // Both should be same
+        assert_eq!(result2, "ab"); // if behavior is consistent
+    }
+
+    #[test]
+    fn test_edge_case_empty_string_vs_empty_list() {
+        // Test difference between empty string and empty list
+
+        // Empty string input
+        let empty_string_append = process("", "{append:!}").unwrap();
+        assert_eq!(empty_string_append, "!"); // String operation
+
+        // Empty list (from split) append
+        let empty_list_append = process("", "{split:,:..|append:!}").unwrap();
+        assert_eq!(empty_list_append, "!"); // List operation -> String
+
+        // These should potentially behave the same way for consistency
+        assert_eq!(empty_string_append, empty_list_append);
+    }
+
+    #[test]
+    fn test_empty_list_with_different_separators() {
+        // Test if the separator tracking works correctly with empty lists
+
+        let result1 = process("", "{split:,:..|append:a|append:b}").unwrap();
+        assert_eq!(result1, "ab");
+
+        let result2 = process("", "{split:-:..|append:a|append:b}").unwrap();
+        assert_eq!(result2, "ab");
+
+        // Both should be the same since we're not creating actual lists
+        assert_eq!(result1, result2);
+    }
+
+    #[test]
+    fn test_empty_list_operation_order_dependency() {
+        // Test if the order of operations affects empty list handling
+
+        // Append then join
+        let append_then_join = process("", "{split:,:..|append:test|join:-}").unwrap();
+        assert_eq!(append_then_join, "test");
+
+        // Join then append (should not be possible, but test error handling)
+        let join_then_append = process("", "{split:,:..|join:-|append:test}").unwrap();
+        assert_eq!(join_then_append, "test");
+
+        // These results expose the internal type conversions
+    }
+
+    #[test]
+    fn test_append_prepend_consistent_behavior() {
+        // All operations on empty lists should return empty results
+        // except when the operation itself provides content
+        // All operations should treat empty list as single empty string element:
+        assert_eq!(process("", "{split:,:..|upper}").unwrap(), "");
+        assert_eq!(process("", "{split:,:..|append:!}").unwrap(), "!");
+        assert_eq!(process("", "{split:,:..|prepend:_}").unwrap(), "_");
     }
 }
