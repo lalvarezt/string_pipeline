@@ -5,6 +5,8 @@ template = { "{" ~ operation_list? ~ "}" }
 operation_list = { operation ~ ("|" ~ operation)* }
 
 operation = {
+    shorthand_range |
+    shorthand_index |
     split |
     join |
     slice |
@@ -15,6 +17,16 @@ operation = {
     strip |
     append |
     prepend
+}
+
+shorthand_index = { number }
+shorthand_range = {
+    range_to_inclusive |
+    range_to |
+    range_inclusive |
+    range_exclusive |
+    range_from |
+    range_full
 }
 
 split = { "split" ~ ":" ~ arg ~ ":" ~ range_spec? }
@@ -54,4 +66,4 @@ range_to_inclusive = { "..=" ~ number }
 range_full = { ".." }
 index = { number }
 
-number = @{ "-"? ~ ASCII_DIGIT+ } 
+number = @{ "-"? ~ ASCII_DIGIT+ }

@@ -656,10 +656,7 @@ mod tests {
     fn test_escaped_pipe() {
         let input = "foo|bar";
         // Replace pipe with dash
-        assert_eq!(
-            process(input, r"{replace:s/\|/-/}").unwrap(),
-            "foo-bar"
-        );
+        assert_eq!(process(input, r"{replace:s/\|/-/}").unwrap(), "foo-bar");
         // Replace with escaped pipe in replacement
         assert_eq!(
             process(input, r"{replace:s/\|/\\\|/}").unwrap(),
@@ -676,15 +673,9 @@ mod tests {
     fn test_escaped_pipe_in_args() {
         let input = "a|b|c";
         // Split by pipe and join with dash
-        assert_eq!(
-            process(input, r"{split:\|:..|join:-}").unwrap(),
-            "a-b-c"
-        );
+        assert_eq!(process(input, r"{split:\|:..|join:-}").unwrap(), "a-b-c");
         // Split by pipe and join with pipe
-        assert_eq!(
-            process(input, r"{split:\|:..|join:\|}").unwrap(),
-            "a|b|c"
-        );
+        assert_eq!(process(input, r"{split:\|:..|join:\|}").unwrap(), "a|b|c");
         // Split by pipe and append/prepend with pipes
         assert_eq!(
             process(input, r"{split:\|:..|append:\|y|join:,}").unwrap(),
@@ -805,5 +796,37 @@ mod tests {
             process(input, "{split:,:..|join:-|split:-:..|upper}").unwrap(),
             "A-B-C"
         );
+    }
+
+    #[test]
+    fn test_shorthand_index() {
+        let input = "a b c d e";
+        // Test shorthand index
+        assert_eq!(process(input, "{1}").unwrap(), "b");
+        assert_eq!(process(input, "{-1}").unwrap(), "e");
+        assert_eq!(process(input, "{0}").unwrap(), "a");
+
+        // Test shorthand ranges
+        assert_eq!(process(input, "{1..3}").unwrap(), "b c");
+        assert_eq!(process(input, "{1..=3}").unwrap(), "b c d");
+        assert_eq!(process(input, "{..2}").unwrap(), "a b");
+        assert_eq!(process(input, "{2..}").unwrap(), "c d e");
+        assert_eq!(process(input, "{..=2}").unwrap(), "a b c");
+        assert_eq!(process(input, "{..}").unwrap(), "a b c d e");
+        assert_eq!(process(input, "{-2..}").unwrap(), "d e");
+        assert_eq!(process(input, "{-3..-1}").unwrap(), "c d");
+        assert_eq!(process(input, "{-3..=-1}").unwrap(), "c d e");
+
+        // Test with empty input
+        assert_eq!(process("", "{1}").unwrap(), "");
+        assert_eq!(process("", "{1..3}").unwrap(), "");
+        assert_eq!(process("", "{..}").unwrap(), "");
+
+        // Test with single word
+        assert_eq!(process("word", "{0}").unwrap(), "word");
+        assert_eq!(process("word", "{1}").unwrap(), "word");
+        assert_eq!(process("word", "{..}").unwrap(), "word");
+        assert_eq!(process("word", "{0..}").unwrap(), "word");
+        assert_eq!(process("word", "{..1}").unwrap(), "word");
     }
 }

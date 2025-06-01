@@ -27,6 +27,20 @@ pub fn parse_template(template: &str) -> Result<Vec<StringOp>, String> {
 fn parse_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String> {
     let inner = pair.into_inner().next().unwrap();
     match inner.as_rule() {
+        Rule::shorthand_range => {
+            let range = parse_range_spec(inner)?;
+            Ok(StringOp::Split {
+                sep: " ".to_string(),
+                range,
+            })
+        }
+        Rule::shorthand_index => {
+            let idx = inner.as_str().parse().unwrap();
+            Ok(StringOp::Split {
+                sep: " ".to_string(),
+                range: RangeSpec::Index(idx),
+            })
+        }
         Rule::split => {
             let mut parts = inner.into_inner();
             let sep = unescape(parts.next().unwrap().as_str());
@@ -139,4 +153,3 @@ fn unescape(s: &str) -> String {
     }
     out
 }
-
