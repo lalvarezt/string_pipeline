@@ -1,10 +1,17 @@
 [package]
-name = "string_processor"
-version = "0.2.0"
+name = "string_pipeline"
+version = "0.3.0"
 edition = "2024"
-description = "String Template Processor"
+authors = ["Luis M Alvarez"]
+description = "A flexible, template-driven string transformation pipeline for Rust."
 license = "MIT"
+repository = "https://github.com/lalvarezt/string_pipeline"
+homepage = "https://github.com/lalvarezt/string_pipeline"
+documentation = "https://docs.rs/string_pipeline"
+readme = "README.md"
+keywords = ["string", "pipeline", "template", "text", "transformation"]
+categories = ["text-processing", "command-line-utilities"]
 
 [dependencies]
-regex = "1.11.1"
-clap = { version = "4.5.39", features = ["derive"] }
+regex = "1"
+clap = { version = "4", features = ["derive"] }
