@@ -15,3 +15,5 @@ categories = ["text-processing", "command-line-utilities"]
 [dependencies]
 regex = "1"
 clap = { version = "4", features = ["derive"] }
+pest = "2.8"
+pest_derive = "2.8"

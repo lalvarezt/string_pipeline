@@ -1,0 +1,57 @@
+WHITESPACE = _{ " " | "\t" }
+
+template = { "{" ~ operation_list? ~ "}" }
+
+operation_list = { operation ~ ("|" ~ operation)* }
+
+operation = {
+    split |
+    join |
+    slice |
+    replace |
+    upper |
+    lower |
+    trim |
+    strip |
+    append |
+    prepend
+}
+
+split = { "split" ~ ":" ~ arg ~ ":" ~ range_spec? }
+join = { "join" ~ ":" ~ arg }
+slice = { "slice" ~ ":" ~ range_spec }
+replace = { "replace" ~ ":" ~ sed_string }
+upper = { "upper" }
+lower = { "lower" }
+trim = { "trim" }
+strip = { "strip" ~ ":" ~ arg }
+append = { "append" ~ ":" ~ arg }
+prepend = { "prepend" ~ ":" ~ arg }
+
+arg = @{ (escaped_char | normal_char)* }
+normal_char = { !(":" | "|" | "}" | "\\") ~ ANY }
+escaped_char = { "\\" ~ (":" | "|" | "\\" | "n" | "t" | "r" | "/") }
+
+sed_string = { "s/" ~ sed_part ~ "/" ~ sed_part ~ "/" ~ sed_flags? }
+sed_part = @{ (("\\" ~ ANY) | (!("/" | "\\") ~ ANY))* }
+sed_flags = @{ ASCII_ALPHA* }
+
+range_spec = {
+    range_to_inclusive |
+    range_to |
+    range_inclusive |
+    range_exclusive |
+    range_from |
+    range_full |
+    index
+}
+
+range_inclusive = { number? ~ "..=" ~ number? }
+range_exclusive = { number? ~ ".." ~ number? }
+range_from = { number ~ ".." }
+range_to = { ".." ~ number }
+range_to_inclusive = { "..=" ~ number }
+range_full = { ".." }
+index = { number }
+
+number = @{ "-"? ~ ASCII_DIGIT+ } 

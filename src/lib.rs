@@ -6,7 +6,7 @@
 //!
 //! ```rust
 //! use string_pipeline::process;
-//! let result = process("a,b,c", "{split:,:..:join:\\n}").unwrap();
+//! let result = process("a,b,c", "{split:,:..|join:\\\\n}").unwrap();
 //! assert_eq!(result, "a\nb\nc");
 //! ```
 
