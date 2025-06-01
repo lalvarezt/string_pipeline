@@ -1,0 +1,187 @@
+name: Release
+permissions:
+  contents: write
+
+on:
+  push:
+    tags:
+      - "[v]?[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to deploy"
+        required: true
+        default: "0.0.0"
+
+jobs:
+  create-release:
+    name: Create a release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # - name: Generate a changelog
+      #   uses: orhun/git-cliff-action@v4
+      #   with:
+      #     config: cliff.toml
+      #     args: --latest --strip header
+      #   env:
+      #     OUTPUT: BODY.md
+
+      - name: Publish on GitHub
+        uses: ncipollo/release-action@v1
+        with:
+          prerelease: false
+          # bodyFile: BODY.md
+
+  publish-release:
+    name: Publishing for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            os-name: macos
+            target: x86_64-apple-darwin
+            architecture: x86_64
+            binary-postfix: ""
+            use-cross: false
+          - os: macos-latest
+            os-name: macos
+            target: aarch64-apple-darwin
+            architecture: arm64
+            binary-postfix: ""
+            use-cross: false
+          - os: ubuntu-latest
+            os-name: linux
+            target: x86_64-unknown-linux-gnu
+            architecture: x86_64
+            binary-postfix: ""
+            use-cross: false
+          - os: ubuntu-latest
+            os-name: linux
+            target: x86_64-unknown-linux-musl
+            architecture: x86_64
+            binary-postfix: ""
+            use-cross: false
+          - os: windows-latest
+            os-name: windows
+            target: x86_64-pc-windows-msvc
+            architecture: x86_64
+            binary-postfix: ".exe"
+            use-cross: false
+          - os: ubuntu-latest
+            os-name: linux
+            target: aarch64-unknown-linux-gnu
+            architecture: arm64
+            binary-postfix: ""
+            use-cross: true
+          - os: ubuntu-latest
+            os-name: linux
+            target: i686-unknown-linux-gnu
+            architecture: i686
+            binary-postfix: ""
+            use-cross: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+          target: ${{ matrix.target }}
+
+          profile: minimal
+          override: true
+
+      - name: Install musl for musl target
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        shell: bash
+        run: |
+          sudo apt update
+          sudo apt-get install -y musl musl-tools
+
+      - uses: Swatinem/rust-cache@v2
+      - name: Cargo build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+
+          use-cross: ${{ matrix.use-cross }}
+
+          toolchain: stable
+
+          args: --release --target ${{ matrix.target }}
+
+      - name: install strip command
+        shell: bash
+        run: |
+
+          if [[ ${{ matrix.target }} == aarch64-unknown-linux-gnu ]]; then
+
+              sudo apt update
+              sudo apt-get install -y binutils-aarch64-linux-gnu
+          fi
+      - name: Packaging final binary
+        shell: bash
+        run: |
+
+          ####### reduce binary size by removing debug symbols #######
+
+          BIN=target/${{ matrix.target }}/release/string_pipeline${{ matrix.binary-postfix }}
+          echo "BIN=$BIN" >> "$GITHUB_ENV"
+          if [[ ${{ matrix.target }} == aarch64-unknown-linux-gnu ]]; then
+
+            GCC_PREFIX="aarch64-linux-gnu-"
+          else
+            GCC_PREFIX=""
+          fi
+          "$GCC_PREFIX"strip $BIN
+
+          ########## create tar.gz ##########
+
+          RELEASE_NAME=string-pipeline${GITHUB_REF/refs\/tags\//}-${{ matrix.target }}
+          echo "RELEASE_NAME=$RELEASE_NAME" >> "$GITHUB_ENV"
+
+          # create the directory for the archive
+          mkdir -p "$RELEASE_NAME"/doc
+          cp $BIN "$RELEASE_NAME"/
+          cp {README.md,LICENSE} "$RELEASE_NAME"/
+          # cp {CHANGELOG.md,docs/*,man/*} "$RELEASE_NAME"/doc/
+
+          tar czvf "$RELEASE_NAME".tar.gz "$RELEASE_NAME"
+
+          ########## create sha256 ##########
+
+          if [[ ${{ runner.os }} == 'Windows' ]]; then
+
+            certutil -hashfile $RELEASE_NAME.tar.gz sha256 | grep -E [A-Fa-f0-9]{64} > $RELEASE_NAME.sha256
+          else
+            shasum -a 256 $RELEASE_NAME.tar.gz > $RELEASE_NAME.sha256
+          fi
+      - name: Packaging with zip format
+        if: runner.os == 'Windows'
+        run: |
+          Compress-Archive -Path "$env:BIN" -Destination "$($env:RELEASE_NAME).zip"
+          (Get-FileHash "$($env:RELEASE_NAME).zip" -Algorithm SHA256).Hash.ToLower() > "$($env:RELEASE_NAME).zip.sha256"
+
+      - name: Releasing assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+
+            string-pipeline*.tar.gz
+            string-pipeline*.zip
+            string-pipeline*.sha256
+
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
