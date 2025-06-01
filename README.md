@@ -1,6 +1,21 @@
 # String Template Processor
 
+[![Crates.io](https://img.shields.io/crates/v/string_pipeline.svg)](https://crates.io/crates/string_pipeline)
+[![Docs.rs](https://docs.rs/string_pipeline/badge.svg)](https://docs.rs/string_pipeline)
+[![CI](https://github.com/lalvarezt/string_pipeline/actions/workflows/release.yml/badge.svg)](https://github.com/lalvarezt/string_pipeline/actions)
+[![License](https://img.shields.io/crates/l/string_pipeline.svg)](https://github.com/lalvarezt/string_pipeline/blob/main/LICENSE)
+
+---
+
 A flexible, composable string transformation CLI tool and library for Rust originally created as a parser for [television](https://github.com/alexpasmantier/television). It allows you to chain operations like split, join, slice, replace, case conversion, trim, and more, using a concise template syntax.
+
+## Use Cases
+
+- **Data extraction**: Parse CSV, logs, or structured text
+- **Text transformation**: Clean and format strings in pipelines
+- **File processing**: Extract parts of filenames or paths
+- **Configuration parsing**: Process environment variables or config files
+- **Shell scripting**: Quick text manipulation in scripts
 
 ## Features
 
@@ -16,7 +31,17 @@ A flexible, composable string transformation CLI tool and library for Rust origi
 - **Stdin support**: Read input from stdin when no input argument is provided.
 - **Tested**: Comprehensive test suite.
 
-## Usage
+## 📦 Crate
+
+You can find this crate on [crates.io](https://crates.io/crates/string_pipeline):
+
+```toml
+[dependencies]
+string_pipeline = "0.3.0"
+```
+
+## 🚀 Usage
+
 
 ### As a CLI
 
@@ -139,33 +164,6 @@ echo "2023-01-01 ERROR Failed to connect" | cargo run -- "{split: :1..:join: :lo
 # Output: error failed to connect
 ```
 
-## Library Usage
-
-Add to your `Cargo.toml`:
-
-```toml
-[dependencies]
-clap = "4"
-regex = "1"
-```
-
-Use in your code:
-
-```rust
-use your_crate::process;
-
-let result = process("foo,bar,baz", "{split:,:1:upper}").unwrap();
-assert_eq!(result, "BAR");
-
-// Chain multiple operations
-let result = process("  hello world  ", "{trim:split: :join:_:upper}").unwrap();
-assert_eq!(result, "HELLO_WORLD");
-
-// Work with ranges
-let result = process("a,b,c,d,e", "{split:,:1..=3:join:-}").unwrap();
-assert_eq!(result, "b-c-d");
-```
-
 ## Error Handling
 
 The tool provides helpful error messages for common issues:
@@ -189,18 +187,6 @@ cargo run -- "{replace:s/[/replacement/}" "test"
 ```sh
 cargo test
 ```
-
-## Use Cases
-
-- **Data extraction**: Parse CSV, logs, or structured text
-- **Text transformation**: Clean and format strings in pipelines
-- **File processing**: Extract parts of filenames or paths
-- **Configuration parsing**: Process environment variables or config files
-- **Shell scripting**: Quick text manipulation in scripts
-
-## License
-
-MIT
 
 ---
 
