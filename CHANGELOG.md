@@ -3,6 +3,33 @@
 All notable changes to this project will be documented in this file.
 <!-- ignore lint rules that are often triggered by content generated from commits / git-cliff -->
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style -->
+## [0.5.0](https://github.com/lalvarezt/string_pipeline/compare/0.4.0..0.5.0) - 2025-06-02
+
+### ⛰️  Features
+
+- *(parser)* [**breaking**] Simplify replace by using regex as default - ([4b6093a](https://github.com/lalvarezt/string_pipeline/commit/4b6093ae20a5f0d50aa0ba22b23624e0b32a5373))
+
+### 🐛 Bug Fixes
+
+- *(pest)* Fix error in the parser that trimmed whitespaces on the boundaries - ([829e273](https://github.com/lalvarezt/string_pipeline/commit/829e273cd761d2b577242b4296080771072679f9))
+
+### 📚 Documentation
+
+- Configure markdown styling - ([d97ee6e](https://github.com/lalvarezt/string_pipeline/commit/d97ee6eda6cefa771e935e888840d47ff147f600))
+
+### 🎨 Styling
+
+- *(pest)* Reformat with pest formatter - ([af3e95e](https://github.com/lalvarezt/string_pipeline/commit/af3e95e50d5faf1a3c2168d773bbf50e9eebbe7d))
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump to 0.5.0 - ([b922d22](https://github.com/lalvarezt/string_pipeline/commit/b922d225608a5e8b511855906fb4ea4f63dad1ee))
+
+### Build
+
+- QoL workflow - ([13b82b1](https://github.com/lalvarezt/string_pipeline/commit/13b82b1487dc939356b409c5eeac3a5b306e3bcc))
+
+
 ## [0.4.0](https://github.com/lalvarezt/string_pipeline/compare/0.3.1..0.4.0) - 2025-06-02
 
 ### ⛰️  Features
@@ -22,6 +49,7 @@ All notable changes to this project will be documented in this file.
 
 ### ⚙️ Miscellaneous Tasks
 
+- *(changelog)* Update changelog - ([a61bd74](https://github.com/lalvarezt/string_pipeline/commit/a61bd741066d31ebfb6bec4aa43109609af29558))
 - Bump to 0.4.0 - ([351f1b1](https://github.com/lalvarezt/string_pipeline/commit/351f1b1af22300b14009ea21f03ad19b2fd1a124))
 
 ## New Contributors ❤️
@@ -34,11 +62,13 @@ All notable changes to this project will be documented in this file.
 
 - Add release workflow - ([4385840](https://github.com/lalvarezt/string_pipeline/commit/4385840ea1e0ebe92ff56b7cfbafe39992937d4b))
 
+
 ## [0.3.0](https://github.com/lalvarezt/string_pipeline/compare/0.2.0..0.3.0) - 2025-06-01
 
 ### 🚜 Refactor
 
 - Split into library and cli - ([dd647eb](https://github.com/lalvarezt/string_pipeline/commit/dd647eb9a3590b7dbdf9d42c39e843e65545a39b))
+
 
 ## [0.2.0] - 2025-05-31
 
