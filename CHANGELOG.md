@@ -3,6 +3,22 @@
 All notable changes to this project will be documented in this file.
 <!-- ignore lint rules that are often triggered by content generated from commits / git-cliff -->
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style -->
+## [0.6.0](https://github.com/lalvarezt/string_pipeline/compare/0.5.0..0.6.0) - 2025-06-02
+
+### ⛰️  Features
+
+- *(parser)* Add debug operator {!...} - ([8a940cf](https://github.com/lalvarezt/string_pipeline/commit/8a940cf79e30d1804d5cbf877c810bcfc1e4b1cb))
+- *(parser)* Make split consistent with the other operations and don't flatten - ([9372c87](https://github.com/lalvarezt/string_pipeline/commit/9372c87448b05f4e1d0b062ab3f3e13a9e694bef))
+
+### 📚 Documentation
+
+- *(readme)* Revamp documentation - ([73ce4f0](https://github.com/lalvarezt/string_pipeline/commit/73ce4f0673b798e82e4d1ab227f98c580cd569af))
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump to 0.6.0 - ([2454007](https://github.com/lalvarezt/string_pipeline/commit/2454007ec7f35755e8edd101d410a50f5b990fbc))
+
+
 ## [0.5.0](https://github.com/lalvarezt/string_pipeline/compare/0.4.0..0.5.0) - 2025-06-02
 
 ### ⛰️  Features
@@ -23,6 +39,7 @@ All notable changes to this project will be documented in this file.
 
 ### ⚙️ Miscellaneous Tasks
 
+- *(changelog)* Update changelog - ([333585d](https://github.com/lalvarezt/string_pipeline/commit/333585d5b42976e4714f8a7dde165f16b5d3db66))
 - Bump to 0.5.0 - ([b922d22](https://github.com/lalvarezt/string_pipeline/commit/b922d225608a5e8b511855906fb4ea4f63dad1ee))
 
 ### Build
