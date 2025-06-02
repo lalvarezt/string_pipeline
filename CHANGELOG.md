@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 <!-- ignore lint rules that are often triggered by content generated from commits / git-cliff -->
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style -->
+## [0.4.1](https://github.com/lalvarezt/string_pipeline/compare/0.4.0..0.4.1) - 2025-06-02
+
+### 🎨 Styling
+
+- *(pest)* Reformat with pest formatter - ([af3e95e](https://github.com/lalvarezt/string_pipeline/commit/af3e95e50d5faf1a3c2168d773bbf50e9eebbe7d))
+
+### Build
+
+- QoL workflow - ([77b172d](https://github.com/lalvarezt/string_pipeline/commit/77b172d44524e6e5927d36abaeb4deb88194ca4c))
+
+
 ## [0.4.0](https://github.com/lalvarezt/string_pipeline/compare/0.3.1..0.4.0) - 2025-06-02
 
 ### ⛰️  Features
@@ -22,6 +33,7 @@ All notable changes to this project will be documented in this file.
 
 ### ⚙️ Miscellaneous Tasks
 
+- *(changelog)* Update changelog - ([a61bd74](https://github.com/lalvarezt/string_pipeline/commit/a61bd741066d31ebfb6bec4aa43109609af29558))
 - Bump to 0.4.0 - ([351f1b1](https://github.com/lalvarezt/string_pipeline/commit/351f1b1af22300b14009ea21f03ad19b2fd1a124))
 
 ## New Contributors ❤️
