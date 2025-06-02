@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/string_pipeline.svg)](https://crates.io/crates/string_pipeline)
 [![Docs.rs](https://docs.rs/string_pipeline/badge.svg)](https://docs.rs/string_pipeline)
-[![CI](https://github.com/lalvarezt/string_pipeline/actions/workflows/release.yml/badge.svg)](https://github.com/lalvarezt/string_pipeline/actions)
+[![CI](https://github.com/lalvarezt/string_pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/lalvarezt/string_pipeline/actions)
 [![License](https://img.shields.io/crates/l/string_pipeline.svg)](https://github.com/lalvarezt/string_pipeline/blob/main/LICENSE)
 
 ---
