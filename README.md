@@ -7,181 +7,311 @@
 
 ---
 
-A flexible, composable string transformation CLI tool and library for Rust originally created as a parser for [television](https://github.com/alexpasmantier/television). It allows you to chain operations like split, join, slice, replace, case conversion, trim, and more, using a concise template syntax.
+A flexible, composable string transformation CLI tool and Rust library. `string_pipeline` lets you chain operations like split, join, slice, replace, case conversion, trim, and more, using a concise template syntax. It is ideal for quick text manipulation, scripting, and data extraction.
 
-## Use Cases
+---
 
-- **Data extraction**: Parse CSV, logs, or structured text
-- **Text transformation**: Clean and format strings in pipelines
-- **File processing**: Extract parts of filenames or paths
-- **Configuration parsing**: Process environment variables or config files
-- **Shell scripting**: Quick text manipulation in scripts
+## Table of Contents
+
+- [Features](#features)
+- [Crate](#crate)
+- [Installation](#installation)
+  - [CLI](#cli)
+  - [Library](#library)
+- [Usage](#usage)
+  - [As a CLI](#as-a-cli)
+  - [As a Library](#as-a-library)
+- [Template Syntax](#template-syntax)
+  - [Syntax Reference](#syntax-reference)
+  - [Supported Operations](#supported-operations)
+  - [Range Specifications](#range-specifications)
+  - [Escaping](#escaping)
+  - [Debug Mode](#debug-mode)
+- [Examples](#examples)
+- [Testing](#testing)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
 
 ## Features
 
 - **Composable operations**: Chain multiple string operations in a single template.
 - **Split and join**: Extract and reassemble parts of strings.
-- **Slice and range**: Select substrings or sublists by index or range.
-- **Replace**: Regex-based search and replace, with sed-like syntax.
+- **Slice and range**: Select sub-strings or sub-lists by index or range.
+- **Regex replace**: sed-like regex search and replace.
 - **Case conversion**: Uppercase and lowercase.
 - **Trim and strip**: Remove whitespace or custom characters.
 - **Append and prepend**: Add text before or after.
 - **Escaping**: Use `\:` and `\\` to include literal colons and backslashes in arguments.
-- **Negative indices**: Support for negative indices (like Python) in ranges and slices.
+- **Flexible indices**: Python-like negative indices in ranges and slices with Rust-like syntax.
 - **Stdin support**: Read input from stdin when no input argument is provided.
+- **Debug mode**: Add `!` after `{` to print debug info for each operation.
+- **Robust error handling**: Helpful error messages for invalid templates or arguments.
 - **Tested**: Comprehensive test suite.
 
-## 📦 Crate
+## Crate
 
-You can find this crate on [crates.io](https://crates.io/crates/string_pipeline):
+Find the crate on [crates.io](https://crates.io/crates/string_pipeline):
 
 ```toml
 [dependencies]
 string_pipeline = "0.5.0"
 ```
 
-## 🚀 Usage
+---
+
+## Installation
+
+### CLI
+
+Clone and build:
+
+```sh
+git clone https://github.com/lalvarezt/string_pipeline.git
+cd string_pipeline
+cargo build --release
+```
+
+Or run directly with Cargo:
+
+```sh
+cargo run -- "{template}" "input string"
+```
+
+### Library
+
+Add to your `Cargo.toml` as shown above.
+
+---
+
+## Usage
 
 ### As a CLI
 
 ```sh
 # With input argument
-cargo run -- "{template}" "input string"
+string-pipeline "{template}" "input string"
 
 # With stdin input
-echo "input string" | cargo run -- "{template}"
+echo "input string" | string-pipeline "{template}"
 ```
 
 **Examples:**
 
 ```sh
 # Get the second item in a comma-separated list
-cargo run -- "{split:,:1}" "a,b,c"
-# Output: b
-
-# Using stdin
-echo "a,b,c" | cargo run -- "{split:,:1}"
+string-pipeline "{split:,:1}" "a,b,c"
 # Output: b
 
 # Replace all spaces with underscores and uppercase
-cargo run -- "{replace:s/ /_/g:upper}" "foo bar baz"
+string-pipeline "{replace:s/ /_/g|upper}" "foo bar baz"
 # Output: FOO_BAR_BAZ
 
 # Trim, split, and append
-cargo run -- "{split:,:..:trim:append:!}" " a, b,c , d , e "
+string-pipeline "{split:,:..|trim|append:!}" " a, b,c , d , e "
 # Output: a!,b!,c!,d!,e!
 
 # Using stdin for processing file content
-cat data.txt | cargo run -- "{split:\n:..:trim:prepend:- }"
-
-# Pipeline processing
-echo "hello,world,test" | cargo run -- "{split:,:0..2:join: | :upper}"
-# Output: HELLO | WORLD
+cat data.txt | string-pipeline "{split:\n:..|trim|prepend:- }"
 ```
 
-### Template Syntax
+### As a Library
 
-Templates are enclosed in `{}` and consist of a chain of operations separated by `:`.  
-Arguments to operations are separated by `:` as well.  
-To include a literal `:` or `\` in an argument, escape it as `\:` or `\\`.
+```rust
+use string_pipeline::process;
 
-**Supported operations:**
+fn main() {
+    let result = process("a,b,c", "{split:,:..|join:\\n}").unwrap();
+    assert_eq!(result, "a\nb\nc");
+}
+```
 
-- `split:<sep>:<range>` — Split by separator, select by index or range.
-- `join:<sep>` — Join a list with separator.
-- `slice:<range>` — Slice string or list elements by range.
-- `replace:s/<pattern>/<replacement>/<flags>` — Regex replace (sed-like).
-- `upper` — Uppercase.
-- `lower` — Lowercase.
-- `trim` — Trim whitespace.
-- `strip:<chars>` — Trim custom characters.
-- `append:<suffix>` — Append text.
-- `prepend:<prefix>` — Prepend text.
+---
 
-**Range syntax:**
+## Template Syntax
 
-- Single index: `2` or `-1`
-- Range: `1..3`, `..2`, `2..`, `1..=3`, `-3..-1`, etc.
+Templates are enclosed in `{}` and consist of a chain of operations separated by `|`.
+Arguments to operations are separated by `:`.
 
-**Examples:**
+### Syntax Reference
+
+- **Template**: `{ [!] operation_list? }`
+  - Add `!` after `{` to enable debug mode.
+- **Operation List**: `operation ('|' operation)*`
+- **Operation**:
+  - `split:<sep>:<range>`
+  - `join:<sep>`
+  - `slice:<range>`
+  - `replace:s/<pattern>/<replacement>/<flags>`
+  - `upper`
+  - `lower`
+  - `trim`
+  - `strip:<chars>`
+  - `append:<suffix>`
+  - `prepend:<prefix>`
+  - **Shorthand for split**:
+    - `{index}` (e.g. `{1}`)
+    - `{range}` (e.g. `{1..3}`)
+
+#### Supported Operations
+
+| Operation         | Syntax                                      | Description                                 |
+|-------------------|---------------------------------------------|---------------------------------------------|
+| Split             | `split:<sep>:<range>`                       | Split by separator, select by index/range   |
+| Join              | `join:<sep>`                                | Join a list with separator                  |
+| Slice             | `slice:<range>`                             | Slice string or list elements by range      |
+| Replace           | `replace:s/<pattern>/<replacement>/<flags>` | Regex replace (sed-like)                    |
+| Uppercase         | `upper`                                     | Convert to uppercase                        |
+| Lowercase         | `lower`                                     | Convert to lowercase                        |
+| Trim              | `trim`                                      | Trim whitespace                            |
+| Strip             | `strip:<chars>`                             | Trim custom characters                      |
+| Append            | `append:<suffix>`                           | Append text                                 |
+| Prepend           | `prepend:<prefix>`                          | Prepend text                                |
+
+#### Range Specifications
+
+Ranges use Rust-like syntax and support negative indices like Python:
+
+| Range | Description | Example |
+|-------|-------------|---------|
+| `N` | Single index | `{split:,:1}` → second element |
+| `N..M` | Exclusive range | `{split:,:1..3}` → elements 1,2 |
+| `N..=M` | Inclusive range | `{split:,:1..=3}` → elements 1,2,3 |
+| `N..` | From N to end | `{split:,:2..}` → from 2nd to end |
+| `..N` | From start to N | `{split:,:..3}` → first 3 elements |
+| `..=N` | From start to N inclusive | `{split:,:..=2}` → first 3 elements |
+| `..` | All elements | `{split:,:..)` → all elements |
+
+Negative indices count from the end:
+
+- `-1` = last element
+- `-2` = second to last element
+- `-3..` = last 3 elements
+
+#### Escaping
+
+To include a literal:
+
+- Use `\:` for a literal colon in arguments.
+- Use `\\` for a literal backslash.
+- Use `\n`, `\t`, `\r` for newline, tab, carriage return.
+- Use `\|` for a literal pipe in arguments.
+
+#### Enable Debug Mode
+
+- Add `!` after `{` to enable debug output for each operation:
+  - Example: `{!split:,:..|upper|join:-}`
+
+---
+
+## Examples
+
+### Basic
 
 ```sh
 # Get the last item
-cargo run -- "{split:,:-1}" "a,b,c"
+string-pipeline "{split:,:-1}" "a,b,c"
 # Output: c
 
 # Get a range of items
-cargo run -- "{split:,:1..=3}" "a,b,c,d,e"
+string-pipeline "{split:,:1..=3}" "a,b,c,d,e"
 # Output: b,c,d
 
 # Replace 'foo' with 'bar' globally
-cargo run -- "{replace:s/foo/bar/g}" "foo foo"
+string-pipeline "{replace:s/foo/bar/g}" "foo foo"
 # Output: bar bar
 
 # Chain operations: uppercase, then append
-cargo run -- "{upper:append:!}" "hello"
+string-pipeline "{upper|append:!}" "hello"
 # Output: HELLO!
 
 # Prepend with a colon (escaped)
-cargo run -- "{prepend:\:foo}" "bar"
+string-pipeline "{prepend:\:foo}" "bar"
 # Output: :foobar
+```
 
+### Advanced
+
+```sh
 # Complex chaining: split, select range, join, replace, uppercase
-cargo run -- "{split:,:0..2:join:-:replace:s/a/X/:upper}" "a,b,c"
+string-pipeline "{split:,:0..2|join:-|replace:s/a/X/|upper}" "a,b,c"
 # Output: X-B
 
 # Slice string characters
-cargo run -- "{slice:1..=3}" "hello"
+string-pipeline "{slice:1..=3}" "hello"
 # Output: ell
 
 # Split, trim each item, then prepend
-echo " a , b , c " | cargo run -- "{split:,:..:trim:prepend:item_}"
+echo " a , b , c " | string-pipeline "{split:,:..|trim|prepend:item_}"
 # Output: item_a,item_b,item_c
 
 # Strip custom characters
-cargo run -- "{strip:xy}" "xyhelloxy"
+string-pipeline "{strip:xy}" "xyhelloxy"
 # Output: hello
 ```
 
-### Advanced Examples
+### Real-World
 
 ```sh
 # Process CSV-like data
-echo "name,age,city" | cargo run -- "{split:,:1..}" 
+echo "name,age,city" | string-pipeline "{split:,:1..}"
 # Output: age,city
 
 # Format file paths
-echo "/home/user/documents/file.txt" | cargo run -- "{split:/:-1:prepend:dir }"
-# Output: dir file.txt
+echo "/home/user/documents/file.txt" | string-pipeline "{split:/:-1}"
+# Output: file.txt
 
 # Extract file extension
-echo "document.pdf" | cargo run -- "{split:.:-1:upper}"
+echo "document.pdf" | string-pipeline "{split:.:-1|upper}"
 # Output: PDF
 
 # Process log entries with timestamps
-echo "2023-01-01 ERROR Failed to connect" | cargo run -- "{split: :1..:join: :lower}"
+echo "2023-01-01 ERROR Failed to connect" | string-pipeline "{split: :1..|join: |lower}"
 # Output: error failed to connect
 ```
 
-## Error Handling
-
-The tool provides helpful error messages for common issues:
+### Shorthand
 
 ```sh
-# Invalid template format
-cargo run -- "split:,:0" "test"
-# Error: Template must start with '{' and end with '}'
+# Get the second word (space-separated)
+string-pipeline "{1}" "foo bar baz"
+# Output: bar
 
-# Invalid range
-cargo run -- "{split:,:abc}" "a,b,c"  
-# Error: Invalid index
-
-# Invalid regex
-cargo run -- "{replace:s/[/replacement/}" "test"
-# Error: regex parse error
+# Get a range of words
+string-pipeline "{1..3}" "foo bar baz qux"
+# Output: bar baz
 ```
 
-## Running Tests
+### Debug Mode
+
+```sh
+# Print debug info for each operation
+string-pipeline "{!split:,:..|upper|join:-}" "a,b,c"
+# DEBUG: Initial value: Str("a,b,c")
+# DEBUG: Applying operation 1: Split { sep: ",", range: Range(None, None, false) }
+# DEBUG: Result: List with 3 items:
+# DEBUG:   [0]: "a"
+# DEBUG:   [1]: "b"
+# DEBUG:   [2]: "c"
+# DEBUG: ---
+# DEBUG: Applying operation 2: Upper
+# DEBUG: Result: List with 3 items:
+# DEBUG:   [0]: "A"
+# DEBUG:   [1]: "B"
+# DEBUG:   [2]: "C"
+# DEBUG: ---
+# DEBUG: Applying operation 3: Join { sep: "-" }
+# DEBUG: Result: String("A-B-C")
+# DEBUG: ---
+# A-B-C
+```
+
+---
+
+## Testing
+
+Run the test suite:
 
 ```sh
 cargo test
@@ -189,5 +319,17 @@ cargo test
 
 ---
 
-**Enjoy fast, composable string transformations!**  
-Contributions and suggestions welcome.
+## Contributing
+
+Contributions and suggestions are welcome!
+Please open issues or pull requests on [GitHub](https://github.com/lalvarezt/string_pipeline).
+
+---
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+
+---
+
+**Enjoy fast, composable string transformations!**
