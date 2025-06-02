@@ -205,37 +205,7 @@ pub fn apply_ops(input: &str, ops: &[StringOp]) -> Result<String, String> {
                 replacement,
                 flags,
             } => {
-                let pattern_to_use = if pattern.starts_with("s/") {
-                    let pattern_str = pattern.trim_start_matches("s/");
-                    if !pattern_str.ends_with('/') {
-                        return Err("Malformed sed string: missing closing slash".to_string());
-                    }
-                    let pattern_str = pattern_str.trim_end_matches("/");
-                    if pattern_str.is_empty() {
-                        return Err("Empty pattern in sed string".to_string());
-                    }
-                    pattern_str.to_string()
-                } else {
-                    regex::escape(pattern)
-                };
-
-                // Unescape special characters in pattern
-                let pattern_to_use = pattern_to_use
-                    .replace("\\:", ":")
-                    .replace("\\[", "[")
-                    .replace("\\]", "]")
-                    .replace("\\*", "*")
-                    .replace("\\+", "+")
-                    .replace("\\?", "?")
-                    .replace("\\(", "(")
-                    .replace("\\)", ")")
-                    .replace("\\{", "{")
-                    .replace("\\}", "}")
-                    .replace("\\^", "^")
-                    .replace("\\$", "$")
-                    .replace("\\|", "|")
-                    .replace("\\.", ".")
-                    .replace("\\\\", "\\");
+                let pattern_to_use = pattern.clone();
 
                 // Compile the regex for use
                 let re = match Regex::new(&pattern_to_use) {
@@ -992,5 +962,601 @@ mod tests {
         assert_eq!(process("", "{split:,:..|upper}").unwrap(), "");
         assert_eq!(process("", "{split:,:..|append:!}").unwrap(), "!");
         assert_eq!(process("", "{split:,:..|prepend:_}").unwrap(), "_");
+    }
+
+    // ============================================================================
+    // POSITIVE TESTING - Expected Behavior
+    // ============================================================================
+
+    mod positive_tests {
+        use super::*;
+
+        // ------------------------------------------------------------------------
+        // Basic Operations
+        // ------------------------------------------------------------------------
+
+        #[test]
+        fn test_split_basic() {
+            assert_eq!(process("a,b,c", "{split:,:..|join:-}").unwrap(), "a-b-c");
+            assert_eq!(
+                process("hello world", "{split: :..|join:_}").unwrap(),
+                "hello_world"
+            );
+            assert_eq!(
+                process("a::b::c", r"{split:\:\::..|join:\|}").unwrap(),
+                "a|b|c"
+            );
+        }
+
+        #[test]
+        fn test_split_with_ranges() {
+            let input = "a,b,c,d,e,f";
+            // Index access
+            assert_eq!(process(input, "{split:,:0}").unwrap(), "a");
+            assert_eq!(process(input, "{split:,:2}").unwrap(), "c");
+            assert_eq!(process(input, "{split:,:-1}").unwrap(), "f");
+            assert_eq!(process(input, "{split:,:-2}").unwrap(), "e");
+
+            // Exclusive ranges
+            assert_eq!(process(input, "{split:,:1..3}").unwrap(), "b,c");
+            assert_eq!(process(input, "{split:,:0..2}").unwrap(), "a,b");
+            assert_eq!(process(input, "{split:,:-3..-1}").unwrap(), "d,e");
+
+            // Inclusive ranges
+            assert_eq!(process(input, "{split:,:1..=3}").unwrap(), "b,c,d");
+            assert_eq!(process(input, "{split:,:-3..=-1}").unwrap(), "d,e,f");
+
+            // Open ranges
+            assert_eq!(process(input, "{split:,:2..}").unwrap(), "c,d,e,f");
+            assert_eq!(process(input, "{split:,:..3}").unwrap(), "a,b,c");
+            assert_eq!(process(input, "{split:,:..=2}").unwrap(), "a,b,c");
+            assert_eq!(process(input, "{split:,:..}").unwrap(), "a,b,c,d,e,f");
+        }
+
+        #[test]
+        fn test_join_various_separators() {
+            let input = "a,b,c";
+            assert_eq!(process(input, r"{split:,:..|join:\\n}").unwrap(), "a\nb\nc");
+            assert_eq!(process(input, r"{split:,:..|join:\\t}").unwrap(), "a\tb\tc");
+            assert_eq!(process(input, r"{split:,:..|join:\\r}").unwrap(), "a\rb\rc");
+            assert_eq!(
+                process(input, "{split:,:..|join: - }").unwrap(),
+                "a - b - c"
+            );
+            assert_eq!(process(input, "{split:,:..|join:}").unwrap(), "abc");
+        }
+
+        #[test]
+        fn test_replace_patterns() {
+            // Sed-style replace
+            assert_eq!(
+                process("foo bar foo", "{replace:s/foo/baz/}").unwrap(),
+                "baz bar foo"
+            );
+            assert_eq!(
+                process("foo bar foo", "{replace:s/foo/baz/g}").unwrap(),
+                "baz bar baz"
+            );
+
+            // Regex patterns in sed style
+            assert_eq!(
+                process("abc123def", r"{replace:s/[0-9]+/XXX/}").unwrap(),
+                "abcXXXdef"
+            );
+            assert_eq!(
+                process("test123test456", "{replace:s/[0-9]+/NUM/g}").unwrap(),
+                "testNUMtestNUM"
+            );
+
+            // Word boundaries
+            assert_eq!(
+                process("cat catch", r"{replace:s/\bcat\b/dog/g}").unwrap(),
+                "dog catch"
+            );
+        }
+
+        #[test]
+        fn test_case_operations() {
+            assert_eq!(process("Hello World", "{upper}").unwrap(), "HELLO WORLD");
+            assert_eq!(process("Hello World", "{lower}").unwrap(), "hello world");
+
+            // On lists
+            assert_eq!(process("a,B,c", "{split:,:..|upper}").unwrap(), "A,B,C");
+            assert_eq!(process("A,b,C", "{split:,:..|lower}").unwrap(), "a,b,c");
+        }
+
+        #[test]
+        fn test_trim_operations() {
+            assert_eq!(process("  hello  ", "{trim}").unwrap(), "hello");
+            assert_eq!(process("\t\nhello\r\n", "{trim}").unwrap(), "hello");
+
+            // On lists
+            assert_eq!(
+                process(" a , b , c ", "{split:,:..|trim}").unwrap(),
+                "a,b,c"
+            );
+        }
+
+        #[test]
+        fn test_strip_operations() {
+            assert_eq!(process("xyhelloxy", "{strip:xy}").unwrap(), "hello");
+            assert_eq!(process("!!!hello!!!", "{strip:!}").unwrap(), "hello");
+            assert_eq!(process("abchelloabc", "{strip:abc}").unwrap(), "hello");
+            assert_eq!(process("  hello  ", "{strip: }").unwrap(), "hello");
+            assert_eq!(process("hello", "{strip:}").unwrap(), "hello"); // default whitespace
+        }
+
+        #[test]
+        fn test_slice_operations() {
+            let input = "abcdefgh";
+            assert_eq!(process(input, "{slice:0}").unwrap(), "a");
+            assert_eq!(process(input, "{slice:2}").unwrap(), "c");
+            assert_eq!(process(input, "{slice:-1}").unwrap(), "h");
+            assert_eq!(process(input, "{slice:1..4}").unwrap(), "bcd");
+            assert_eq!(process(input, "{slice:1..=4}").unwrap(), "bcde");
+            assert_eq!(process(input, "{slice:2..}").unwrap(), "cdefgh");
+            assert_eq!(process(input, "{slice:..3}").unwrap(), "abc");
+            assert_eq!(process(input, "{slice:..=3}").unwrap(), "abcd");
+            assert_eq!(process(input, "{slice:-3..}").unwrap(), "fgh");
+            assert_eq!(process(input, "{slice:-3..-1}").unwrap(), "fg");
+            assert_eq!(process(input, "{slice:-3..=-1}").unwrap(), "fgh");
+        }
+
+        #[test]
+        fn test_append_prepend_operations() {
+            assert_eq!(process("hello", "{append: world}").unwrap(), "hello world");
+            assert_eq!(process("world", "{prepend:hello }").unwrap(), "hello world");
+
+            // On lists
+            assert_eq!(
+                process("a,b,c", "{split:,:..|append:!}").unwrap(),
+                "a!,b!,c!"
+            );
+            assert_eq!(
+                process("a,b,c", "{split:,:..|prepend:_}").unwrap(),
+                "_a,_b,_c"
+            );
+        }
+
+        #[test]
+        fn test_shorthand_syntax() {
+            let input = "one two three four five";
+            assert_eq!(process(input, "{0}").unwrap(), "one");
+            assert_eq!(process(input, "{2}").unwrap(), "three");
+            assert_eq!(process(input, "{-1}").unwrap(), "five");
+            assert_eq!(process(input, "{1..3}").unwrap(), "two three");
+            assert_eq!(process(input, "{1..=3}").unwrap(), "two three four");
+            assert_eq!(process(input, "{..2}").unwrap(), "one two");
+            assert_eq!(process(input, "{2..}").unwrap(), "three four five");
+            assert_eq!(process(input, "{..=2}").unwrap(), "one two three");
+            assert_eq!(process(input, "{..}").unwrap(), "one two three four five");
+        }
+
+        // ------------------------------------------------------------------------
+        // Complex Chaining
+        // ------------------------------------------------------------------------
+
+        #[test]
+        fn test_complex_chains() {
+            // Multi-step transformations
+            assert_eq!(
+                process("foo,bar,baz", "{split:,:..|upper|join:-|append:!}").unwrap(),
+                "FOO-BAR-BAZ!"
+            );
+
+            // Range then transform
+            assert_eq!(
+                process("a,b,c,d,e", "{split:,:1..4|join:_|replace:s/_/-/g|upper}").unwrap(),
+                "B-C-D"
+            );
+
+            // Complex slicing and replacement
+            assert_eq!(
+                process(
+                    "hello world test",
+                    "{split: :..|slice:0..=1|join:|replace:s/o/0/g}"
+                )
+                .unwrap(),
+                "hew0te"
+            );
+        }
+
+        #[test]
+        fn test_nested_operations() {
+            // Split, transform each element, rejoin with different separator
+            assert_eq!(
+                process(
+                    "First,Second,Third",
+                    r"{split:,:..|lower|prepend:item_|join: \| }"
+                )
+                .unwrap(),
+                "item_first | item_second | item_third"
+            );
+
+            // Extract, transform, and format
+            assert_eq!(
+                process(
+                    "data1,data2,data3,data4",
+                    "{split:,:1..3|replace:s/data/item/g|upper|join: -> }"
+                )
+                .unwrap(),
+                "ITEM2 -> ITEM3"
+            );
+        }
+
+        // ------------------------------------------------------------------------
+        // Special Characters and Escaping
+        // ------------------------------------------------------------------------
+
+        #[test]
+        fn test_escape_sequences() {
+            // Newlines, tabs, carriage returns
+            assert_eq!(process("a,b", r"{split:,:..|join:\\n}").unwrap(), "a\nb");
+            assert_eq!(process("a,b", r"{split:,:..|join:\\t}").unwrap(), "a\tb");
+            assert_eq!(process("a,b", r"{split:,:..|join:\\r}").unwrap(), "a\rb");
+
+            // Escaped special characters
+            assert_eq!(process("test", r"{append:\:}").unwrap(), "test:");
+            assert_eq!(process("test", r"{append:\\}").unwrap(), r"test\");
+            assert_eq!(process("test", r"{append:\|}").unwrap(), "test|");
+
+            // Complex escaping
+            assert_eq!(process("test", r"{append:\:\\\|\:}").unwrap(), r"test:\|:");
+        }
+
+        #[test]
+        fn test_unicode_support() {
+            // Unicode characters
+            assert_eq!(
+                process("café,naïve", "{split:,:..|upper}").unwrap(),
+                "CAFÉ,NAÏVE"
+            );
+            assert_eq!(process("BJÖRK", "{lower}").unwrap(), "björk");
+
+            // Emoji and symbols
+            assert_eq!(
+                process("🚀,⭐,🌟", "{split:,:..|join: }").unwrap(),
+                "🚀 ⭐ 🌟"
+            );
+
+            // Unicode in separators
+            assert_eq!(process("a→b→c", "{split:→:..|join:←}").unwrap(), "a←b←c");
+        }
+
+        #[test]
+        fn test_special_separators() {
+            // Multi-character separators
+            assert_eq!(
+                process("a::b::c", r"{split:\:\::..|join:--}").unwrap(),
+                "a--b--c"
+            );
+            assert_eq!(
+                process("a<>b<>c", "{split:<>:..|join:><}").unwrap(),
+                "a><b><c"
+            );
+
+            // Regex-special characters as separators
+            assert_eq!(process("a.b.c", "{split:.:..|join:*}").unwrap(), "a*b*c");
+            assert_eq!(process("a+b+c", "{split:+:..|join:=}").unwrap(), "a=b=c");
+        }
+
+        // ------------------------------------------------------------------------
+        // Edge Cases and Boundary Conditions
+        // ------------------------------------------------------------------------
+
+        #[test]
+        fn test_empty_inputs() {
+            assert_eq!(process("", "{}").unwrap(), "");
+            assert_eq!(process("", "{upper}").unwrap(), "");
+            assert_eq!(process("", "{split:,:..|join:-}").unwrap(), "");
+            assert_eq!(process("", "{slice:0}").unwrap(), "");
+            assert_eq!(process("", "{append:test}").unwrap(), "test");
+            assert_eq!(process("", "{prepend:test}").unwrap(), "test");
+        }
+
+        #[test]
+        fn test_single_character_inputs() {
+            assert_eq!(process("a", "{upper}").unwrap(), "A");
+            assert_eq!(process("A", "{lower}").unwrap(), "a");
+            assert_eq!(process("a", "{slice:0}").unwrap(), "a");
+            assert_eq!(process("a", "{append:b}").unwrap(), "ab");
+            assert_eq!(process("b", "{prepend:a}").unwrap(), "ab");
+        }
+
+        #[test]
+        fn test_boundary_indices() {
+            let input = "a,b,c";
+            // Large positive indices (should clamp)
+            assert_eq!(process(input, "{split:,:1000}").unwrap(), "c");
+            assert_eq!(process(input, "{split:,:999..1001}").unwrap(), "");
+
+            // Large negative indices (should clamp)
+            assert_eq!(process(input, "{split:,:-1000}").unwrap(), "a");
+            assert_eq!(process(input, "{split:,:-1000..-999}").unwrap(), "");
+        }
+
+        #[test]
+        fn test_no_separator_found() {
+            // Split with separator not in string
+            assert_eq!(process("hello", "{split:,:..|join:-}").unwrap(), "hello");
+            assert_eq!(process("hello", "{split:xyz:..|upper}").unwrap(), "HELLO");
+        }
+
+        #[test]
+        fn test_consecutive_separators() {
+            // Multiple consecutive separators create empty elements
+            assert_eq!(process("a,,b", "{split:,:..|join:-}").unwrap(), "a--b");
+            assert_eq!(process("a,,,b", r"{split:,:..|join:\|}").unwrap(), "a|||b");
+        }
+
+        #[test]
+        fn test_operations_preserve_structure() {
+            // Operations on lists should preserve list nature until final output
+            let input = "a,b,c";
+            assert_eq!(process(input, "{split:,:..|upper|lower}").unwrap(), "a,b,c");
+            assert_eq!(process(input, "{split:,:..|trim|strip:}").unwrap(), "a,b,c");
+        }
+
+        // ------------------------------------------------------------------------
+        // Performance and Stress Testing
+        // ------------------------------------------------------------------------
+
+        #[test]
+        fn test_large_inputs() {
+            // Large number of elements
+            let large_input = (0..1000)
+                .map(|i| i.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
+            let result = process(&large_input, "{split:,:0..10|join:-}").unwrap();
+            assert_eq!(result, "0-1-2-3-4-5-6-7-8-9");
+        }
+
+        #[test]
+        fn test_long_strings() {
+            let long_string = "a".repeat(10000);
+            assert_eq!(process(&long_string, "{slice:0..5}").unwrap(), "aaaaa");
+            assert_eq!(process(&long_string, "{slice:-5..}").unwrap(), "aaaaa");
+        }
+
+        #[test]
+        fn test_deep_chaining() {
+            let input = "test";
+            let result = process(
+                input,
+                "{upper|lower|upper|lower|upper|lower|append:!|prepend:_}",
+            )
+            .unwrap();
+            assert_eq!(result, "_test!");
+        }
+    }
+
+    // ============================================================================
+    // NEGATIVE TESTING - Error Handling and Edge Cases
+    // ============================================================================
+
+    mod negative_tests {
+        use super::*;
+
+        // ------------------------------------------------------------------------
+        // Malformed Templates
+        // ------------------------------------------------------------------------
+
+        #[test]
+        fn test_malformed_template_syntax() {
+            // Missing braces
+            assert!(process("test", "split:,:0").is_err());
+            assert!(process("test", "upper").is_err());
+
+            // Unmatched braces
+            assert!(process("test", "{split:,:0").is_err());
+            assert!(process("test", "split:,:0}").is_err());
+            assert!(process("test", "{{split:,:0}").is_err());
+
+            // Empty braces with invalid content
+            assert!(process("test", "{ }").is_err());
+            assert!(process("test", r"{\|}").is_err());
+        }
+
+        #[test]
+        fn test_invalid_operations() {
+            // Non-existent operations
+            assert!(process("test", "{unknown}").is_err());
+            assert!(process("test", "{badop:arg}").is_err());
+            assert!(process("test", "{invalid_operation}").is_err());
+
+            // Misspelled operations
+            assert!(process("test", "{splt:,:0}").is_err());
+            assert!(process("test", "{joinn:-}").is_err());
+            assert!(process("test", "{repplace:s/a/b/}").is_err());
+        }
+
+        #[test]
+        fn test_invalid_operation_arguments() {
+            // Missing required arguments
+            assert!(process("test", "{split}").is_err());
+            assert!(process("test", "{join}").is_err());
+            assert!(process("test", "{replace}").is_err());
+            assert!(process("test", "{slice}").is_err());
+            assert!(process("test", "{strip}").is_err());
+            assert!(process("test", "{append}").is_err());
+            assert!(process("test", "{prepend}").is_err());
+
+            // Invalid argument formats
+            assert!(process("test", "{split:}").is_err());
+        }
+
+        // ------------------------------------------------------------------------
+        // Invalid Range Specifications
+        // ------------------------------------------------------------------------
+
+        #[test]
+        fn test_invalid_range_formats() {
+            // Non-numeric ranges
+            assert!(process("a,b,c", "{split:,:abc}").is_err());
+            assert!(process("a,b,c", "{split:,:1..abc}").is_err());
+            assert!(process("hello", "{slice:xyz}").is_err());
+            assert!(process("hello", "{slice:1..xyz}").is_err());
+
+            // Invalid range syntax
+            assert!(process("a,b,c", "{split:,:1...3}").is_err()); // Triple dots
+            assert!(process("a,b,c", "{split:,:1.=3}").is_err()); // Wrong inclusive syntax
+            assert!(process("hello", "{slice:1.2}").is_err()); // Single dot
+
+            // Invalid shorthand ranges
+            assert!(process("a b c", "{abc}").is_err());
+            assert!(process("a b c", "{1.2.3}").is_err());
+        }
+
+        // ------------------------------------------------------------------------
+        // Invalid Regular Expressions
+        // ------------------------------------------------------------------------
+
+        #[test]
+        fn test_malformed_sed_strings() {
+            // Missing closing slash
+            assert!(process("test", "{replace:s/pattern/replacement}").is_err());
+            assert!(process("test", "{replace:s/pattern}").is_err());
+
+            // Missing middle slash
+            assert!(process("test", "{replace:s/patternreplacement/}").is_err());
+
+            // No pattern
+            assert!(process("test", "{replace:s//replacement/}").is_err());
+
+            // Wrong prefix
+            assert!(process("test", "{replace:r/pattern/replacement/}").is_err());
+            assert!(process("test", "{replace:pattern/replacement}").is_err());
+
+            // Invalid flags
+            assert!(process("test", "{replace:s/a/b/xyz}").is_ok()); // Should work but ignore invalid flags
+        }
+
+        #[test]
+        fn test_invalid_regex_patterns() {
+            // Invalid regex syntax in sed strings
+            assert!(process("test", "{replace:s/[/replacement/}").is_err()); // Unclosed bracket
+            assert!(process("test", "{replace:s/(/replacement/}").is_err()); // Unclosed paren
+            assert!(process("test", "{replace:s/*/replacement/}").is_err()); // Invalid quantifier
+            assert!(process("test", "{replace:s/+/replacement/}").is_err()); // Invalid quantifier
+            assert!(process("test", "{replace:s/?/replacement/}").is_err()); // Invalid quantifier
+            assert!(process("test", "{replace:s/{/replacement/}").is_err()); // Unclosed brace
+        }
+
+        // ------------------------------------------------------------------------
+        // Chain Validation
+        // ------------------------------------------------------------------------
+
+        #[test]
+        fn test_invalid_operation_chains() {
+            // Operations that don't make sense in sequence (these should still work, testing for crashes)
+            assert!(process("test", r"{split:,:..|split:-:..|split: :..|join:\|}").is_ok());
+        }
+
+        // ------------------------------------------------------------------------
+        // Resource Exhaustion
+        // ------------------------------------------------------------------------
+
+        #[test]
+        fn test_extremely_large_operations() {
+            // Very large separator (should work but be expensive)
+            let large_sep = "x".repeat(1000);
+            let template = format!("{{split:{}:..|join:-}}", large_sep);
+            assert!(process("test", &template).is_ok());
+
+            // Very large replacement string
+            let large_replacement = "y".repeat(1000);
+            let template = format!("{{replace:s/test/{}/}}", large_replacement);
+            assert!(process("test", &template).is_ok());
+        }
+
+        #[test]
+        fn test_pathological_splitting() {
+            // String with many consecutive separators
+            let input = ",".repeat(1000);
+            assert!(process(&input, "{split:,:..|join:-}").is_ok());
+
+            // Every character is a separator
+            let input = "a,a,a,a,a".repeat(200);
+            assert!(process(&input, r"{split:,:..|join:\|\|}").is_ok());
+        }
+
+        // ------------------------------------------------------------------------
+        // Unicode Edge Cases
+        // ------------------------------------------------------------------------
+
+        #[test]
+        fn test_unicode_edge_cases() {
+            // Splitting on unicode characters
+            let input = "café→naïve→résumé";
+            assert!(process(input, "{split:→:..|join:←}").is_ok());
+
+            // Slicing through multi-byte characters (should work correctly)
+            assert!(process("🚀🌟⭐", "{slice:1}").is_ok());
+
+            // Very long unicode strings
+            let long_unicode = "🌟".repeat(1000);
+            assert!(process(&long_unicode, "{slice:0..10}").is_ok());
+        }
+
+        // ------------------------------------------------------------------------
+        // Error Message Quality
+        // ------------------------------------------------------------------------
+
+        #[test]
+        fn test_error_message_content() {
+            // Check that error messages are informative
+
+            let result = process("test", "{unknown}");
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(error.contains("unknown") || error.contains("Unknown"));
+
+            let result = process("test", "{replace:s/pattern/replacement}");
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(
+                error.contains("slash") || error.contains("sed") || error.contains("Malformed")
+            );
+
+            let result = process("test", "{split:,:abc}");
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            assert!(
+                error.contains("range") || error.contains("parse") || error.contains("invalid")
+            );
+        }
+
+        // ------------------------------------------------------------------------
+        // Boundary Input Validation
+        // ------------------------------------------------------------------------
+
+        #[test]
+        fn test_null_and_control_characters() {
+            // Null bytes in input
+            let input_with_null = "hello\0world";
+            assert!(process(input_with_null, "{upper}").is_ok());
+
+            // Control characters
+            let input_with_control = "hello\x01\x02world";
+            assert!(process(input_with_control, "{split:\x01:..|join:\\|}").is_ok());
+        }
+
+        #[test]
+        fn test_very_long_templates() {
+            // Extremely long template (testing parser limits)
+            let long_op = "upper|lower|".repeat(500);
+            let template = format!("{{{}}}", long_op.trim_end_matches('|'));
+
+            // This might be slow but shouldn't crash
+            assert!(process("test", &template).is_ok());
+        }
+
+        #[test]
+        fn test_nested_escape_sequences() {
+            // Complex nested escaping that might confuse the parser
+            assert!(process("test", r"{append:\\\\}").is_ok()); // Should append two backslashes
+            assert!(process("test", r"{append:\\\:}").is_ok()); // Should append backslash and colon
+        }
     }
 }
