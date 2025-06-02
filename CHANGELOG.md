@@ -34,13 +34,11 @@ All notable changes to this project will be documented in this file.
 
 - Add release workflow - ([4385840](https://github.com/lalvarezt/string_pipeline/commit/4385840ea1e0ebe92ff56b7cfbafe39992937d4b))
 
-
 ## [0.3.0](https://github.com/lalvarezt/string_pipeline/compare/0.2.0..0.3.0) - 2025-06-01
 
 ### 🚜 Refactor
 
 - Split into library and cli - ([dd647eb](https://github.com/lalvarezt/string_pipeline/commit/dd647eb9a3590b7dbdf9d42c39e843e65545a39b))
-
 
 ## [0.2.0] - 2025-05-31
 
