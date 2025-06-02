@@ -1,5 +1,3 @@
-WHITESPACE = _{ " " | "\t" }
-
 template = { "{" ~ operation_list? ~ "}" }
 
 operation_list = { operation ~ ("|" ~ operation)* }
@@ -40,8 +38,8 @@ strip   = { "strip" ~ ":" ~ arg }
 append  = { "append" ~ ":" ~ arg }
 prepend = { "prepend" ~ ":" ~ arg }
 
-arg          = @{ (escaped_char | normal_char)* }
-normal_char  =  { !(":" | "|" | "}" | "\\") ~ ANY }
+arg          = @{ (escaped_char | normal_char | " " | "\t")* }
+normal_char  =  { !(":" | "|" | "}" | "\\" | " " | "\t") ~ ANY }
 escaped_char =  { "\\" ~ (":" | "|" | "\\" | "n" | "t" | "r" | "/") }
 
 sed_string =  { "s/" ~ sed_part ~ "/" ~ sed_part ~ "/" ~ sed_flags? }
