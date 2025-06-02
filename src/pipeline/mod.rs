@@ -155,18 +155,25 @@ pub fn apply_ops(input: &str, ops: &[StringOp]) -> Result<String, String> {
     let mut default_sep = " ".to_string(); // Clear default
     for op in ops {
         match op {
-            StringOp::Split { sep, range } => {
-                let parts: Vec<String> = match &val {
-                    Value::Str(s) => s.split(sep).map(|s| s.to_string()).collect(),
-                    Value::List(list) => list
+            StringOp::Split { sep, range } => match &val {
+                Value::Str(s) => {
+                    let parts: Vec<String> = s.split(sep).map(|s| s.to_string()).collect();
+                    default_sep = sep.clone();
+                    let result = apply_range(&parts, range);
+                    val = Value::List(result);
+                }
+                Value::List(list) => {
+                    let result: Vec<String> = list
                         .iter()
-                        .flat_map(|s| s.split(sep).map(|s| s.to_string()))
-                        .collect(),
-                };
-                default_sep = sep.clone(); // Track for final output
-                let result = apply_range(&parts, range);
-                val = Value::List(result);
-            }
+                        .flat_map(|s| {
+                            let parts: Vec<String> = s.split(sep).map(|s| s.to_string()).collect();
+                            apply_range(&parts, range)
+                        })
+                        .collect();
+                    default_sep = sep.clone();
+                    val = Value::List(result);
+                }
+            },
             StringOp::Slice { range } => match &val {
                 Value::Str(s) => {
                     let chars: Vec<char> = s.chars().collect();
