@@ -37,7 +37,7 @@ You can find this crate on [crates.io](https://crates.io/crates/string_pipeline)
 
 ```toml
 [dependencies]
-string_pipeline = "0.4.0"
+string_pipeline = "0.5.0"
 ```
 
 ## 🚀 Usage
