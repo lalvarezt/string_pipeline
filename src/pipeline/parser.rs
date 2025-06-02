@@ -7,21 +7,30 @@ use super::{RangeSpec, StringOp, unescape};
 #[grammar = "pipeline/template.pest"]
 struct TemplateParser;
 
-pub fn parse_template(template: &str) -> Result<Vec<StringOp>, String> {
+pub fn parse_template(template: &str) -> Result<(Vec<StringOp>, bool), String> {
     let pairs = TemplateParser::parse(Rule::template, template)
         .map_err(|e| format!("Parse error: {}", e))?
         .next()
         .unwrap();
 
     let mut ops = Vec::new();
+    let mut debug = false;
+
     for pair in pairs.into_inner() {
-        if pair.as_rule() == Rule::operation_list {
-            for op_pair in pair.into_inner() {
-                ops.push(parse_operation(op_pair)?);
+        match pair.as_rule() {
+            Rule::operation_list => {
+                for op_pair in pair.into_inner() {
+                    ops.push(parse_operation(op_pair)?);
+                }
             }
+            Rule::debug_flag => {
+                debug = true;
+            }
+            _ => {}
         }
     }
-    Ok(ops)
+
+    Ok((ops, debug))
 }
 
 fn parse_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String> {

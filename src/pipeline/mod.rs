@@ -44,7 +44,7 @@ pub enum RangeSpec {
     Range(Option<isize>, Option<isize>, bool), // (start, end, inclusive)
 }
 
-pub fn parse_template(template: &str) -> Result<Vec<StringOp>, String> {
+pub fn parse_template(template: &str) -> Result<(Vec<StringOp>, bool), String> {
     parser::parse_template(template)
 }
 
@@ -150,10 +150,18 @@ fn unescape(s: &str) -> String {
     out
 }
 
-pub fn apply_ops(input: &str, ops: &[StringOp]) -> Result<String, String> {
+pub fn apply_ops(input: &str, ops: &[StringOp], debug: bool) -> Result<String, String> {
     let mut val = Value::Str(input.to_string());
-    let mut default_sep = " ".to_string(); // Clear default
-    for op in ops {
+    let mut default_sep = " ".to_string();
+
+    if debug {
+        eprintln!("DEBUG: Initial value: {:?}", val);
+    }
+
+    for (i, op) in ops.iter().enumerate() {
+        if debug {
+            eprintln!("DEBUG: Applying operation {}: {:?}", i + 1, op);
+        }
         match op {
             StringOp::Split { sep, range } => match &val {
                 Value::Str(s) => {
@@ -306,6 +314,18 @@ pub fn apply_ops(input: &str, ops: &[StringOp]) -> Result<String, String> {
                 }
             },
         }
+        if debug {
+            match &val {
+                Value::Str(s) => eprintln!("DEBUG: Result: String({:?})", s),
+                Value::List(list) => {
+                    eprintln!("DEBUG: Result: List with {} items:", list.len());
+                    for (idx, item) in list.iter().enumerate() {
+                        eprintln!("DEBUG:   [{}]: {:?}", idx, item);
+                    }
+                }
+            }
+            eprintln!("DEBUG: ---");
+        }
     }
 
     // Note: If the final value is a List, we join using the last split separator
@@ -323,8 +343,8 @@ pub fn apply_ops(input: &str, ops: &[StringOp]) -> Result<String, String> {
 }
 
 pub fn process(input: &str, template: &str) -> Result<String, String> {
-    let ops = parse_template(template)?;
-    apply_ops(input, &ops)
+    let (ops, debug) = parse_template(template)?;
+    apply_ops(input, &ops, debug)
 }
 
 #[cfg(test)]

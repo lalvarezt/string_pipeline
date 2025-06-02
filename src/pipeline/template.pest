@@ -1,4 +1,6 @@
-template = { "{" ~ operation_list? ~ "}" }
+template = { "{" ~ debug_flag? ~ operation_list? ~ "}" }
+
+debug_flag = { "!" }
 
 operation_list = { operation ~ ("|" ~ operation)* }
 
