@@ -44,3 +44,10 @@ lto = "fat"
 [profile.deb]
 inherits = "release"
 debug = false
+
+[dev-dependencies]
+criterion = { version = "0.6" }
+
+[[bench]]
+name = "process"
+harness = false
