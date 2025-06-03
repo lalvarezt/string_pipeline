@@ -40,10 +40,11 @@ A flexible, composable string transformation CLI tool and Rust library. `string_
 - **Split and join**: Extract and reassemble parts of strings.
 - **Slice and range**: Select sub-strings or sub-lists by index or range.
 - **Regex replace**: sed-like regex search and replace.
+- **Filtering**: Filter lists with regex patterns using `filter` and `filter_not`.
 - **Case conversion**: Uppercase and lowercase.
 - **Trim and strip**: Remove whitespace, custom characters, ansi sequences.
 - **Append and prepend**: Add text before or after.
-- **Escaping**: Use `\:` and `\\` to include literal colons and backslashes in arguments.
+- **Smart escaping**: Contextual pipe handling - no escaping needed in most cases.
 - **Flexible indices**: Python-like negative indices in ranges and slices with Rust-like syntax.
 - **Stdin support**: Read input from stdin when no input argument is provided.
 - **Debug mode**: Add `!` after `{` to print debug info for each operation.
@@ -145,7 +146,7 @@ Arguments to operations are separated by `:`.
       - `{index}` (e.g. `{1}`, equivalent to `{split: :1}`)
       - `{range}` (e.g. `{1..3}`, equivalent to `{split: :1..3}`)
   - `join:<sep>`
-  - `slice:<range>`
+  - `substring:<range>`
   - `replace:s/<pattern>/<replacement>/<flags>`
   - `upper`
   - `lower`
@@ -154,8 +155,9 @@ Arguments to operations are separated by `:`.
   - `append:<suffix>`
   - `prepend:<prefix>`
   - `strip_ansi`
-  - `filter`
-  - `filter_not`
+  - `filter:<regex_pattern>`
+  - `filter_not:<regex_pattern>`
+  - `slice:<range>`
 
 #### Supported Operations
 
@@ -163,7 +165,7 @@ Arguments to operations are separated by `:`.
 |-------------------|---------------------------------------------|---------------------------------------------|
 | Split             | `split:<sep>:<range>`                         | Split by separator, select by index/range   |
 | Join              | `join:<sep>`                                  | Join a list with separator                  |
-| Slice             | `slice:<range>`                               | Slice string or list elements by range      |
+| Substring         | `slice:<range>`                               | Extract substrings                          |
 | Replace           | `replace:s/<pattern>/<replacement>/<flags>`   | Regex replace (sed-like)                    |
 | Uppercase         | `upper`                                       | Convert to uppercase                        |
 | Lowercase         | `lower`                                       | Convert to lowercase                        |
@@ -172,8 +174,9 @@ Arguments to operations are separated by `:`.
 | Append            | `append:<suffix>`                             | Append text                                 |
 | Prepend           | `prepend:<prefix>`                            | Prepend text                                |
 | StripAnsi         | `strip_ansi`                                  | Removes ansi escape sequences               |
-| Filter            | `filter`                                      | Only show matched entries                   |
-| FilterNot         | `filter_not`                                  | Removes matched entries                     |
+| Filter            | `filter:<regex_pattern>`                      | Keep only items matching regex pattern      |
+| FilterNot         | `filter_not:<regex_pattern>`                  | Remove items matching regex pattern         |
+| Slice             | `filter_not:<regex_pattern>`                  | Select elements from a list                 |
 
 #### Range Specifications
 
@@ -197,12 +200,19 @@ Negative indices count from the end:
 
 #### Escaping
 
-To include a literal:
+The parser intelligently handles pipe characters (`|`) based on context:
 
-- Use `\:` for a literal colon in arguments.
-- Use `\\` for a literal backslash.
-- Use `\n`, `\t`, `\r` for newline, tab, carriage return.
-- Use `\|` for a literal pipe in arguments.
+**Pipes are automatically allowed in:**
+
+- **Split separators**: `{split:|:..}` (splits on pipe)
+- **Regex patterns**: `{filter:\.(txt|md|log)}` (alternation)
+- **Sed replacements**: `{replace:s/test/a|b/}` (pipe in replacement)
+
+**Manual escaping needed for:**
+
+- **Other arguments**: Use `\|` for literal pipes in join, append, prepend, etc.
+- **Special characters**: Use `\:` for literal colons, `\\` for backslashes
+- **Escape sequences**: Use `\n`, `\t`, `\r` for newline, tab, carriage return
 
 #### Enable Debug Mode
 
