@@ -3,6 +3,36 @@
 All notable changes to this project will be documented in this file.
 <!-- ignore lint rules that are often triggered by content generated from commits / git-cliff -->
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style -->
+## [0.7.0](https://github.com/lalvarezt/string_pipeline/compare/0.6.0..0.7.0) - 2025-06-03
+
+### ⛰️  Features
+
+- *(parser)* [**breaking**] Rework handling of espaced characters in arguments, now it behaves as expected - ([6291c4f](https://github.com/lalvarezt/string_pipeline/commit/6291c4f1d12bf8b7471b51837ac222c1b749f367))
+- *(parser)* Add filter and filter_not operations - ([f0c9f1a](https://github.com/lalvarezt/string_pipeline/commit/f0c9f1aadd25368419dcb1c1aa17b329cdf1746f))
+- *(parser)* Add strip_ansi operation - ([505f582](https://github.com/lalvarezt/string_pipeline/commit/505f582bdbc9af12a3f75c680a972d0cdc227cb3))
+- *(parser)* Add support for imsx sed flags - ([bb16ba5](https://github.com/lalvarezt/string_pipeline/commit/bb16ba52f74f4b0a43e4d9cde4437436f904d8bd))
+
+### 📚 Documentation
+
+- *(parser)* Add strip ansi escape sequences documentation - ([d5343dd](https://github.com/lalvarezt/string_pipeline/commit/d5343ddf4fdabcaf0ab5a7503a1ec1fd4fa01e95))
+- *(readme)* Updated readme - ([7f83031](https://github.com/lalvarezt/string_pipeline/commit/7f8303113174204f0b41d427274194edf92c1a29))
+
+### ⚡ Performance
+
+- Add a simple benchmark for `string_pipeline::process`  - ([93a19eb](https://github.com/lalvarezt/string_pipeline/commit/93a19eb80fa38752f4868379a47909b546c0afc5))
+
+### 🧪 Testing
+
+- *(parser)* New set of test, hopefully better organized to allow growth - ([6532b2c](https://github.com/lalvarezt/string_pipeline/commit/6532b2ce48c284bfc718c20a7c914f876e76bb25))
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump to 0.7.0 - ([d84ee41](https://github.com/lalvarezt/string_pipeline/commit/d84ee41279a9f778522d79553779ee355e7bcb62))
+
+## New Contributors ❤️
+
+* @alexpasmantier made their first contribution in [#3](https://github.com/lalvarezt/string_pipeline/pull/3)
+
 ## [0.6.0](https://github.com/lalvarezt/string_pipeline/compare/0.5.0..0.6.0) - 2025-06-02
 
 ### ⛰️  Features
@@ -16,6 +46,7 @@ All notable changes to this project will be documented in this file.
 
 ### ⚙️ Miscellaneous Tasks
 
+- *(changelog)* Update changelog - ([1da1f0b](https://github.com/lalvarezt/string_pipeline/commit/1da1f0bb804607e68c465082e96857b8f746c77d))
 - Bump to 0.6.0 - ([2454007](https://github.com/lalvarezt/string_pipeline/commit/2454007ec7f35755e8edd101d410a50f5b990fbc))
 
 
