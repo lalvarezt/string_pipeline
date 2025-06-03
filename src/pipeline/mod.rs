@@ -220,7 +220,27 @@ pub fn apply_ops(input: &str, ops: &[StringOp], debug: bool) -> Result<String, S
                 replacement,
                 flags,
             } => {
-                let pattern_to_use = pattern.clone();
+                let mut pattern_to_use = pattern.clone();
+
+                // Build inline flags based on the provided flags
+                let mut inline_flags = String::new();
+                if flags.contains('i') {
+                    inline_flags.push('i');
+                }
+                if flags.contains('m') {
+                    inline_flags.push('m');
+                }
+                if flags.contains('s') {
+                    inline_flags.push('s');
+                }
+                if flags.contains('x') {
+                    inline_flags.push('x');
+                }
+
+                // Add inline flags if any are present
+                if !inline_flags.is_empty() {
+                    pattern_to_use = format!("(?{}){}", inline_flags, pattern_to_use);
+                }
 
                 // Compile the regex for use
                 let re = match Regex::new(&pattern_to_use) {
