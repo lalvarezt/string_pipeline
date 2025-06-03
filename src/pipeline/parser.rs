@@ -98,6 +98,14 @@ fn parse_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String
             Ok(StringOp::Prepend { prefix })
         }
         Rule::strip_ansi => Ok(StringOp::StripAnsi),
+        Rule::filter => {
+            let pattern = unescape(inner.into_inner().next().unwrap().as_str());
+            Ok(StringOp::Filter { pattern })
+        }
+        Rule::filter_not => {
+            let pattern = unescape(inner.into_inner().next().unwrap().as_str());
+            Ok(StringOp::FilterNot { pattern })
+        }
         _ => Err(format!("Unknown operation: {:?}", inner.as_rule())),
     }
 }

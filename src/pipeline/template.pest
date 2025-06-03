@@ -18,6 +18,8 @@ operation = {
   | append
   | prepend
   | strip_ansi
+  | filter
+  | filter_not
 }
 
 shorthand_index = { number }
@@ -41,6 +43,8 @@ strip      = { "strip" ~ ":" ~ arg }
 append     = { "append" ~ ":" ~ arg }
 prepend    = { "prepend" ~ ":" ~ arg }
 strip_ansi = { "strip_ansi" }
+filter     = { "filter" ~ ":" ~ arg }
+filter_not = { "filter_not" ~ ":" ~ arg }
 
 arg          = @{ (escaped_char | normal_char | " " | "\t")* }
 normal_char  =  { !(":" | "|" | "}" | "\\" | " " | "\t") ~ ANY }

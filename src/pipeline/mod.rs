@@ -38,6 +38,12 @@ pub enum StringOp {
         prefix: String,
     },
     StripAnsi,
+    Filter {
+        pattern: String,
+    },
+    FilterNot {
+        pattern: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -357,6 +363,34 @@ pub fn apply_ops(input: &str, ops: &[StringOp], debug: bool) -> Result<String, S
                         }
                     }
                     val = Value::List(stripped_list);
+                }
+            },
+            StringOp::Filter { pattern } => match &val {
+                Value::List(list) => {
+                    let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
+                    let filtered: Vec<String> =
+                        list.iter().filter(|s| re.is_match(s)).cloned().collect();
+                    val = Value::List(filtered);
+                }
+                Value::Str(s) => {
+                    let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
+                    if !re.is_match(s) {
+                        val = Value::Str(String::new());
+                    }
+                }
+            },
+            StringOp::FilterNot { pattern } => match &val {
+                Value::List(list) => {
+                    let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
+                    let filtered: Vec<String> =
+                        list.iter().filter(|s| !re.is_match(s)).cloned().collect();
+                    val = Value::List(filtered);
+                }
+                Value::Str(s) => {
+                    let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
+                    if re.is_match(s) {
+                        val = Value::Str(String::new());
+                    }
                 }
             },
         }

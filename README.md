@@ -154,6 +154,8 @@ Arguments to operations are separated by `:`.
   - `append:<suffix>`
   - `prepend:<prefix>`
   - `strip_ansi`
+  - `filter`
+  - `filter_not`
 
 #### Supported Operations
 
@@ -170,6 +172,8 @@ Arguments to operations are separated by `:`.
 | Append            | `append:<suffix>`                             | Append text                                 |
 | Prepend           | `prepend:<prefix>`                            | Prepend text                                |
 | StripAnsi         | `strip_ansi`                                  | Removes ansi escape sequences               |
+| Filter            | `filter`                                      | Only show matched entries                   |
+| FilterNot         | `filter_not`                                  | Removes matched entries                     |
 
 #### Range Specifications
 
