@@ -605,7 +605,7 @@ dependencies = [
 
 [[package]]
 name = "string_pipeline"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "clap",
  "clap_mangen",
