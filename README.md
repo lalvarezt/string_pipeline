@@ -41,7 +41,7 @@ A flexible, composable string transformation CLI tool and Rust library. `string_
 - **Slice and range**: Select sub-strings or sub-lists by index or range.
 - **Regex replace**: sed-like regex search and replace.
 - **Case conversion**: Uppercase and lowercase.
-- **Trim and strip**: Remove whitespace or custom characters.
+- **Trim and strip**: Remove whitespace, custom characters, ansi sequences.
 - **Append and prepend**: Add text before or after.
 - **Escaping**: Use `\:` and `\\` to include literal colons and backslashes in arguments.
 - **Flexible indices**: Python-like negative indices in ranges and slices with Rust-like syntax.
@@ -141,6 +141,9 @@ Arguments to operations are separated by `:`.
 - **Operation List**: `operation ('|' operation)*`
 - **Operation**:
   - `split:<sep>:<range>`
+    - **Shorthand for split**:
+      - `{index}` (e.g. `{1}`, equivalent to `{split: :1}`)
+      - `{range}` (e.g. `{1..3}`, equivalent to `{split: :1..3}`)
   - `join:<sep>`
   - `slice:<range>`
   - `replace:s/<pattern>/<replacement>/<flags>`
@@ -150,24 +153,23 @@ Arguments to operations are separated by `:`.
   - `strip:<chars>`
   - `append:<suffix>`
   - `prepend:<prefix>`
-  - **Shorthand for split**:
-    - `{index}` (e.g. `{1}`)
-    - `{range}` (e.g. `{1..3}`)
+  - `strip_ansi`
 
 #### Supported Operations
 
 | Operation         | Syntax                                      | Description                                 |
 |-------------------|---------------------------------------------|---------------------------------------------|
-| Split             | `split:<sep>:<range>`                       | Split by separator, select by index/range   |
-| Join              | `join:<sep>`                                | Join a list with separator                  |
-| Slice             | `slice:<range>`                             | Slice string or list elements by range      |
-| Replace           | `replace:s/<pattern>/<replacement>/<flags>` | Regex replace (sed-like)                    |
-| Uppercase         | `upper`                                     | Convert to uppercase                        |
-| Lowercase         | `lower`                                     | Convert to lowercase                        |
-| Trim              | `trim`                                      | Trim whitespace                            |
-| Strip             | `strip:<chars>`                             | Trim custom characters                      |
-| Append            | `append:<suffix>`                           | Append text                                 |
-| Prepend           | `prepend:<prefix>`                          | Prepend text                                |
+| Split             | `split:<sep>:<range>`                         | Split by separator, select by index/range   |
+| Join              | `join:<sep>`                                  | Join a list with separator                  |
+| Slice             | `slice:<range>`                               | Slice string or list elements by range      |
+| Replace           | `replace:s/<pattern>/<replacement>/<flags>`   | Regex replace (sed-like)                    |
+| Uppercase         | `upper`                                       | Convert to uppercase                        |
+| Lowercase         | `lower`                                       | Convert to lowercase                        |
+| Trim              | `trim`                                        | Trim whitespace                             |
+| Strip             | `strip:<chars>`                               | Trim custom characters                      |
+| Append            | `append:<suffix>`                             | Append text                                 |
+| Prepend           | `prepend:<prefix>`                            | Prepend text                                |
+| StripAnsi         | `strip_ansi`                                  | Removes ansi escape sequences               |
 
 #### Range Specifications
 
@@ -269,6 +271,23 @@ echo "document.pdf" | string-pipeline "{split:.:-1|upper}"
 # Process log entries with timestamps
 echo "2023-01-01 ERROR Failed to connect" | string-pipeline "{split: :1..|join: |lower}"
 # Output: error failed to connect
+
+# Clean colored git output
+git log --oneline --color=always | string-pipeline "{split:\\n:..|strip_ansi|join:\\n}"
+
+# Process ls colored output
+ls --color=always | string-pipeline "{strip_ansi}"
+
+# Clean grep colored output
+grep --color=always "pattern" file.txt | string-pipeline "{strip_ansi|upper}"
+
+# Chain with other operations
+echo -e "\x1b[31mred\x1b[0m,\x1b[32mgreen\x1b[0m" | \
+  string-pipeline "{split:,:..|strip_ansi|upper|join: \| }"
+# Output: RED | GREEN
+
+# Process log files with ANSI codes
+cat colored.log | string-pipeline "{split:\n:-10..|strip_ansi|join:\\n}"
 ```
 
 ### Shorthand
