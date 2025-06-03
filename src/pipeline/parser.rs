@@ -97,6 +97,7 @@ fn parse_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String
             let prefix = unescape(inner.into_inner().next().unwrap().as_str());
             Ok(StringOp::Prepend { prefix })
         }
+        Rule::strip_ansi => Ok(StringOp::StripAnsi),
         _ => Err(format!("Unknown operation: {:?}", inner.as_rule())),
     }
 }

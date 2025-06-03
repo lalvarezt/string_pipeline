@@ -17,6 +17,7 @@ operation = {
   | strip
   | append
   | prepend
+  | strip_ansi
 }
 
 shorthand_index = { number }
@@ -29,16 +30,17 @@ shorthand_range = {
   | range_full
 }
 
-split   = { "split" ~ ":" ~ arg ~ ":" ~ range_spec? }
-join    = { "join" ~ ":" ~ arg }
-slice   = { "slice" ~ ":" ~ range_spec }
-replace = { "replace" ~ ":" ~ sed_string }
-upper   = { "upper" }
-lower   = { "lower" }
-trim    = { "trim" }
-strip   = { "strip" ~ ":" ~ arg }
-append  = { "append" ~ ":" ~ arg }
-prepend = { "prepend" ~ ":" ~ arg }
+split      = { "split" ~ ":" ~ arg ~ ":" ~ range_spec? }
+join       = { "join" ~ ":" ~ arg }
+slice      = { "slice" ~ ":" ~ range_spec }
+replace    = { "replace" ~ ":" ~ sed_string }
+upper      = { "upper" }
+lower      = { "lower" }
+trim       = { "trim" }
+strip      = { "strip" ~ ":" ~ arg }
+append     = { "append" ~ ":" ~ arg }
+prepend    = { "prepend" ~ ":" ~ arg }
+strip_ansi = { "strip_ansi" }
 
 arg          = @{ (escaped_char | normal_char | " " | "\t")* }
 normal_char  =  { !(":" | "|" | "}" | "\\" | " " | "\t") ~ ANY }

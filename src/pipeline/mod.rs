@@ -1,5 +1,6 @@
 use regex::Regex;
 mod parser;
+use strip_ansi_escapes::strip;
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -36,6 +37,7 @@ pub enum StringOp {
     Prepend {
         prefix: String,
     },
+    StripAnsi,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -331,6 +333,30 @@ pub fn apply_ops(input: &str, ops: &[StringOp], debug: bool) -> Result<String, S
                         val =
                             Value::List(list.iter().map(|s| format!("{}{}", prefix, s)).collect());
                     }
+                }
+            },
+            StringOp::StripAnsi => match &val {
+                Value::Str(s) => {
+                    let stripped = strip(s.as_bytes());
+                    match String::from_utf8(stripped) {
+                        Ok(clean_str) => val = Value::Str(clean_str),
+                        Err(_) => {
+                            return Err("Failed to convert stripped bytes to UTF-8".to_string());
+                        }
+                    }
+                }
+                Value::List(list) => {
+                    let mut stripped_list = Vec::new();
+                    for s in list {
+                        let stripped = strip(s.as_bytes());
+                        match String::from_utf8(stripped) {
+                            Ok(clean_str) => stripped_list.push(clean_str),
+                            Err(_) => {
+                                return Err("Failed to convert stripped bytes to UTF-8".to_string());
+                            }
+                        }
+                    }
+                    val = Value::List(stripped_list);
                 }
             },
         }
@@ -843,6 +869,87 @@ mod tests {
             fn test_shorthand_full_range() {
                 assert_eq!(process("a b c d", "{..}").unwrap(), "a b c d");
             }
+
+            // Strip Ansi operation tests
+            #[test]
+            fn test_strip_ansi_basic() {
+                // Basic ANSI color codes
+                let input = "\x1b[31mRed text\x1b[0m";
+                assert_eq!(process(input, "{strip_ansi}").unwrap(), "Red text");
+
+                // Multiple ANSI sequences
+                let input = "\x1b[1m\x1b[31mBold Red\x1b[0m\x1b[32m Green\x1b[0m";
+                assert_eq!(process(input, "{strip_ansi}").unwrap(), "Bold Red Green");
+
+                // No ANSI sequences (should be unchanged)
+                let input = "Plain text";
+                assert_eq!(process(input, "{strip_ansi}").unwrap(), "Plain text");
+            }
+
+            #[test]
+            fn test_strip_ansi_complex_sequences() {
+                // Complex ANSI sequences
+                let input = "\x1b[38;5;196mHello\x1b[0m \x1b[48;5;21mWorld\x1b[0m";
+                assert_eq!(process(input, "{strip_ansi}").unwrap(), "Hello World");
+
+                // Cursor movement sequences
+                let input = "\x1b[2J\x1b[H\x1b[31mCleared screen\x1b[0m";
+                assert_eq!(process(input, "{strip_ansi}").unwrap(), "Cleared screen");
+
+                // Mixed content
+                let input = "Normal \x1b[1mBold\x1b[0m and \x1b[4mUnderlined\x1b[0m text";
+                assert_eq!(
+                    process(input, "{strip_ansi}").unwrap(),
+                    "Normal Bold and Underlined text"
+                );
+            }
+
+            #[test]
+            fn test_strip_ansi_edge_cases() {
+                // Empty string
+                assert_eq!(process("", "{strip_ansi}").unwrap(), "");
+
+                // Only ANSI sequences
+                let input = "\x1b[31m\x1b[1m\x1b[0m";
+                assert_eq!(process(input, "{strip_ansi}").unwrap(), "");
+
+                // Malformed ANSI sequences (should still work)
+                let input = "\x1b[99mText\x1b[";
+                let result = process(input, "{strip_ansi}").unwrap();
+                assert!(result.contains("Text"));
+            }
+
+            #[test]
+            fn test_strip_ansi_real_world_examples() {
+                // Git colored output
+                let input = "\x1b[32m+\x1b[0m\x1b[32madded line\x1b[0m";
+                assert_eq!(process(input, "{strip_ansi}").unwrap(), "+added line");
+
+                // ls colored output
+                let input = "\x1b[0m\x1b[01;34mfolder\x1b[0m  \x1b[01;32mexecutable\x1b[0m";
+                assert_eq!(
+                    process(input, "{strip_ansi}").unwrap(),
+                    "folder  executable"
+                );
+
+                // Grep colored output
+                let input = "file.txt:\x1b[01;31m\x1b[Kmatch\x1b[m\x1b[Ked text";
+                assert_eq!(
+                    process(input, "{strip_ansi}").unwrap(),
+                    "file.txt:matched text"
+                );
+            }
+
+            #[test]
+            fn test_strip_ansi_unicode_preservation() {
+                // Ensure Unicode characters are preserved
+                let input = "\x1b[31m🚀 Rocket\x1b[0m \x1b[32m🌟 Star\x1b[0m";
+                assert_eq!(process(input, "{strip_ansi}").unwrap(), "🚀 Rocket 🌟 Star");
+
+                // Unicode with combining characters
+                let input = "\x1b[31mCafé naïve résumé\x1b[0m";
+                assert_eq!(process(input, "{strip_ansi}").unwrap(), "Café naïve résumé");
+            }
         }
 
         mod negative_tests {
@@ -1230,6 +1337,24 @@ mod tests {
                     "a\nb\nc"
                 );
             }
+
+            // Split + Strip Ansi
+            #[test]
+            fn test_strip_ansi_on_list() {
+                // ANSI sequences in list items
+                let input = "\x1b[31mred\x1b[0m,\x1b[32mgreen\x1b[0m,\x1b[34mblue\x1b[0m";
+                assert_eq!(
+                    process(input, "{split:,:..|strip_ansi}").unwrap(),
+                    "red,green,blue"
+                );
+
+                // Mixed ANSI and plain text in list
+                let input = "plain,\x1b[1mbold\x1b[0m,\x1b[3mitalic\x1b[0m";
+                assert_eq!(
+                    process(input, "{split:,:..|strip_ansi}").unwrap(),
+                    "plain,bold,italic"
+                );
+            }
         }
 
         mod negative_tests {
@@ -1563,6 +1688,24 @@ mod tests {
                 assert_eq!(
                     process("  HELLO,WORLD  ", "{trim|split:,:..|lower|prepend:item_}").unwrap(),
                     "item_hello,item_world"
+                );
+            }
+
+            // Split + String Ansi chaining
+            #[test]
+            fn test_strip_ansi_chaining() {
+                // Chain with other operations
+                let input = "\x1b[31mHELLO\x1b[0m,\x1b[32mWORLD\x1b[0m";
+                assert_eq!(
+                    process(input, "{split:,:..|strip_ansi|lower|join: }").unwrap(),
+                    "hello world"
+                );
+
+                // Strip ANSI then transform
+                let input = "\x1b[1m\x1b[31mtest\x1b[0m";
+                assert_eq!(
+                    process(input, "{strip_ansi|upper|append:!}").unwrap(),
+                    "TEST!"
                 );
             }
         }
