@@ -1,6 +1,6 @@
 use clap::Parser;
 use std::io::{self, Read};
-use string_pipeline::process;
+use string_pipeline::Template;
 
 #[derive(Parser)]
 struct Cli {
@@ -33,10 +33,15 @@ fn main() {
         },
     };
 
-    match process(&input, &cli.template) {
+    let template = Template::parse(&cli.template).unwrap_or_else(|e| {
+        eprintln!("Error parsing template: {}", e);
+        std::process::exit(1);
+    });
+
+    match template.format(&input) {
         Ok(result) => println!("{}", result),
         Err(e) => {
-            eprintln!("Error: {}", e);
+            eprintln!("Error formatting input: {}", e);
             std::process::exit(1);
         }
     }

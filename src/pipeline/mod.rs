@@ -2,8 +2,11 @@ use regex::Regex;
 mod parser;
 use strip_ansi_escapes::strip;
 
+pub use crate::pipeline::template::Template;
+mod template;
+
 #[derive(Debug, Clone)]
-pub enum Value {
+enum Value {
     Str(String),
     List(Vec<String>),
 }
@@ -53,10 +56,6 @@ pub enum StringOp {
 pub enum RangeSpec {
     Index(isize),
     Range(Option<isize>, Option<isize>, bool), // (start, end, inclusive)
-}
-
-pub fn parse_template(template: &str) -> Result<(Vec<StringOp>, bool), String> {
-    parser::parse_template(template)
 }
 
 fn resolve_index(idx: isize, len: usize) -> usize {
@@ -380,21 +379,20 @@ pub fn apply_ops(input: &str, ops: &[StringOp], debug: bool) -> Result<String, S
     })
 }
 
-pub fn process(input: &str, template: &str) -> Result<String, String> {
-    let (ops, debug) = parse_template(template)?;
-    apply_ops(input, &ops, debug)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::Template;
+
+    fn process(input: &str, template: &str) -> Result<String, String> {
+        let tmpl = Template::parse(template)?;
+        tmpl.format(input)
+    }
 
     // Single Operation Tests - Organized by Operation Type
     mod single_operations {
-        use super::*;
 
         mod positive_tests {
-            use super::*;
+            use super::super::process;
 
             // Split operation tests
             #[test]
@@ -979,7 +977,7 @@ mod tests {
         }
 
         mod negative_tests {
-            use super::*;
+            use super::super::process;
 
             // Split operation negative tests
             #[test]
@@ -1111,11 +1109,8 @@ mod tests {
 
     // Two-Step Pipeline Tests
     mod two_step_pipelines {
-        use super::*;
-
         mod positive_tests {
-            use super::*;
-
+            use super::super::process;
             // Split + Join combinations
             #[test]
             fn test_split_join_different_separators() {
@@ -1379,7 +1374,7 @@ mod tests {
         }
 
         mod negative_tests {
-            use super::*;
+            use super::super::process;
 
             // Invalid pipeline combinations
             #[test]
@@ -1430,10 +1425,8 @@ mod tests {
 
     // Multi-Step Pipeline Tests
     mod multi_step_pipelines {
-        use super::*;
-
         mod positive_tests {
-            use super::*;
+            use super::super::process;
 
             // Split + Transform + Join patterns
             #[test]
@@ -2135,7 +2128,7 @@ mod tests {
         }
 
         mod negative_tests {
-            use super::*;
+            use super::super::process;
 
             // Invalid three-step combinations
             #[test]
