@@ -25,7 +25,7 @@ pub enum StringOp {
     Upper,
     Lower,
     Trim,
-    Slice {
+    Substring {
         range: RangeSpec,
     },
     Strip {
@@ -43,6 +43,9 @@ pub enum StringOp {
     },
     FilterNot {
         pattern: String,
+    },
+    Slice {
+        range: RangeSpec,
     },
 }
 
@@ -110,54 +113,6 @@ fn apply_range<T: Clone>(items: &[T], range: &RangeSpec) -> Vec<T> {
     }
 }
 
-/// Unescape \n, \t, \r, in argument strings
-fn unescape(s: &str) -> String {
-    let mut out = String::new();
-    let mut chars = s.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c == '\\' {
-            match chars.peek() {
-                Some('n') => {
-                    out.push('\n');
-                    chars.next();
-                }
-                Some('t') => {
-                    out.push('\t');
-                    chars.next();
-                }
-                Some('r') => {
-                    out.push('\r');
-                    chars.next();
-                }
-                Some(':') => {
-                    out.push(':');
-                    chars.next();
-                }
-                Some('\\') => {
-                    out.push('\\');
-                    chars.next();
-                }
-                Some('/') => {
-                    out.push('/');
-                    chars.next();
-                }
-                Some('|') => {
-                    out.push('|');
-                    chars.next();
-                }
-                Some(&next) => {
-                    out.push(next);
-                    chars.next();
-                }
-                None => out.push('\\'),
-            }
-        } else {
-            out.push(c);
-        }
-    }
-    out
-}
-
 pub fn apply_ops(input: &str, ops: &[StringOp], debug: bool) -> Result<String, String> {
     let mut val = Value::Str(input.to_string());
     let mut default_sep = " ".to_string();
@@ -190,14 +145,14 @@ pub fn apply_ops(input: &str, ops: &[StringOp], debug: bool) -> Result<String, S
                     val = Value::List(result);
                 }
             },
-            StringOp::Slice { range } => match &val {
+            StringOp::Substring { range } => match &val {
                 Value::Str(s) => {
                     let chars: Vec<char> = s.chars().collect();
                     let result = apply_range(&chars, range);
                     val = Value::Str(result.into_iter().collect());
                 }
                 Value::List(list) => {
-                    let sliced: Vec<String> = list
+                    let substring: Vec<String> = list
                         .iter()
                         .map(|s| {
                             let chars: Vec<char> = s.chars().collect();
@@ -205,19 +160,18 @@ pub fn apply_ops(input: &str, ops: &[StringOp], debug: bool) -> Result<String, S
                             result.into_iter().collect()
                         })
                         .collect();
-                    val = Value::List(sliced);
+                    val = Value::List(substring);
                 }
             },
             StringOp::Join { sep } => match &val {
                 Value::List(list) => {
-                    let unescaped_sep = unescape(sep);
                     let joined = if list.is_empty() {
                         String::new()
                     } else {
-                        list.join(&unescaped_sep)
+                        list.join(sep)
                     };
                     val = Value::Str(joined);
-                    default_sep = unescaped_sep.clone(); // Update default
+                    default_sep = sep.clone(); // Update default
                 }
                 Value::Str(s) => {
                     val = Value::Str(s.clone());
@@ -255,8 +209,6 @@ pub fn apply_ops(input: &str, ops: &[StringOp], debug: bool) -> Result<String, S
                     Ok(re) => re,
                     Err(e) => return Err(format!("Invalid regex pattern: {}", e)),
                 };
-
-                let replacement = unescape(replacement);
 
                 match &val {
                     Value::Str(s) => {
@@ -393,6 +345,12 @@ pub fn apply_ops(input: &str, ops: &[StringOp], debug: bool) -> Result<String, S
                     }
                 }
             },
+            StringOp::Slice { range } => {
+                if let Value::List(list) = &val {
+                    let taken = apply_range(list, range);
+                    val = Value::List(taken);
+                }
+            }
         }
         if debug {
             match &val {
@@ -755,60 +713,60 @@ mod tests {
                 assert_eq!(process("🔥hello🔥", "{strip:🔥}").unwrap(), "hello");
             }
 
-            // Slice operation tests
+            // substring operation tests
             #[test]
-            fn test_slice_index() {
-                assert_eq!(process("hello", "{slice:1}").unwrap(), "e");
+            fn test_substring_index() {
+                assert_eq!(process("hello", "{substring:1}").unwrap(), "e");
             }
 
             #[test]
-            fn test_slice_negative_index() {
-                assert_eq!(process("hello", "{slice:-1}").unwrap(), "o");
+            fn test_substring_negative_index() {
+                assert_eq!(process("hello", "{substring:-1}").unwrap(), "o");
             }
 
             #[test]
-            fn test_slice_range_exclusive() {
-                assert_eq!(process("hello", "{slice:1..3}").unwrap(), "el");
+            fn test_substring_range_exclusive() {
+                assert_eq!(process("hello", "{substring:1..3}").unwrap(), "el");
             }
 
             #[test]
-            fn test_slice_range_inclusive() {
-                assert_eq!(process("hello", "{slice:1..=3}").unwrap(), "ell");
+            fn test_substring_range_inclusive() {
+                assert_eq!(process("hello", "{substring:1..=3}").unwrap(), "ell");
             }
 
             #[test]
-            fn test_slice_range_from() {
-                assert_eq!(process("hello", "{slice:2..}").unwrap(), "llo");
+            fn test_substring_range_from() {
+                assert_eq!(process("hello", "{substring:2..}").unwrap(), "llo");
             }
 
             #[test]
-            fn test_slice_range_to() {
-                assert_eq!(process("hello", "{slice:..3}").unwrap(), "hel");
+            fn test_substring_range_to() {
+                assert_eq!(process("hello", "{substring:..3}").unwrap(), "hel");
             }
 
             #[test]
-            fn test_slice_range_to_inclusive() {
-                assert_eq!(process("hello", "{slice:..=2}").unwrap(), "hel");
+            fn test_substring_range_to_inclusive() {
+                assert_eq!(process("hello", "{substring:..=2}").unwrap(), "hel");
             }
 
             #[test]
-            fn test_slice_full_range() {
-                assert_eq!(process("hello", "{slice:..}").unwrap(), "hello");
+            fn test_substring_full_range() {
+                assert_eq!(process("hello", "{substring:..}").unwrap(), "hello");
             }
 
             #[test]
-            fn test_slice_empty_string() {
-                assert_eq!(process("", "{slice:0}").unwrap(), "");
+            fn test_substring_empty_string() {
+                assert_eq!(process("", "{substring:0}").unwrap(), "");
             }
 
             #[test]
-            fn test_slice_out_of_bounds() {
-                assert_eq!(process("hi", "{slice:5}").unwrap(), "i");
+            fn test_substring_out_of_bounds() {
+                assert_eq!(process("hi", "{substring:5}").unwrap(), "i");
             }
 
             #[test]
-            fn test_slice_unicode() {
-                assert_eq!(process("café", "{slice:1..3}").unwrap(), "af");
+            fn test_substring_unicode() {
+                assert_eq!(process("café", "{substring:1..3}").unwrap(), "af");
             }
 
             // Append operation tests
@@ -984,6 +942,40 @@ mod tests {
                 let input = "\x1b[31mCafé naïve résumé\x1b[0m";
                 assert_eq!(process(input, "{strip_ansi}").unwrap(), "Café naïve résumé");
             }
+
+            // Filter operation tests
+            #[test]
+            fn test_filter_on_string_value() {
+                // Filter on string - match keeps string
+                assert_eq!(process("hello", "{filter:hello}").unwrap(), "hello");
+                assert_eq!(process("hello", "{filter:^hello$}").unwrap(), "hello");
+                assert_eq!(
+                    process("hello world", "{filter:world}").unwrap(),
+                    "hello world"
+                );
+
+                // Filter on string - no match returns empty
+                assert_eq!(process("hello", "{filter:goodbye}").unwrap(), "");
+                assert_eq!(process("hello", "{filter:^world$}").unwrap(), "");
+            }
+
+            #[test]
+            fn test_filter_not_on_string_value() {
+                // Filter not on string - match returns empty
+                assert_eq!(process("hello", "{filter_not:hello}").unwrap(), "");
+                assert_eq!(process("hello world", "{filter_not:world}").unwrap(), "");
+
+                // Filter not on string - no match keeps string
+                assert_eq!(process("hello", "{filter_not:goodbye}").unwrap(), "hello");
+                assert_eq!(process("hello", "{filter_not:^world$}").unwrap(), "hello");
+            }
+
+            #[test]
+            fn test_filter_empty_inputs() {
+                // Empty string
+                assert_eq!(process("", "{filter:anything}").unwrap(), "");
+                assert_eq!(process("", "{filter_not:anything}").unwrap(), "");
+            }
         }
 
         mod negative_tests {
@@ -1036,15 +1028,15 @@ mod tests {
                 assert!(result.is_ok() || result.is_err());
             }
 
-            // Slice operation negative tests
+            // substring operation negative tests
             #[test]
-            fn test_slice_invalid_range() {
-                assert!(process("hello", "{slice:abc}").is_err());
+            fn test_substring_invalid_range() {
+                assert!(process("hello", "{substring:abc}").is_err());
             }
 
             #[test]
-            fn test_slice_malformed_range() {
-                assert!(process("hello", "{slice:1..abc}").is_err());
+            fn test_substring_malformed_range() {
+                assert!(process("hello", "{substring:1..abc}").is_err());
             }
 
             // Strip operation negative tests
@@ -1099,6 +1091,21 @@ mod tests {
             fn test_shorthand_invalid_range() {
                 assert!(process("a b c", "{1..abc}").is_err());
             }
+
+            // Filter negative tests
+            #[test]
+            fn test_filter_invalid_regex() {
+                // Invalid regex patterns should return errors
+                assert!(process("test", "{filter:[}").is_err());
+                assert!(process("test", "{filter:(}").is_err());
+                assert!(process("test", r"{filter:*}").is_err());
+                assert!(process("test", r"{filter:+}").is_err());
+                assert!(process("test", r"{filter:?}").is_err());
+
+                // Same for filter_not
+                assert!(process("test", "{filter_not:[}").is_err());
+                assert!(process("test", "{filter_not:*}").is_err());
+            }
         }
     }
 
@@ -1125,10 +1132,7 @@ mod tests {
 
             #[test]
             fn test_split_join_newline_to_space() {
-                assert_eq!(
-                    process("a\nb\nc", "{split:\\n:..|join: }").unwrap(),
-                    "a b c"
-                );
+                assert_eq!(process("a\nb\nc", "{split:\n:..|join: }").unwrap(), "a b c");
             }
 
             #[test]
@@ -1234,23 +1238,6 @@ mod tests {
                 );
             }
 
-            // Case + Join operations
-            #[test]
-            fn test_upper_join() {
-                assert_eq!(
-                    process("hello world test", "{upper|split: :..|join:-}").unwrap(),
-                    "HELLO-WORLD-TEST"
-                );
-            }
-
-            #[test]
-            fn test_lower_join() {
-                assert_eq!(
-                    process("HELLO WORLD TEST", "{lower|split: :..|join:_}").unwrap(),
-                    "hello_world_test"
-                );
-            }
-
             // Trim + operations
             #[test]
             fn test_trim_split() {
@@ -1292,24 +1279,24 @@ mod tests {
                 );
             }
 
-            // Slice + operations
+            // substring + operations
             #[test]
-            fn test_slice_upper() {
-                assert_eq!(process("hello", "{slice:1..3|upper}").unwrap(), "EL");
+            fn test_substring_upper() {
+                assert_eq!(process("hello", "{substring:1..3|upper}").unwrap(), "EL");
             }
 
             #[test]
-            fn test_slice_append() {
+            fn test_substring_append() {
                 assert_eq!(
-                    process("hello", "{slice:0..3|append:...}").unwrap(),
+                    process("hello", "{substring:0..3|append:...}").unwrap(),
                     "hel..."
                 );
             }
 
             #[test]
-            fn test_slice_replace() {
+            fn test_substring_replace() {
                 assert_eq!(
-                    process("hello world", "{slice:6..|replace:s/world/universe/}").unwrap(),
+                    process("hello world", "{substring:6..|replace:s/world/universe/}").unwrap(),
                     "universe"
                 );
             }
@@ -1367,7 +1354,7 @@ mod tests {
             #[test]
             fn test_escape_sequences_in_pipeline() {
                 assert_eq!(
-                    process("a\tb\tc", "{split:\\t:..|join:\\n}").unwrap(),
+                    process("a\tb\tc", "{split:\t:..|join:\n}").unwrap(),
                     "a\nb\nc"
                 );
             }
@@ -1441,8 +1428,8 @@ mod tests {
         }
     }
 
-    // Three-Step Pipeline Tests
-    mod three_step_pipelines {
+    // Multi-Step Pipeline Tests
+    mod multi_step_pipelines {
         use super::*;
 
         mod positive_tests {
@@ -1505,6 +1492,23 @@ mod tests {
                 );
             }
 
+            // Case + Split + Join operations
+            #[test]
+            fn test_upper_join() {
+                assert_eq!(
+                    process("hello world test", "{upper|split: :..|join:-}").unwrap(),
+                    "HELLO-WORLD-TEST"
+                );
+            }
+
+            #[test]
+            fn test_lower_join() {
+                assert_eq!(
+                    process("HELLO WORLD TEST", "{lower|split: :..|join:_}").unwrap(),
+                    "hello_world_test"
+                );
+            }
+
             // Split with range + Transform + Join
             #[test]
             fn test_split_range_upper_join() {
@@ -1556,9 +1560,9 @@ mod tests {
             }
 
             #[test]
-            fn test_slice_split_join() {
+            fn test_substring_split_join() {
                 assert_eq!(
-                    process("prefix:a,b,c", "{slice:7..|split:,:..|join:-}").unwrap(),
+                    process("prefix:a,b,c", "{substring:7..|split:,:..|join:-}").unwrap(),
                     "a-b-c"
                 );
             }
@@ -1626,9 +1630,9 @@ mod tests {
             }
 
             #[test]
-            fn test_slice_append_slice() {
+            fn test_substring_append_substring() {
                 assert_eq!(
-                    process("hello", "{slice:1..4|append:_test|slice:0..5}").unwrap(),
+                    process("hello", "{substring:1..4|append:_test|substring:0..5}").unwrap(),
                     "ell_t"
                 );
             }
@@ -1645,7 +1649,7 @@ mod tests {
             #[test]
             fn test_special_chars_pipeline() {
                 assert_eq!(
-                    process("a\tb\tc", "{split:\\t:..|prepend:[|append:]|join: }").unwrap(),
+                    process("a\tb\tc", "{split:\t:..|prepend:[|append:]|join: }").unwrap(),
                     "[a] [b] [c]"
                 );
             }
@@ -1661,7 +1665,7 @@ mod tests {
 
             #[test]
             fn test_escaped_pipes_pipeline() {
-                let result = process("test", "{replace:s/test/a\\|b/|split:\\|:..|join:-}");
+                let result = process("test", r"{replace:s/test/a|b/|split:|:..|join:-}");
                 assert_eq!(result.unwrap(), "a-b");
             }
 
@@ -1740,6 +1744,392 @@ mod tests {
                 assert_eq!(
                     process(input, "{strip_ansi|upper|append:!}").unwrap(),
                     "TEST!"
+                );
+            }
+
+            // Filter chain tests
+            #[test]
+            fn test_filter_basic_string_matching() {
+                // Filter list - keep matching items
+                let input = "apple,banana,apricot,cherry,grape";
+                assert_eq!(
+                    process(input, "{split:,:..|filter:ap|join:,}").unwrap(),
+                    "apple,apricot,grape"
+                );
+
+                // Filter list - exact match
+                assert_eq!(
+                    process(input, "{split:,:..|filter:^apple$|join:,}").unwrap(),
+                    "apple"
+                );
+
+                // Filter list - case sensitive
+                assert_eq!(
+                    process("Apple,apple,APPLE", "{split:,:..|filter:apple|join:,}").unwrap(),
+                    "apple"
+                );
+            }
+
+            #[test]
+            fn test_filter_not_basic() {
+                // Filter out matching items
+                let input = "apple,banana,apricot,cherry,grape";
+                assert_eq!(
+                    process(input, "{split:,:..|filter_not:ap|join:,}").unwrap(),
+                    "banana,cherry"
+                );
+
+                // Filter out exact match
+                assert_eq!(
+                    process(input, "{split:,:..|filter_not:^banana$|join:,}").unwrap(),
+                    "apple,apricot,cherry,grape"
+                );
+            }
+
+            #[test]
+            fn test_filter_regex_patterns() {
+                let input = "test123,abc456,xyz789,hello,world123";
+
+                // Numbers
+                assert_eq!(
+                    process(input, r"{split:,:..|filter:\d+|join:,}").unwrap(),
+                    "test123,abc456,xyz789,world123"
+                );
+
+                // Start with letter
+                assert_eq!(
+                    process(input, r"{split:,:..|filter:^[a-z]+$|join:,}").unwrap(),
+                    "hello"
+                );
+
+                // Contains specific pattern
+                assert_eq!(
+                    process(input, r"{split:,:..|filter:^.{3}\d+$|join:,}").unwrap(),
+                    "abc456,xyz789"
+                );
+            }
+
+            #[test]
+            fn test_filter_case_insensitive_patterns() {
+                let input = "Apple,BANANA,cherry,GRAPE";
+
+                // Case insensitive matching
+                assert_eq!(
+                    process(input, r"{split:,:..|filter:(?i)apple|join:,}").unwrap(),
+                    "Apple"
+                );
+
+                assert_eq!(
+                    process(input, r"{split:,:..|filter:(?i)^[bg]|join:,}").unwrap(),
+                    "BANANA,GRAPE"
+                );
+            }
+
+            #[test]
+            fn test_filter_special_characters() {
+                let input = "hello.world,test@email.com,user:password,file.txt,data.json";
+
+                // Dot literal
+                assert_eq!(
+                    process(input, r"{split:,:..|filter:\.|join:,}").unwrap(),
+                    "hello.world,test@email.com,file.txt,data.json"
+                );
+
+                // Email pattern
+                assert_eq!(
+                    process(input, r"{split:,:..|filter:@.*.com|join:,}").unwrap(),
+                    "test@email.com"
+                );
+
+                // File extensions
+                assert_eq!(
+                    process(input, r"{split:,:..|filter:.(txt|json)$|join:,}").unwrap(),
+                    "file.txt,data.json"
+                );
+
+                // Colon separator
+                assert_eq!(
+                    process(input, r"{split:,:..|filter::|join:,}").unwrap(),
+                    "user:password"
+                );
+            }
+
+            #[test]
+            fn test_filter_empty_inputs() {
+                // Empty list (from splitting empty string)
+                assert_eq!(
+                    process("", "{split:,:..|filter:anything|join:,}").unwrap(),
+                    ""
+                );
+                assert_eq!(
+                    process("", "{split:,:..|filter_not:anything|join:,}").unwrap(),
+                    ""
+                );
+            }
+
+            #[test]
+            fn test_filter_no_matches() {
+                let input = "apple,banana,cherry";
+
+                // Filter with no matches
+                assert_eq!(
+                    process(input, "{split:,:..|filter:xyz|join:,}").unwrap(),
+                    ""
+                );
+
+                // Filter not with all matches (everything filtered out)
+                assert_eq!(
+                    process(input, "{split:,:..|filter_not:.*|join:,}").unwrap(),
+                    ""
+                );
+            }
+
+            #[test]
+            fn test_filter_all_matches() {
+                let input = "apple,banana,cherry";
+
+                // Filter that matches everything
+                assert_eq!(
+                    process(input, "{split:,:..|filter:.*|join:,}").unwrap(),
+                    "apple,banana,cherry"
+                );
+
+                // Filter not that matches nothing (keeps everything)
+                assert_eq!(
+                    process(input, "{split:,:..|filter_not:xyz|join:,}").unwrap(),
+                    "apple,banana,cherry"
+                );
+            }
+
+            #[test]
+            fn test_filter_single_item_list() {
+                // Single item that matches
+                assert_eq!(
+                    process("apple", "{split:,:..|filter:app|join:,}").unwrap(),
+                    "apple"
+                );
+
+                // Single item that doesn't match
+                assert_eq!(
+                    process("apple", "{split:,:..|filter:xyz|join:,}").unwrap(),
+                    ""
+                );
+            }
+
+            #[test]
+            fn test_filter_chaining() {
+                let input = "Apple,banana,Cherry,grape,KIWI";
+
+                // Filter then transform
+                assert_eq!(
+                    process(input, r"{split:,:..|filter:^[A-Z]|lower|join:,}").unwrap(),
+                    "apple,cherry,kiwi"
+                );
+
+                // Transform then filter
+                assert_eq!(
+                    process(input, r"{split:,:..|lower|filter:^[ag]|join:,}").unwrap(),
+                    "apple,grape"
+                );
+
+                // Multiple filters
+                assert_eq!(
+                    process(input, r"{split:,:..|filter:^[A-Za-z]|filter:a|join:,}").unwrap(),
+                    "banana,grape"
+                );
+            }
+
+            #[test]
+            fn test_filter_with_slicing() {
+                let input = "apple,banana,cherry,date,elderberry";
+
+                // Filter then substring
+                assert_eq!(
+                    process(input, "{split:,:..|filter:e|slice:0..2|join:,}").unwrap(),
+                    "apple,cherry"
+                );
+
+                // slice then filter
+                assert_eq!(
+                    process(input, "{split:,:..|slice:1..4|filter:a|join:,}").unwrap(),
+                    "banana,date"
+                );
+            }
+
+            #[test]
+            fn test_filter_with_replace() {
+                let input = "test1,test2,prod1,prod2,dev1";
+
+                // Filter then replace
+                assert_eq!(
+                    process(
+                        input,
+                        "{split:,:..|filter:test|replace:s/test/demo/g|join:,}"
+                    )
+                    .unwrap(),
+                    "demo1,demo2"
+                );
+
+                // Replace then filter
+                assert_eq!(
+                    process(input, "{split:,:..|replace:s/\\d+//g|filter:^test$|join:,}").unwrap(),
+                    "test,test"
+                );
+            }
+
+            #[test]
+            fn test_filter_complex_chains() {
+                let input = "  Apple  , banana ,  CHERRY  , grape,  KIWI  ";
+
+                // Complex processing chain
+                assert_eq!(
+                    process(
+                        input,
+                        r"{split:,:..|trim|filter:^[A-Z]|lower|append:-fruit|join: \| }"
+                    )
+                    .unwrap(),
+                    "apple-fruit | cherry-fruit | kiwi-fruit"
+                );
+
+                // Filter, sort-like operation with join
+                let input2 = "zebra,apple,banana,cherry";
+                assert_eq!(
+                    process(input2, "{split:,:..|filter:^[abc]|upper|join:-}").unwrap(),
+                    "APPLE-BANANA-CHERRY"
+                );
+            }
+
+            #[test]
+            fn test_filter_file_extensions() {
+                let input = "file1.txt,script.py,data.json,image.png,doc.pdf,config.yaml";
+
+                // Text files
+                assert_eq!(
+                    process(input, r"{split:,:..|filter:\.(txt|md|log)$|join:\n}").unwrap(),
+                    "file1.txt"
+                );
+
+                // Code files
+                assert_eq!(
+                    process(input, r"{split:,:..|filter:\.(py|js|rs|java)$|join:\n}").unwrap(),
+                    "script.py"
+                );
+
+                // Config files
+                assert_eq!(
+                    process(
+                        input,
+                        r"{split:,:..|filter:\.(json|yaml|yml|toml)$|join:\n}"
+                    )
+                    .unwrap(),
+                    "data.json\nconfig.yaml"
+                );
+            }
+
+            #[test]
+            fn test_filter_log_processing() {
+                let input = "INFO: Starting application,ERROR: Database connection failed,DEBUG: Query executed,WARNING: Deprecated function used,ERROR: Timeout occurred";
+
+                // Error messages only
+                assert_eq!(
+                    process(input, "{split:,:..|filter:^ERROR|join:\\n}").unwrap(),
+                    "ERROR: Database connection failed\nERROR: Timeout occurred"
+                );
+
+                // Non-debug messages
+                assert_eq!(
+                    process(input, "{split:,:..|filter_not:^DEBUG|join:\\n}").unwrap(),
+                    "INFO: Starting application\nERROR: Database connection failed\nWARNING: Deprecated function used\nERROR: Timeout occurred"
+                );
+            }
+
+            #[test]
+            fn test_filter_ip_addresses() {
+                let input = "192.168.1.1,10.0.0.1,invalid-ip,172.16.0.1,not.an.ip,127.0.0.1";
+
+                // Simple IP pattern (basic validation)
+                assert_eq!(
+                    process(input, r"{split:,:..|filter:^\d+\.\d+\.\d+\.\d+$|join:\n}").unwrap(),
+                    "192.168.1.1\n10.0.0.1\n172.16.0.1\n127.0.0.1"
+                );
+
+                // Private IP ranges
+                assert_eq!(
+                    process(
+                        input,
+                        r"{split:,:..|filter:^(192.168\.|10\.|172.16\.)|join:,}"
+                    )
+                    .unwrap(),
+                    "192.168.1.1,10.0.0.1,172.16.0.1"
+                );
+            }
+
+            #[test]
+            fn test_filter_email_validation() {
+                let input =
+                    "user@example.com,invalid-email,test@test.org,not.an.email,admin@site.co.uk";
+
+                // Basic email pattern
+                assert_eq!(
+                    process(input, r"{split:,:..|filter:@|join:\n}").unwrap(),
+                    "user@example.com\ntest@test.org\nadmin@site.co.uk"
+                );
+
+                // Specific domain
+                assert_eq!(
+                    process(input, r"{split:,:..|filter:@example.com|join:,}").unwrap(),
+                    "user@example.com"
+                );
+            }
+
+            #[test]
+            fn test_filter_multiline_strings() {
+                // When processing strings with newlines
+                let input = "line1\nline2,single_line,multi\nline\ntext";
+
+                // Filter items containing newlines
+                assert_eq!(
+                    process(input, r"{split:,:..|filter:\n|join: \| }").unwrap(),
+                    "line1\nline2 | multi\nline\ntext"
+                );
+
+                // Filter single lines only
+                assert_eq!(
+                    process(input, r"{split:,:..|filter_not:\n|join:,}").unwrap(),
+                    "single_line"
+                );
+            }
+
+            #[test]
+            fn test_filter_large_lists() {
+                // Test with a larger dataset
+                let large_input: Vec<String> = (0..1000).map(|i| format!("item{}", i)).collect();
+                let input_str = large_input.join(",");
+
+                // Filter even numbers
+                let result = process(
+                    &input_str,
+                    r"{split:,:..|filter:[02468]$|slice:0..5|join:,}",
+                )
+                .unwrap();
+                assert_eq!(result, "item0,item2,item4,item6,item8");
+            }
+
+            #[test]
+            fn test_filter_empty_strings_in_list() {
+                // List with empty strings
+                let input = "apple,,banana,,cherry,";
+
+                // Filter out empty strings
+                assert_eq!(
+                    process(input, r"{split:,:..|filter_not:^$|join:,}").unwrap(),
+                    "apple,banana,cherry"
+                );
+
+                // Filter only empty strings
+                assert_eq!(
+                    process(input, r"{split:,:..|filter:^$|join:\|\|}").unwrap(),
+                    "||||"
                 );
             }
         }
@@ -1858,8 +2248,8 @@ mod tests {
         }
 
         #[test]
-        fn test_debug_flag_with_slice() {
-            let result = process("hello", "{!slice:1..3}");
+        fn test_debug_flag_with_substring() {
+            let result = process("hello", "{!substring:1..3}");
             assert!(result.is_ok());
             assert_eq!(result.unwrap(), "el");
         }
@@ -1955,14 +2345,14 @@ mod tests {
 
         #[test]
         fn test_debug_flag_regex_operations() {
-            let result = process("test123", "{!replace:s/\\d+/XXX/}");
+            let result = process("test123", r"{!replace:s/\d+/XXX/}");
             assert!(result.is_ok());
             assert_eq!(result.unwrap(), "testXXX");
         }
 
         #[test]
         fn test_debug_flag_boundary_conditions() {
-            let result = process("a", "{!slice:-1}");
+            let result = process("a", "{!substring:-1}");
             assert!(result.is_ok());
             assert_eq!(result.unwrap(), "a");
         }

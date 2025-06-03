@@ -9,7 +9,7 @@ operation = {
   | shorthand_index
   | split
   | join
-  | slice
+  | substring
   | replace
   | upper
   | lower
@@ -20,6 +20,7 @@ operation = {
   | strip_ansi
   | filter
   | filter_not
+  | slice
 }
 
 shorthand_index = { number }
@@ -32,9 +33,9 @@ shorthand_range = {
   | range_full
 }
 
-split      = { "split" ~ ":" ~ arg ~ ":" ~ range_spec? }
+split      = { "split" ~ ":" ~ split_arg ~ ":" ~ range_spec? }
 join       = { "join" ~ ":" ~ arg }
-slice      = { "slice" ~ ":" ~ range_spec }
+substring  = { "substring" ~ ":" ~ range_spec }
 replace    = { "replace" ~ ":" ~ sed_string }
 upper      = { "upper" }
 lower      = { "lower" }
@@ -43,16 +44,59 @@ strip      = { "strip" ~ ":" ~ arg }
 append     = { "append" ~ ":" ~ arg }
 prepend    = { "prepend" ~ ":" ~ arg }
 strip_ansi = { "strip_ansi" }
-filter     = { "filter" ~ ":" ~ arg }
-filter_not = { "filter_not" ~ ":" ~ arg }
+filter     = { "filter" ~ ":" ~ regex_arg }
+filter_not = { "filter_not" ~ ":" ~ regex_arg }
+slice      = { "slice" ~ ":" ~ range_spec }
 
-arg          = @{ (escaped_char | normal_char | " " | "\t")* }
-normal_char  =  { !(":" | "|" | "}" | "\\" | " " | "\t") ~ ANY }
-escaped_char =  { "\\" ~ (":" | "|" | "\\" | "n" | "t" | "r" | "/") }
+// Regular arguments (with proper escape handling)
+arg          = { (escaped_char | normal_char | " " | "\t")* }
+normal_char  = { !(":" | "|" | "}" | "{" | "\\") ~ ANY }
+escaped_char = { "\\" ~ (":" | "|" | "\\" | "n" | "t" | "r" | "/" | "{" | "}") }
 
-sed_string =  { "s/" ~ sed_part ~ "/" ~ sed_part ~ "/" ~ sed_flags? }
-sed_part   = @{ (("\\" ~ ANY) | (!("/" | "\\") ~ ANY))* }
-sed_flags  = @{ ASCII_ALPHA* }
+// Split arguments - allow pipes unless followed by operation names
+split_arg          = @{ (split_escaped_char | split_pipe_or_char)* }
+split_pipe_or_char =  { split_pipe | split_normal_char }
+split_pipe         =  { "|" ~ !operation_name }
+split_normal_char  =  {
+    !(":" ~ (operation_name | range_spec | number)) ~ !("|" ~ operation_name) ~ !("}" ~ EOI) ~ ANY
+}
+split_escaped_char =  { "\\" ~ ANY }
+
+// Regex arguments - allow pipes unless followed by operation names, and handle braces
+regex_arg          = @{ (regex_escaped_char | regex_pipe_or_char)* }
+regex_pipe_or_char =  { regex_pipe | regex_normal_char }
+regex_pipe         =  { "|" ~ !operation_name }
+regex_normal_char  =  {
+    !(":" ~ (operation_name | range_spec | number)) ~ !("|" ~ operation_name) ~ !("}" ~ EOI) ~ ANY
+}
+regex_escaped_char =  { "\\" ~ ANY }
+
+// Operation names for lookahead
+operation_name = {
+    "split"
+  | "join"
+  | "substring"
+  | "replace"
+  | "upper"
+  | "lower"
+  | "trim"
+  | "strip"
+  | "append"
+  | "prepend"
+  | "strip_ansi"
+  | "filter_not"
+  | "filter"
+  | "slice"
+}
+
+// Sed strings (preserve sed/regex escape sequences)
+sed_string       =  { "s/" ~ sed_pattern ~ "/" ~ sed_replacement ~ "/" ~ sed_flags? }
+sed_pattern      = @{ sed_content }
+sed_replacement  = @{ sed_content }
+sed_content      =  { (sed_escaped_char | sed_normal_char)* }
+sed_normal_char  =  { !("/" | "\\") ~ ANY }
+sed_escaped_char =  { "\\" ~ ANY }
+sed_flags        = @{ ASCII_ALPHA* }
 
 range_spec = {
     range_to_inclusive
