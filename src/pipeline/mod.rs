@@ -98,20 +98,9 @@ pub enum PadDirection {
 }
 
 fn resolve_index(idx: isize, len: usize) -> usize {
-    if len == 0 {
-        return 0;
-    }
-
     let len_i = len as isize;
     let resolved = if idx < 0 { len_i + idx } else { idx };
-
-    if resolved < 0 {
-        0
-    } else if resolved > len_i {
-        len - 1
-    } else {
-        resolved as usize
-    }
+    resolved.clamp(0, len_i.max(0)) as usize
 }
 
 fn apply_range<T: Clone>(items: &[T], range: &RangeSpec) -> Vec<T> {
@@ -121,10 +110,7 @@ fn apply_range<T: Clone>(items: &[T], range: &RangeSpec) -> Vec<T> {
             if len == 0 {
                 return vec![];
             }
-            let mut i = resolve_index(*idx, len);
-            if i >= len {
-                i = len - 1;
-            }
+            let i = resolve_index(*idx, len).min(len - 1);
             items.get(i).cloned().map_or(vec![], |v| vec![v])
         }
         RangeSpec::Range(start, end, inclusive) => {
@@ -132,16 +118,10 @@ fn apply_range<T: Clone>(items: &[T], range: &RangeSpec) -> Vec<T> {
                 return vec![];
             }
             let s_idx = start.map_or(0, |s| resolve_index(s, len));
-            let e_idx = match end {
-                Some(e) => {
-                    let mut idx = resolve_index(*e, len);
-                    if *inclusive {
-                        idx = idx.saturating_add(1);
-                    }
-                    idx
-                }
-                None => len,
-            };
+            let mut e_idx = end.map_or(len, |e| resolve_index(e, len));
+            if *inclusive {
+                e_idx = e_idx.saturating_add(1);
+            }
             if s_idx >= len {
                 vec![]
             } else {
@@ -164,313 +144,212 @@ pub fn apply_ops(input: &str, ops: &[StringOp], debug: bool) -> Result<String, S
             eprintln!("DEBUG: Applying operation {}: {:?}", i + 1, op);
         }
         match op {
-            StringOp::Split { sep, range } => match &val {
-                Value::Str(s) => {
-                    let parts: Vec<String> = s.split(sep).map(|s| s.to_string()).collect();
-                    default_sep = sep.clone();
-                    let result = apply_range(&parts, range);
-                    val = Value::List(result);
-                }
-                Value::List(list) => {
-                    let result: Vec<String> = list
+            StringOp::Split { sep, range } => {
+                let parts: Vec<String> = match &val {
+                    Value::Str(s) => s.split(sep).map(str::to_string).collect(),
+                    Value::List(list) => list
                         .iter()
-                        .flat_map(|s| {
-                            let parts: Vec<String> = s.split(sep).map(|s| s.to_string()).collect();
-                            apply_range(&parts, range)
-                        })
-                        .collect();
-                    default_sep = sep.clone();
-                    val = Value::List(result);
-                }
-            },
-            StringOp::Substring { range } => match &val {
-                Value::Str(s) => {
+                        .flat_map(|s| s.split(sep).map(str::to_string))
+                        .collect(),
+                };
+                default_sep = sep.clone();
+                val = Value::List(apply_range(&parts, range));
+            }
+            StringOp::Substring { range } => {
+                let apply = |s: &str| {
                     let chars: Vec<char> = s.chars().collect();
-                    let result = apply_range(&chars, range);
-                    val = Value::Str(result.into_iter().collect());
-                }
-                Value::List(list) => {
-                    let substring: Vec<String> = list
-                        .iter()
-                        .map(|s| {
-                            let chars: Vec<char> = s.chars().collect();
-                            let result = apply_range(&chars, range);
-                            result.into_iter().collect()
-                        })
-                        .collect();
-                    val = Value::List(substring);
-                }
-            },
-            StringOp::Join { sep } => match &val {
-                Value::List(list) => {
-                    let joined = if list.is_empty() {
-                        String::new()
-                    } else {
-                        list.join(sep)
-                    };
-                    val = Value::Str(joined);
-                    default_sep = sep.clone(); // Update default
-                }
-                Value::Str(s) => {
-                    val = Value::Str(s.clone());
-                }
-            },
+                    apply_range(&chars, range).into_iter().collect()
+                };
+                val = match val {
+                    Value::Str(s) => Value::Str(apply(&s)),
+                    Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
+                };
+            }
+            StringOp::Join { sep } => {
+                val = match val {
+                    Value::List(list) => Value::Str(list.join(sep)),
+                    Value::Str(s) => Value::Str(s),
+                };
+                default_sep = sep.clone();
+            }
             StringOp::Replace {
                 pattern,
                 replacement,
                 flags,
             } => {
                 let mut pattern_to_use = pattern.clone();
-
-                // Build inline flags based on the provided flags
                 let mut inline_flags = String::new();
-                if flags.contains('i') {
-                    inline_flags.push('i');
+                for (flag, c) in [('i', 'i'), ('m', 'm'), ('s', 's'), ('x', 'x')] {
+                    if flags.contains(flag) {
+                        inline_flags.push(c);
+                    }
                 }
-                if flags.contains('m') {
-                    inline_flags.push('m');
-                }
-                if flags.contains('s') {
-                    inline_flags.push('s');
-                }
-                if flags.contains('x') {
-                    inline_flags.push('x');
-                }
-
-                // Add inline flags if any are present
                 if !inline_flags.is_empty() {
                     pattern_to_use = format!("(?{}){}", inline_flags, pattern_to_use);
                 }
-
-                // Compile the regex for use
-                let re = match Regex::new(&pattern_to_use) {
-                    Ok(re) => re,
-                    Err(e) => return Err(format!("Invalid regex pattern: {}", e)),
+                let re = Regex::new(&pattern_to_use)
+                    .map_err(|e| format!("Invalid regex pattern: {}", e))?;
+                let apply = |s: &str| {
+                    if flags.contains('g') {
+                        re.replace_all(s, replacement.as_str()).to_string()
+                    } else {
+                        re.replace(s, replacement.as_str()).to_string()
+                    }
                 };
-
-                match &val {
-                    Value::Str(s) => {
-                        let s = if flags.contains('g') {
-                            re.replace_all(s, replacement.as_str()).to_string()
-                        } else {
-                            re.replace(s, replacement.as_str()).to_string()
-                        };
-                        val = Value::Str(s);
-                    }
-                    Value::List(list) => {
-                        let replaced: Vec<String> = list
-                            .iter()
-                            .map(|s| {
-                                if flags.contains('g') {
-                                    re.replace_all(s, replacement.as_str()).to_string()
-                                } else {
-                                    re.replace(s, replacement.as_str()).to_string()
-                                }
-                            })
-                            .collect();
-                        val = Value::List(replaced);
-                    }
-                }
+                val = match val {
+                    Value::Str(s) => Value::Str(apply(&s)),
+                    Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
+                };
             }
-            StringOp::Upper => match &val {
-                Value::Str(s) => val = Value::Str(s.to_uppercase()),
-                Value::List(list) => {
-                    val = Value::List(list.iter().map(|s| s.to_uppercase()).collect())
-                }
-            },
-            StringOp::Lower => match &val {
-                Value::Str(s) => val = Value::Str(s.to_lowercase()),
-                Value::List(list) => {
-                    val = Value::List(list.iter().map(|s| s.to_lowercase()).collect())
-                }
-            },
-            StringOp::Trim { direction } => match &val {
-                Value::Str(s) => {
-                    let trimmed = match direction {
-                        TrimDirection::Both => s.trim().to_string(),
-                        TrimDirection::Left => s.trim_start().to_string(),
-                        TrimDirection::Right => s.trim_end().to_string(),
-                    };
-                    val = Value::Str(trimmed);
-                }
-                Value::List(list) => {
-                    let trimmed: Vec<String> = list
-                        .iter()
-                        .map(|s| match direction {
-                            TrimDirection::Both => s.trim().to_string(),
-                            TrimDirection::Left => s.trim_start().to_string(),
-                            TrimDirection::Right => s.trim_end().to_string(),
-                        })
-                        .collect();
-                    val = Value::List(trimmed);
-                }
-            },
+            StringOp::Upper => {
+                val = match val {
+                    Value::Str(s) => Value::Str(s.to_uppercase()),
+                    Value::List(list) => {
+                        Value::List(list.iter().map(|s| s.to_uppercase()).collect())
+                    }
+                };
+            }
+            StringOp::Lower => {
+                val = match val {
+                    Value::Str(s) => Value::Str(s.to_lowercase()),
+                    Value::List(list) => {
+                        Value::List(list.iter().map(|s| s.to_lowercase()).collect())
+                    }
+                };
+            }
+            StringOp::Trim { direction } => {
+                let apply = |s: &str| {
+                    match direction {
+                        TrimDirection::Both => s.trim(),
+                        TrimDirection::Left => s.trim_start(),
+                        TrimDirection::Right => s.trim_end(),
+                    }
+                    .to_string()
+                };
+                val = match val {
+                    Value::Str(s) => Value::Str(apply(&s)),
+                    Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
+                };
+            }
             StringOp::Strip { chars } => {
                 let chars: Vec<char> = if chars.trim().is_empty() {
                     vec![' ', '\t', '\n', '\r']
                 } else {
                     chars.chars().collect()
                 };
-                match &val {
-                    Value::Str(s) => {
-                        val = Value::Str(s.trim_matches(|c| chars.contains(&c)).to_string())
-                    }
+                let apply = |s: &str| s.trim_matches(|c| chars.contains(&c)).to_string();
+                val = match val {
+                    Value::Str(s) => Value::Str(apply(&s)),
+                    Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
+                };
+            }
+            StringOp::Append { suffix } => {
+                let apply = |s: &str| format!("{}{}", s, suffix);
+                val = match val {
+                    Value::Str(s) => Value::Str(apply(&s)),
+                    Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
+                };
+            }
+            StringOp::Prepend { prefix } => {
+                let apply = |s: &str| format!("{}{}", prefix, s);
+                val = match val {
+                    Value::Str(s) => Value::Str(apply(&s)),
+                    Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
+                };
+            }
+            StringOp::StripAnsi => {
+                let apply = |s: &str| {
+                    String::from_utf8(strip(s.as_bytes()))
+                        .map_err(|_| "Failed to convert stripped bytes to UTF-8".to_string())
+                };
+                val = match val {
+                    Value::Str(s) => Value::Str(apply(&s)?),
                     Value::List(list) => {
-                        val = Value::List(
-                            list.iter()
-                                .map(|s| s.trim_matches(|c| chars.contains(&c)).to_string())
-                                .collect(),
-                        )
+                        Value::List(list.iter().map(|s| apply(s)).collect::<Result<_, _>>()?)
                     }
-                }
+                };
             }
-            StringOp::Append { suffix } => match &val {
-                Value::Str(s) => val = Value::Str(format!("{}{}", s, suffix)),
-                Value::List(list) => {
-                    if list.is_empty() {
-                        val = Value::List(vec![suffix.clone()]); // Create single-item list
-                    } else {
-                        val =
-                            Value::List(list.iter().map(|s| format!("{}{}", s, suffix)).collect());
+            StringOp::Filter { pattern } => {
+                let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
+                val = match val {
+                    Value::List(list) => {
+                        Value::List(list.into_iter().filter(|s| re.is_match(s)).collect())
                     }
-                }
-            },
-            StringOp::Prepend { prefix } => match &val {
-                Value::Str(s) => val = Value::Str(format!("{}{}", prefix, s)),
-                Value::List(list) => {
-                    if list.is_empty() {
-                        val = Value::List(vec![prefix.clone()]); // Create single-item list
-                    } else {
-                        val =
-                            Value::List(list.iter().map(|s| format!("{}{}", prefix, s)).collect());
+                    Value::Str(s) => Value::Str(if re.is_match(&s) { s } else { String::new() }),
+                };
+            }
+            StringOp::FilterNot { pattern } => {
+                let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
+                val = match val {
+                    Value::List(list) => {
+                        Value::List(list.into_iter().filter(|s| !re.is_match(s)).collect())
                     }
-                }
-            },
-            StringOp::StripAnsi => match &val {
-                Value::Str(s) => {
-                    let stripped = strip(s.as_bytes());
-                    match String::from_utf8(stripped) {
-                        Ok(clean_str) => val = Value::Str(clean_str),
-                        Err(_) => {
-                            return Err("Failed to convert stripped bytes to UTF-8".to_string());
-                        }
-                    }
-                }
-                Value::List(list) => {
-                    let mut stripped_list = Vec::new();
-                    for s in list {
-                        let stripped = strip(s.as_bytes());
-                        match String::from_utf8(stripped) {
-                            Ok(clean_str) => stripped_list.push(clean_str),
-                            Err(_) => {
-                                return Err("Failed to convert stripped bytes to UTF-8".to_string());
-                            }
-                        }
-                    }
-                    val = Value::List(stripped_list);
-                }
-            },
-            StringOp::Filter { pattern } => match &val {
-                Value::List(list) => {
-                    let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
-                    let filtered: Vec<String> =
-                        list.iter().filter(|s| re.is_match(s)).cloned().collect();
-                    val = Value::List(filtered);
-                }
-                Value::Str(s) => {
-                    let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
-                    if !re.is_match(s) {
-                        val = Value::Str(String::new());
-                    }
-                }
-            },
-            StringOp::FilterNot { pattern } => match &val {
-                Value::List(list) => {
-                    let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
-                    let filtered: Vec<String> =
-                        list.iter().filter(|s| !re.is_match(s)).cloned().collect();
-                    val = Value::List(filtered);
-                }
-                Value::Str(s) => {
-                    let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
-                    if re.is_match(s) {
-                        val = Value::Str(String::new());
-                    }
-                }
-            },
+                    Value::Str(s) => Value::Str(if re.is_match(&s) { String::new() } else { s }),
+                };
+            }
             StringOp::Slice { range } => {
-                if let Value::List(list) = &val {
-                    let taken = apply_range(list, range);
-                    val = Value::List(taken);
+                if let Value::List(list) = val {
+                    val = Value::List(apply_range(&list, range));
                 }
             }
-            StringOp::Map { operation } => match &val {
-                Value::List(list) => {
-                    let mut mapped: Vec<String> = Vec::new();
-                    for item in list {
-                        let result = apply_ops(item, &[(**operation).clone()], false)?;
-                        mapped.push(result);
-                    }
+            StringOp::Map { operation } => {
+                if let Value::List(list) = val {
+                    let mapped = list
+                        .iter()
+                        .map(|item| apply_ops(item, &[(**operation).clone()], false))
+                        .collect::<Result<Vec<_>, _>>()?;
                     val = Value::List(mapped);
-                }
-                Value::Str(_) => {
+                } else {
                     return Err("Map operation can only be applied to lists".to_string());
                 }
-            },
-            StringOp::Sort { direction } => match &val {
-                Value::List(list) => {
-                    let mut sorted = list.clone();
+            }
+            StringOp::Sort { direction } => {
+                if let Value::List(mut list) = val {
                     match direction {
-                        SortDirection::Asc => sorted.sort(),
+                        SortDirection::Asc => list.sort(),
                         SortDirection::Desc => {
-                            sorted.sort();
-                            sorted.reverse();
+                            list.sort();
+                            list.reverse();
                         }
                     }
-                    val = Value::List(sorted);
-                }
-                Value::Str(_) => {
+                    val = Value::List(list);
+                } else {
                     return Err("Sort operation can only be applied to lists".to_string());
                 }
-            },
-            StringOp::Reverse => match &val {
-                Value::Str(s) => {
-                    let reversed: String = s.chars().rev().collect();
-                    val = Value::Str(reversed);
-                }
-                Value::List(list) => {
-                    let mut reversed = list.clone();
-                    reversed.reverse();
-                    val = Value::List(reversed);
-                }
-            },
-            StringOp::Unique => match &val {
-                Value::List(list) => {
-                    let mut unique = Vec::new();
-                    let mut seen = std::collections::HashSet::new();
-                    for item in list {
-                        if seen.insert(item.clone()) {
-                            unique.push(item.clone());
-                        }
+            }
+            StringOp::Reverse => {
+                val = match val {
+                    Value::Str(s) => Value::Str(s.chars().rev().collect()),
+                    Value::List(mut list) => {
+                        list.reverse();
+                        Value::List(list)
                     }
+                };
+            }
+            StringOp::Unique => {
+                if let Value::List(list) = val {
+                    let mut seen = std::collections::HashSet::new();
+                    let unique = list
+                        .into_iter()
+                        .filter(|item| seen.insert(item.clone()))
+                        .collect();
                     val = Value::List(unique);
-                }
-                Value::Str(_) => {
+                } else {
                     return Err("Unique operation can only be applied to lists".to_string());
                 }
-            },
+            }
             StringOp::Pad {
                 width,
                 char,
                 direction,
-            } => match &val {
-                Value::Str(s) => {
+            } => {
+                let apply = |s: &str| {
                     let current_len = s.chars().count();
                     if current_len >= *width {
-                        val = Value::Str(s.clone());
+                        s.to_string()
                     } else {
                         let padding_needed = *width - current_len;
-                        let padded = match direction {
+                        match direction {
                             PadDirection::Left => {
                                 format!("{}{}", char.to_string().repeat(padding_needed), s)
                             }
@@ -487,84 +366,32 @@ pub fn apply_ops(input: &str, ops: &[StringOp], debug: bool) -> Result<String, S
                                     char.to_string().repeat(right_pad)
                                 )
                             }
-                        };
-                        val = Value::Str(padded);
+                        }
                     }
-                }
-                Value::List(list) => {
-                    let padded: Vec<String> = list
-                        .iter()
-                        .map(|s| {
-                            let current_len = s.chars().count();
-                            if current_len >= *width {
-                                s.clone()
-                            } else {
-                                let padding_needed = *width - current_len;
-                                match direction {
-                                    PadDirection::Left => {
-                                        format!("{}{}", char.to_string().repeat(padding_needed), s)
-                                    }
-                                    PadDirection::Right => {
-                                        format!("{}{}", s, char.to_string().repeat(padding_needed))
-                                    }
-                                    PadDirection::Both => {
-                                        let left_pad = padding_needed / 2;
-                                        let right_pad = padding_needed - left_pad;
-                                        format!(
-                                            "{}{}{}",
-                                            char.to_string().repeat(left_pad),
-                                            s,
-                                            char.to_string().repeat(right_pad)
-                                        )
-                                    }
-                                }
-                            }
-                        })
-                        .collect();
-                    val = Value::List(padded);
-                }
-            },
+                };
+                val = match val {
+                    Value::Str(s) => Value::Str(apply(&s)),
+                    Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
+                };
+            }
             StringOp::RegexExtract { pattern, group } => {
                 let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
-                match &val {
-                    Value::Str(s) => {
-                        let extracted = if let Some(group_idx) = group {
-                            if let Some(caps) = re.captures(s) {
-                                caps.get(*group_idx)
-                                    .map(|m| m.as_str().to_string())
-                                    .unwrap_or_else(String::new)
-                            } else {
-                                String::new()
-                            }
-                        } else {
-                            re.find(s)
-                                .map(|m| m.as_str().to_string())
-                                .unwrap_or_else(String::new)
-                        };
-                        val = Value::Str(extracted);
+                let apply = |s: &str| {
+                    if let Some(group_idx) = group {
+                        re.captures(s)
+                            .and_then(|caps| caps.get(*group_idx))
+                            .map(|m| m.as_str().to_string())
+                            .unwrap_or_default()
+                    } else {
+                        re.find(s)
+                            .map(|m| m.as_str().to_string())
+                            .unwrap_or_default()
                     }
-                    Value::List(list) => {
-                        let extracted: Vec<String> = list
-                            .iter()
-                            .map(|s| {
-                                if let Some(group_idx) = group {
-                                    if let Some(caps) = re.captures(s) {
-                                        caps.get(*group_idx)
-                                            .map(|m| m.as_str().to_string())
-                                            .unwrap_or_else(String::new)
-                                    } else {
-                                        String::new()
-                                    }
-                                } else {
-                                    re.find(s)
-                                        .map(|m| m.as_str().to_string())
-                                        .unwrap_or_else(String::new)
-                                }
-                            })
-                            .collect();
-                        val = Value::List(extracted);
-                    }
-                }
+                };
+                val = match val {
+                    Value::Str(s) => Value::Str(apply(&s)),
+                    Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
+                };
             }
         }
         if debug {
@@ -581,8 +408,6 @@ pub fn apply_ops(input: &str, ops: &[StringOp], debug: bool) -> Result<String, S
         }
     }
 
-    // Note: If the final value is a List, we join using the last split separator
-    // or a space if no split operation was performed
     Ok(match val {
         Value::Str(s) => s,
         Value::List(list) => {
