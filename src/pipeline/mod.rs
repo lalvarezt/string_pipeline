@@ -53,7 +53,7 @@ pub enum StringOp {
         range: RangeSpec,
     },
     Map {
-        operation: Box<StringOp>,
+        operations: Vec<StringOp>,
     },
     Sort {
         direction: SortDirection,
@@ -132,279 +132,134 @@ fn apply_range<T: Clone>(items: &[T], range: &RangeSpec) -> Vec<T> {
 }
 
 pub fn apply_ops(input: &str, ops: &[StringOp], debug: bool) -> Result<String, String> {
+    apply_ops_internal(input, ops, debug, None)
+}
+
+fn apply_ops_internal(
+    input: &str,
+    ops: &[StringOp],
+    debug: bool,
+    debug_context: Option<DebugContext>,
+) -> Result<String, String> {
     let mut val = Value::Str(input.to_string());
     let mut default_sep = " ".to_string();
 
     if debug {
-        eprintln!("DEBUG: Initial value: {:?}", val);
+        match &debug_context {
+            Some(ctx) => eprintln!(
+                "DEBUG:   Item {}/{} initial value: {:?}",
+                ctx.item_num, ctx.total_items, val
+            ),
+            None => eprintln!("DEBUG: Initial value: {:?}", val),
+        }
     }
 
     for (i, op) in ops.iter().enumerate() {
         if debug {
-            eprintln!("DEBUG: Applying operation {}: {:?}", i + 1, op);
+            match &debug_context {
+                Some(ctx) => eprintln!(
+                    "DEBUG:   Item {}/{} applying step {}: {:?}",
+                    ctx.item_num,
+                    ctx.total_items,
+                    i + 1,
+                    op
+                ),
+                None => eprintln!("DEBUG: Applying operation {}: {:?}", i + 1, op),
+            }
         }
+
         match op {
-            StringOp::Split { sep, range } => {
-                let parts: Vec<String> = match &val {
-                    Value::Str(s) => s.split(sep).map(str::to_string).collect(),
-                    Value::List(list) => list
-                        .iter()
-                        .flat_map(|s| s.split(sep).map(str::to_string))
-                        .collect(),
-                };
-                default_sep = sep.clone();
-                val = Value::List(apply_range(&parts, range));
-            }
-            StringOp::Substring { range } => {
-                let apply = |s: &str| {
-                    let chars: Vec<char> = s.chars().collect();
-                    apply_range(&chars, range).into_iter().collect()
-                };
-                val = match val {
-                    Value::Str(s) => Value::Str(apply(&s)),
-                    Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
-                };
-            }
-            StringOp::Join { sep } => {
-                val = match val {
-                    Value::List(list) => Value::Str(list.join(sep)),
-                    Value::Str(s) => Value::Str(s),
-                };
-                default_sep = sep.clone();
-            }
-            StringOp::Replace {
-                pattern,
-                replacement,
-                flags,
-            } => {
-                let mut pattern_to_use = pattern.clone();
-                let mut inline_flags = String::new();
-                for (flag, c) in [('i', 'i'), ('m', 'm'), ('s', 's'), ('x', 'x')] {
-                    if flags.contains(flag) {
-                        inline_flags.push(c);
-                    }
+            StringOp::Map { operations } => {
+                if debug_context.is_some() {
+                    return Err("Nested map operations are not supported".to_string());
                 }
-                if !inline_flags.is_empty() {
-                    pattern_to_use = format!("(?{}){}", inline_flags, pattern_to_use);
-                }
-                let re = Regex::new(&pattern_to_use)
-                    .map_err(|e| format!("Invalid regex pattern: {}", e))?;
-                let apply = |s: &str| {
-                    if flags.contains('g') {
-                        re.replace_all(s, replacement.as_str()).to_string()
-                    } else {
-                        re.replace(s, replacement.as_str()).to_string()
-                    }
-                };
-                val = match val {
-                    Value::Str(s) => Value::Str(apply(&s)),
-                    Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
-                };
-            }
-            StringOp::Upper => {
-                val = match val {
-                    Value::Str(s) => Value::Str(s.to_uppercase()),
-                    Value::List(list) => {
-                        Value::List(list.iter().map(|s| s.to_uppercase()).collect())
-                    }
-                };
-            }
-            StringOp::Lower => {
-                val = match val {
-                    Value::Str(s) => Value::Str(s.to_lowercase()),
-                    Value::List(list) => {
-                        Value::List(list.iter().map(|s| s.to_lowercase()).collect())
-                    }
-                };
-            }
-            StringOp::Trim { direction } => {
-                let apply = |s: &str| {
-                    match direction {
-                        TrimDirection::Both => s.trim(),
-                        TrimDirection::Left => s.trim_start(),
-                        TrimDirection::Right => s.trim_end(),
-                    }
-                    .to_string()
-                };
-                val = match val {
-                    Value::Str(s) => Value::Str(apply(&s)),
-                    Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
-                };
-            }
-            StringOp::Strip { chars } => {
-                let chars: Vec<char> = if chars.trim().is_empty() {
-                    vec![' ', '\t', '\n', '\r']
-                } else {
-                    chars.chars().collect()
-                };
-                let apply = |s: &str| s.trim_matches(|c| chars.contains(&c)).to_string();
-                val = match val {
-                    Value::Str(s) => Value::Str(apply(&s)),
-                    Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
-                };
-            }
-            StringOp::Append { suffix } => {
-                let apply = |s: &str| format!("{}{}", s, suffix);
-                val = match val {
-                    Value::Str(s) => Value::Str(apply(&s)),
-                    Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
-                };
-            }
-            StringOp::Prepend { prefix } => {
-                let apply = |s: &str| format!("{}{}", prefix, s);
-                val = match val {
-                    Value::Str(s) => Value::Str(apply(&s)),
-                    Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
-                };
-            }
-            StringOp::StripAnsi => {
-                let apply = |s: &str| {
-                    String::from_utf8(strip(s.as_bytes()))
-                        .map_err(|_| "Failed to convert stripped bytes to UTF-8".to_string())
-                };
-                val = match val {
-                    Value::Str(s) => Value::Str(apply(&s)?),
-                    Value::List(list) => {
-                        Value::List(list.iter().map(|s| apply(s)).collect::<Result<_, _>>()?)
-                    }
-                };
-            }
-            StringOp::Filter { pattern } => {
-                let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
-                val = match val {
-                    Value::List(list) => {
-                        Value::List(list.into_iter().filter(|s| re.is_match(s)).collect())
-                    }
-                    Value::Str(s) => Value::Str(if re.is_match(&s) { s } else { String::new() }),
-                };
-            }
-            StringOp::FilterNot { pattern } => {
-                let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
-                val = match val {
-                    Value::List(list) => {
-                        Value::List(list.into_iter().filter(|s| !re.is_match(s)).collect())
-                    }
-                    Value::Str(s) => Value::Str(if re.is_match(&s) { String::new() } else { s }),
-                };
-            }
-            StringOp::Slice { range } => {
+
                 if let Value::List(list) = val {
-                    val = Value::List(apply_range(&list, range));
-                }
-            }
-            StringOp::Map { operation } => {
-                if let Value::List(list) = val {
+                    if debug {
+                        eprintln!("DEBUG: Map operation starting with {} items", list.len());
+                        eprintln!("DEBUG: Map operations to apply: {} steps", operations.len());
+                        for (op_idx, map_op) in operations.iter().enumerate() {
+                            eprintln!("DEBUG:   Step {}: {:?}", op_idx + 1, map_op);
+                        }
+                    }
+
                     let mapped = list
                         .iter()
-                        .map(|item| apply_ops(item, &[(**operation).clone()], false))
+                        .enumerate()
+                        .map(|(item_idx, item)| {
+                            if debug {
+                                eprintln!(
+                                    "DEBUG: Processing item {} of {}: {:?}",
+                                    item_idx + 1,
+                                    list.len(),
+                                    item
+                                );
+                            }
+
+                            let ctx = DebugContext {
+                                item_num: item_idx + 1,
+                                total_items: list.len(),
+                            };
+
+                            apply_ops_internal(item, operations, debug, Some(ctx))
+                        })
                         .collect::<Result<Vec<_>, _>>()?;
+
+                    if debug {
+                        eprintln!("DEBUG: Map operation completed. Results:");
+                        for (idx, result) in mapped.iter().enumerate() {
+                            eprintln!("DEBUG:   Item {}: {:?}", idx + 1, result);
+                        }
+                    }
+
                     val = Value::List(mapped);
                 } else {
                     return Err("Map operation can only be applied to lists".to_string());
                 }
             }
-            StringOp::Sort { direction } => {
-                if let Value::List(mut list) = val {
-                    match direction {
-                        SortDirection::Asc => list.sort(),
-                        SortDirection::Desc => {
-                            list.sort();
-                            list.reverse();
-                        }
-                    }
-                    val = Value::List(list);
-                } else {
-                    return Err("Sort operation can only be applied to lists".to_string());
-                }
-            }
-            StringOp::Reverse => {
-                val = match val {
-                    Value::Str(s) => Value::Str(s.chars().rev().collect()),
-                    Value::List(mut list) => {
-                        list.reverse();
-                        Value::List(list)
-                    }
-                };
-            }
-            StringOp::Unique => {
-                if let Value::List(list) = val {
-                    let mut seen = std::collections::HashSet::new();
-                    let unique = list
-                        .into_iter()
-                        .filter(|item| seen.insert(item.clone()))
-                        .collect();
-                    val = Value::List(unique);
-                } else {
-                    return Err("Unique operation can only be applied to lists".to_string());
-                }
-            }
-            StringOp::Pad {
-                width,
-                char,
-                direction,
-            } => {
-                let apply = |s: &str| {
-                    let current_len = s.chars().count();
-                    if current_len >= *width {
-                        s.to_string()
-                    } else {
-                        let padding_needed = *width - current_len;
-                        match direction {
-                            PadDirection::Left => {
-                                format!("{}{}", char.to_string().repeat(padding_needed), s)
-                            }
-                            PadDirection::Right => {
-                                format!("{}{}", s, char.to_string().repeat(padding_needed))
-                            }
-                            PadDirection::Both => {
-                                let left_pad = padding_needed / 2;
-                                let right_pad = padding_needed - left_pad;
-                                format!(
-                                    "{}{}{}",
-                                    char.to_string().repeat(left_pad),
-                                    s,
-                                    char.to_string().repeat(right_pad)
-                                )
-                            }
-                        }
-                    }
-                };
-                val = match val {
-                    Value::Str(s) => Value::Str(apply(&s)),
-                    Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
-                };
-            }
-            StringOp::RegexExtract { pattern, group } => {
-                let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
-                let apply = |s: &str| {
-                    if let Some(group_idx) = group {
-                        re.captures(s)
-                            .and_then(|caps| caps.get(*group_idx))
-                            .map(|m| m.as_str().to_string())
-                            .unwrap_or_default()
-                    } else {
-                        re.find(s)
-                            .map(|m| m.as_str().to_string())
-                            .unwrap_or_default()
-                    }
-                };
-                val = match val {
-                    Value::Str(s) => Value::Str(apply(&s)),
-                    Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
-                };
+
+            // All other operations use the shared implementation
+            _ => {
+                val = apply_single_operation(op, val, &mut default_sep)?;
             }
         }
+
         if debug {
-            match &val {
-                Value::Str(s) => eprintln!("DEBUG: Result: String({:?})", s),
-                Value::List(list) => {
-                    eprintln!("DEBUG: Result: List with {} items:", list.len());
-                    for (idx, item) in list.iter().enumerate() {
-                        eprintln!("DEBUG:   [{}]: {:?}", idx, item);
+            match &debug_context {
+                Some(ctx) => match &val {
+                    Value::Str(s) => eprintln!(
+                        "DEBUG:   Item {}/{} step {} result: String({:?})",
+                        ctx.item_num,
+                        ctx.total_items,
+                        i + 1,
+                        s
+                    ),
+                    Value::List(list) => {
+                        eprintln!(
+                            "DEBUG:   Item {}/{} step {} result: List with {} items:",
+                            ctx.item_num,
+                            ctx.total_items,
+                            i + 1,
+                            list.len()
+                        );
+                        for (idx, item) in list.iter().enumerate() {
+                            eprintln!("DEBUG:     [{}]: {:?}", idx, item);
+                        }
                     }
+                },
+                None => {
+                    match &val {
+                        Value::Str(s) => eprintln!("DEBUG: Result: String({:?})", s),
+                        Value::List(list) => {
+                            eprintln!("DEBUG: Result: List with {} items:", list.len());
+                            for (idx, item) in list.iter().enumerate() {
+                                eprintln!("DEBUG:   [{}]: {:?}", idx, item);
+                            }
+                        }
+                    }
+                    eprintln!("DEBUG: ---");
                 }
             }
-            eprintln!("DEBUG: ---");
         }
     }
 
@@ -418,6 +273,251 @@ pub fn apply_ops(input: &str, ops: &[StringOp], debug: bool) -> Result<String, S
             }
         }
     })
+}
+
+#[derive(Debug, Clone)]
+struct DebugContext {
+    item_num: usize,
+    total_items: usize,
+}
+
+fn apply_single_operation(
+    op: &StringOp,
+    val: Value,
+    default_sep: &mut String,
+) -> Result<Value, String> {
+    match op {
+        StringOp::Split { sep, range } => {
+            let parts: Vec<String> = match &val {
+                Value::Str(s) => s.split(sep).map(str::to_string).collect(),
+                Value::List(list) => list
+                    .iter()
+                    .flat_map(|s| s.split(sep).map(str::to_string))
+                    .collect(),
+            };
+            *default_sep = sep.clone();
+            Ok(Value::List(apply_range(&parts, range)))
+        }
+        StringOp::Substring { range } => {
+            let apply = |s: &str| {
+                let chars: Vec<char> = s.chars().collect();
+                apply_range(&chars, range).into_iter().collect()
+            };
+            Ok(match val {
+                Value::Str(s) => Value::Str(apply(&s)),
+                Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
+            })
+        }
+        StringOp::Join { sep } => {
+            let result = match val {
+                Value::List(list) => Value::Str(list.join(sep)),
+                Value::Str(s) => Value::Str(s),
+            };
+            *default_sep = sep.clone();
+            Ok(result)
+        }
+        StringOp::Replace {
+            pattern,
+            replacement,
+            flags,
+        } => {
+            let mut pattern_to_use = pattern.clone();
+            let mut inline_flags = String::new();
+            for (flag, c) in [('i', 'i'), ('m', 'm'), ('s', 's'), ('x', 'x')] {
+                if flags.contains(flag) {
+                    inline_flags.push(c);
+                }
+            }
+            if !inline_flags.is_empty() {
+                pattern_to_use = format!("(?{}){}", inline_flags, pattern_to_use);
+            }
+            let re =
+                Regex::new(&pattern_to_use).map_err(|e| format!("Invalid regex pattern: {}", e))?;
+            let apply = |s: &str| {
+                if flags.contains('g') {
+                    re.replace_all(s, replacement.as_str()).to_string()
+                } else {
+                    re.replace(s, replacement.as_str()).to_string()
+                }
+            };
+            Ok(match val {
+                Value::Str(s) => Value::Str(apply(&s)),
+                Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
+            })
+        }
+        StringOp::Upper => Ok(match val {
+            Value::Str(s) => Value::Str(s.to_uppercase()),
+            Value::List(list) => Value::List(list.iter().map(|s| s.to_uppercase()).collect()),
+        }),
+        StringOp::Lower => Ok(match val {
+            Value::Str(s) => Value::Str(s.to_lowercase()),
+            Value::List(list) => Value::List(list.iter().map(|s| s.to_lowercase()).collect()),
+        }),
+        StringOp::Trim { direction } => {
+            let apply = |s: &str| {
+                match direction {
+                    TrimDirection::Both => s.trim(),
+                    TrimDirection::Left => s.trim_start(),
+                    TrimDirection::Right => s.trim_end(),
+                }
+                .to_string()
+            };
+            Ok(match val {
+                Value::Str(s) => Value::Str(apply(&s)),
+                Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
+            })
+        }
+        StringOp::Strip { chars } => {
+            let chars: Vec<char> = if chars.trim().is_empty() {
+                vec![' ', '\t', '\n', '\r']
+            } else {
+                chars.chars().collect()
+            };
+            let apply = |s: &str| s.trim_matches(|c| chars.contains(&c)).to_string();
+            Ok(match val {
+                Value::Str(s) => Value::Str(apply(&s)),
+                Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
+            })
+        }
+        StringOp::Append { suffix } => {
+            let apply = |s: &str| format!("{}{}", s, suffix);
+            Ok(match val {
+                Value::Str(s) => Value::Str(apply(&s)),
+                Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
+            })
+        }
+        StringOp::Prepend { prefix } => {
+            let apply = |s: &str| format!("{}{}", prefix, s);
+            Ok(match val {
+                Value::Str(s) => Value::Str(apply(&s)),
+                Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
+            })
+        }
+        StringOp::StripAnsi => {
+            let apply = |s: &str| {
+                String::from_utf8(strip(s.as_bytes()))
+                    .map_err(|_| "Failed to convert stripped bytes to UTF-8".to_string())
+            };
+            Ok(match val {
+                Value::Str(s) => Value::Str(apply(&s)?),
+                Value::List(list) => {
+                    Value::List(list.iter().map(|s| apply(s)).collect::<Result<_, _>>()?)
+                }
+            })
+        }
+        StringOp::Filter { pattern } => {
+            let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
+            Ok(match val {
+                Value::List(list) => {
+                    Value::List(list.into_iter().filter(|s| re.is_match(s)).collect())
+                }
+                Value::Str(s) => Value::Str(if re.is_match(&s) { s } else { String::new() }),
+            })
+        }
+        StringOp::FilterNot { pattern } => {
+            let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
+            Ok(match val {
+                Value::List(list) => {
+                    Value::List(list.into_iter().filter(|s| !re.is_match(s)).collect())
+                }
+                Value::Str(s) => Value::Str(if re.is_match(&s) { String::new() } else { s }),
+            })
+        }
+        StringOp::Slice { range } => Ok(if let Value::List(list) = val {
+            Value::List(apply_range(&list, range))
+        } else {
+            val
+        }),
+        StringOp::Sort { direction } => {
+            if let Value::List(mut list) = val {
+                match direction {
+                    SortDirection::Asc => list.sort(),
+                    SortDirection::Desc => {
+                        list.sort();
+                        list.reverse();
+                    }
+                }
+                Ok(Value::List(list))
+            } else {
+                Err("Sort operation can only be applied to lists".to_string())
+            }
+        }
+        StringOp::Reverse => Ok(match val {
+            Value::Str(s) => Value::Str(s.chars().rev().collect()),
+            Value::List(mut list) => {
+                list.reverse();
+                Value::List(list)
+            }
+        }),
+        StringOp::Unique => {
+            if let Value::List(list) = val {
+                let mut seen = std::collections::HashSet::new();
+                let unique = list
+                    .into_iter()
+                    .filter(|item| seen.insert(item.clone()))
+                    .collect();
+                Ok(Value::List(unique))
+            } else {
+                Err("Unique operation can only be applied to lists".to_string())
+            }
+        }
+        StringOp::Pad {
+            width,
+            char,
+            direction,
+        } => {
+            let apply = |s: &str| {
+                let current_len = s.chars().count();
+                if current_len >= *width {
+                    s.to_string()
+                } else {
+                    let padding_needed = *width - current_len;
+                    match direction {
+                        PadDirection::Left => {
+                            format!("{}{}", char.to_string().repeat(padding_needed), s)
+                        }
+                        PadDirection::Right => {
+                            format!("{}{}", s, char.to_string().repeat(padding_needed))
+                        }
+                        PadDirection::Both => {
+                            let left_pad = padding_needed / 2;
+                            let right_pad = padding_needed - left_pad;
+                            format!(
+                                "{}{}{}",
+                                char.to_string().repeat(left_pad),
+                                s,
+                                char.to_string().repeat(right_pad)
+                            )
+                        }
+                    }
+                }
+            };
+            Ok(match val {
+                Value::Str(s) => Value::Str(apply(&s)),
+                Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
+            })
+        }
+        StringOp::RegexExtract { pattern, group } => {
+            let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
+            let apply = |s: &str| {
+                if let Some(group_idx) = group {
+                    re.captures(s)
+                        .and_then(|caps| caps.get(*group_idx))
+                        .map(|m| m.as_str().to_string())
+                        .unwrap_or_default()
+                } else {
+                    re.find(s)
+                        .map(|m| m.as_str().to_string())
+                        .unwrap_or_default()
+                }
+            };
+            Ok(match val {
+                Value::Str(s) => Value::Str(apply(&s)),
+                Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
+            })
+        }
+        StringOp::Map { .. } => Err("Map operations should be handled separately".to_string()),
+    }
 }
 
 #[cfg(test)]

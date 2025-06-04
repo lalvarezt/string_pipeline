@@ -162,13 +162,16 @@ fn parse_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String
             Ok(StringOp::RegexExtract { pattern, group })
         }
         Rule::map => {
-            let map_op_pair = pair.into_inner().next().unwrap(); // map_operation
-            let inner_op_pair = map_op_pair.into_inner().next().unwrap(); // map_inner_operation
-            let inner_inner = inner_op_pair.into_inner().next().unwrap();
-            let map_op = parse_operation(inner_inner)?;
-            Ok(StringOp::Map {
-                operation: Box::new(map_op),
-            })
+            let map_op_pair = pair.into_inner().next().unwrap();
+            let operation_list_pair = map_op_pair.into_inner().next().unwrap();
+
+            let mut operations = Vec::new();
+            for op_pair in operation_list_pair.into_inner() {
+                let inner_op_pair = op_pair.into_inner().next().unwrap();
+                operations.push(parse_operation(inner_op_pair)?);
+            }
+
+            Ok(StringOp::Map { operations })
         }
         _ => Err(format!("Unsupported operation: {:?}", pair.as_rule())),
     }
@@ -281,4 +284,3 @@ fn parse_range_spec(pair: pest::iterators::Pair<Rule>) -> Result<RangeSpec, Stri
         _ => Err(format!("Unknown range spec: {:?}", inner.as_rule())),
     }
 }
-

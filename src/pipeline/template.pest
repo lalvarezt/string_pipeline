@@ -67,7 +67,8 @@ sort_direction =  { "asc" | "desc" }
 pad_char       = @{ (escaped_char | normal_char)+ }
 
 // Map operation
-map_operation       = { "{" ~ map_inner_operation ~ "}" }
+map_operation       = { "{" ~ map_operation_list ~ "}" }
+map_operation_list  = { map_inner_operation ~ ("|" ~ map_inner_operation)* }
 map_inner_operation = {
     map_regex_extract
   | map_filter_not
