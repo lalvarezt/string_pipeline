@@ -47,7 +47,7 @@
 //! ```rust
 //! use string_pipeline::Template;
 //!
-//! let template = Template::parse("{split:,:..|trim|append:!}").unwrap();
+//! let template = Template::parse("{split:,:..|map:{trim|append:!}}").unwrap();
 //!
 //! let result = template.format(" a, b,c , d , e ").unwrap();
 //!

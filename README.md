@@ -27,7 +27,7 @@ A flexible, composable string transformation CLI tool and Rust library. `string_
   - [Range Specifications](#range-specifications)
   - [Escaping](#escaping)
   - [Debug Mode](#debug-mode)
-- [Examples](#examples)
+- [More Examples](#more-examples)
 - [Testing](#testing)
 - [Contributing](#contributing)
 - [License](#license)
@@ -44,6 +44,10 @@ A flexible, composable string transformation CLI tool and Rust library. `string_
 - **Case conversion**: Uppercase and lowercase.
 - **Trim and strip**: Remove whitespace, custom characters, ansi sequences.
 - **Append and prepend**: Add text before or after.
+- **Map**: Apply a sub-pipeline to each list item.
+- **Sort, reverse, unique**: List operations for sorting, reversing, deduplication.
+- **Pad**: Pad strings or list items to a given width.
+- **Regex extract**: Extract regex matches or groups.
 - **Smart escaping**: Contextual pipe handling - no escaping needed in most cases.
 - **Flexible indices**: Python-like negative indices in ranges and slices with Rust-like syntax.
 - **Stdin support**: Read input from stdin when no input argument is provided.
@@ -57,7 +61,7 @@ Find the crate on [crates.io](https://crates.io/crates/string_pipeline):
 
 ```toml
 [dependencies]
-string_pipeline = "0.7.0"
+string_pipeline = "0.8.0"
 ```
 
 ---
@@ -113,17 +117,31 @@ string-pipeline "{replace:s/ /_/g|upper}" "foo bar baz"
 string-pipeline "{split:,:..|trim|append:!}" " a, b,c , d , e "
 # Output: a!,b!,c!,d!,e!
 
-# Using stdin for processing file content
-cat data.txt | string-pipeline "{split:\n:..|trim|prepend:- }"
+# Using map to uppercase each item
+string-pipeline "{split:,:..|map:{upper}}" "a,b,c"
+# Output: A,B,C
+
+# Sort and join
+string-pipeline "{split:,:..|sort:desc|join:-}" "b,a,c"
+# Output: c-b-a
+
+# Pad each item to width 3 with '*'
+string-pipeline "{split:,:..|map:{pad:3:*:both}}" "a,bb,c"
+# Output: *a*,bb*,*c*
+
+# Extract numbers from each item
+string-pipeline "{split:,:..|map:{regex_extract:\d+}}" "a1,b22,c333"
+# Output: 1,22,333
 ```
 
 ### As a Library
 
 ```rust
-use string_pipeline::process;
+use string_pipeline::Template;
 
 fn main() {
-    let result = process("a,b,c", "{split:,:..|join:\\n}").unwrap();
+    let template = Template::parse("{split:,:..|join:\\n}").unwrap();
+    let result = template.format("a,b,c").unwrap();
     assert_eq!(result, "a\nb\nc");
 }
 ```
@@ -150,7 +168,7 @@ Arguments to operations are separated by `:`.
   - `replace:s/<pattern>/<replacement>/<flags>`
   - `upper`
   - `lower`
-  - `trim`
+  - `trim[:left|right|both]`
   - `strip:<chars>`
   - `append:<suffix>`
   - `prepend:<prefix>`
@@ -158,25 +176,37 @@ Arguments to operations are separated by `:`.
   - `filter:<regex_pattern>`
   - `filter_not:<regex_pattern>`
   - `slice:<range>`
+  - `map:{<operation_list>}`
+  - `sort[:asc|desc]`
+  - `reverse`
+  - `unique`
+  - `pad:<width>[:<char>][:left|right|both]`
+  - `regex_extract:<pattern>[:<group>]`
 
 #### Supported Operations
 
-| Operation  | Syntax                                    | Description                                 |
-| ---------- | ----------------------------------------- | ------------------------------------------- |
-| Split      | `split:<sep>:<range>`                       | Split by separator, select by index/range   |
-| Join       | `join:<sep>`                                | Join a list with separator                  |
-| Substring  | `substring:<range>`                         | Extract substrings                          |
-| Replace    | `replace:s/<pattern>/<replacement>/<flags>` | Regex replace (sed-like)                    |
-| Uppercase  | `upper`                                     | Convert to uppercase                        |
-| Lowercase  | `lower`                                     | Convert to lowercase                        |
-| Trim       | `trim`                                      | Trim whitespace                             |
-| Strip      | `strip:<chars>`                             | Trim custom characters                      |
-| Append     | `append:<suffix>`                           | Append text                                 |
-| Prepend    | `prepend:<prefix>`                          | Prepend text                                |
-| StripAnsi  | `strip_ansi`                                | Removes ansi escape sequences               |
-| Filter     | `filter:<regex_pattern>`                    | Keep only items matching regex pattern      |
-| FilterNot  | `filter_not:<regex_pattern>`                | Remove items matching regex pattern         |
-| Slice      | `slice:<range>`                             | Select elements from a list                 |
+| Operation    | Syntax                                      | Description                                         |
+| ------------ | ------------------------------------------- | --------------------------------------------------- |
+| Split        | `split:<sep>:<range>`                       | Split by separator, select by index/range           |
+| Join         | `join:<sep>`                                | Join a list with separator                          |
+| Substring    | `substring:<range>`                         | Extract substring(s) by character index/range       |
+| Replace      | `replace:s/<pattern>/<replacement>/<flags>` | Regex replace (sed-like, supports flags)            |
+| Uppercase    | `upper`                                     | Convert to uppercase                                |
+| Lowercase    | `lower`                                     | Convert to lowercase                                |
+| Trim         | `trim[:left\|right\|both]`                  | Trim whitespace (or side-specific)                  |
+| Strip        | `strip:<chars>`                             | Strip custom characters from both ends              |
+| Append       | `append:<suffix>`                           | Append text                                         |
+| Prepend      | `prepend:<prefix>`                          | Prepend text                                        |
+| StripAnsi    | `strip_ansi`                                | Remove ANSI escape sequences                        |
+| Filter       | `filter:<regex_pattern>`                    | Keep only items matching regex pattern              |
+| FilterNot    | `filter_not:<regex_pattern>`                | Remove items matching regex pattern                 |
+| Slice        | `slice:<range>`                             | Select elements from a list by index/range          |
+| Map          | `map:{<operation_list>}`                    | Apply a sub-pipeline to each list item              |
+| Sort         | `sort[:asc\|desc]`                          | Sort list ascending/descending                      |
+| Reverse      | `reverse`                                   | Reverse string or list                              |
+| Unique       | `unique`                                    | Remove duplicate items from a list                  |
+| Pad          | `pad:<width>[:<char>][:left\|right\|both]`  | Pad string/list items to width with char/side       |
+| RegexExtract | `regex_extract:<pattern>[:<group>]`         | Extract first match or group from string/list items |
 
 #### Range Specifications
 
@@ -190,7 +220,7 @@ Ranges use Rust-like syntax and support negative indices like Python:
 | `N..`   | From N to end             | `{split:,:2..}`   → from 2nd to end  |
 | `..N`   | From start to N           | `{split:,:..3}`   → first 3 elements |
 | `..=N`  | From start to N inclusive | `{split:,:..=2}`  → first 3 elements |
-| `..`    | All elements              | `{split:,:..)`    → all elements     |
+| `..`    | All elements              | `{split:,:..}`    → all elements     |
 
 Negative indices count from the end:
 
@@ -221,9 +251,7 @@ The parser intelligently handles pipe characters (`|`) based on context:
 
 ---
 
-## Examples
-
-### Basic
+## More examples
 
 ```sh
 # Get the last item
@@ -262,83 +290,72 @@ string-pipeline "{upper|append:!}" "hello"
 string-pipeline "{prepend:\:foo}" "bar"
 # Output: :foobar
 
-```
+# Map: uppercase each item
+string-pipeline "{split:,:..|map:{upper}}" "a,b,c"
+# Output: A,B,C
 
-### Advanced
+# Sort, reverse, unique, pad, regex_extract
+string-pipeline "{split:,:..|sort:desc|join:-}" "b,a,c"
+# Output: c-b-a
 
-```sh
-# Complex chaining: split, select range, join, replace, uppercase
-string-pipeline "{split:,:0..2|join:-|replace:s/a/X/|upper}" "a,b,c"
-# Output: X-B
+string-pipeline "{split:,:..|reverse}" "a,b,c"
+# Output: c,b,a
 
-# Split, trim each item, then prepend
-echo " a , b , c " | string-pipeline "{split:,:..|trim|prepend:item_}"
-# Output: item_a,item_b,item_c
+string-pipeline "{split:,:..|unique}" "a,b,a,c"
+# Output: a,b,c
 
-# Strip custom characters
-string-pipeline "{strip:xy}" "xyhelloxy"
-# Output: hello
-```
+string-pipeline "{split:,:..|map:{pad:3:*:both}}" "a,bb,c"
+# Output: *a*,bb*,*c*
 
-### Real-World
-
-```sh
-# Process CSV-like data
-echo "name,age,city" | string-pipeline "{split:,:1..}"
-# Output: age,city
-
-# Format file paths
-echo "/home/user/documents/file.txt" | string-pipeline "{split:/:-1}"
-# Output: file.txt
-
-# Extract file extension
-echo "document.pdf" | string-pipeline "{split:.:-1|upper}"
-# Output: PDF
-
-# Process log entries with timestamps
-echo "2023-01-01 ERROR Failed to connect" | string-pipeline "{split: :1..|join: |lower}"
-# Output: error failed to connect
-
-# Clean colored git output
-git log --oneline --color=always | string-pipeline "{split:\n:..|strip_ansi|join:\n}"
-
-# Process ls colored output
-ls --color=always | string-pipeline "{strip_ansi}"
-
-# Clean grep colored output
-grep --color=always "pattern" file.txt | string-pipeline "{strip_ansi|upper}"
-
-# Chain with other operations
-echo -e "\x1b[31mred\x1b[0m,\x1b[32mgreen\x1b[0m" | \
-  string-pipeline "{split:,:..|strip_ansi|upper|join: \| }"
-# Output: RED | GREEN
-
-# Process log files with ANSI codes
-cat colored.log | string-pipeline "{split:\n:-10..|strip_ansi|join:\n}"
+string-pipeline "{split:,:..|map:{regex_extract:\\d+}}" "a1,b22,c333"
+# Output: 1,22,333
 ```
 
 ### Debug Mode
 
 ```sh
 # Print debug info for each operation
-string-pipeline "{!split:,:..|upper|join:-}" "a,b,c"
-# DEBUG: Initial value: Str("a,b,c")
+string-pipeline "{!split:,:..|map:{trim|upper}}" "user123,   admin456   ,guest789"
+# DEBUG: Initial value: Str("user123,   admin456   ,guest789")
 # DEBUG: Applying operation 1: Split { sep: ",", range: Range(None, None, false) }
 # DEBUG: Result: List with 3 items:
-# DEBUG:   [0]: "a"
-# DEBUG:   [1]: "b"
-# DEBUG:   [2]: "c"
+# DEBUG:   [0]: "user123"
+# DEBUG:   [1]: "   admin456   "
+# DEBUG:   [2]: "guest789"
 # DEBUG: ---
-# DEBUG: Applying operation 2: Upper
+# DEBUG: Applying operation 2: Map { operations: [Trim { direction: Both }, Upper] }
+# DEBUG: Map operation starting with 3 items
+# DEBUG: Map operations to apply: 2 steps
+# DEBUG:   Step 1: Trim { direction: Both }
+# DEBUG:   Step 2: Upper
+# DEBUG: Processing item 1 of 3: "user123"
+# DEBUG:   Item 1/3 initial value: Str("user123")
+# DEBUG:   Item 1/3 applying step 1: Trim { direction: Both }
+# DEBUG:   Item 1/3 step 1 result: String("user123")
+# DEBUG:   Item 1/3 applying step 2: Upper
+# DEBUG:   Item 1/3 step 2 result: String("USER123")
+# DEBUG: Processing item 2 of 3: "   admin456   "
+# DEBUG:   Item 2/3 initial value: Str("   admin456   ")
+# DEBUG:   Item 2/3 applying step 1: Trim { direction: Both }
+# DEBUG:   Item 2/3 step 1 result: String("admin456")
+# DEBUG:   Item 2/3 applying step 2: Upper
+# DEBUG:   Item 2/3 step 2 result: String("ADMIN456")
+# DEBUG: Processing item 3 of 3: "guest789"
+# DEBUG:   Item 3/3 initial value: Str("guest789")
+# DEBUG:   Item 3/3 applying step 1: Trim { direction: Both }
+# DEBUG:   Item 3/3 step 1 result: String("guest789")
+# DEBUG:   Item 3/3 applying step 2: Upper
+# DEBUG:   Item 3/3 step 2 result: String("GUEST789")
+# DEBUG: Map operation completed. Results:
+# DEBUG:   Item 1: "USER123"
+# DEBUG:   Item 2: "ADMIN456"
+# DEBUG:   Item 3: "GUEST789"
 # DEBUG: Result: List with 3 items:
-# DEBUG:   [0]: "A"
-# DEBUG:   [1]: "B"
-# DEBUG:   [2]: "C"
+# DEBUG:   [0]: "USER123"
+# DEBUG:   [1]: "ADMIN456"
+# DEBUG:   [2]: "GUEST789"
 # DEBUG: ---
-# DEBUG: Applying operation 3: Join { sep: "-" }
-# DEBUG: Result: String("A-B-C")
-# DEBUG: ---
-# A-B-C
+# USER123,ADMIN456,GUEST789
 ```
 
 ---

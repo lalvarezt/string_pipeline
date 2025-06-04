@@ -17,7 +17,8 @@ use crate::pipeline::{StringOp, apply_ops, parser};
 /// - **Uppercase and lowercase conversion**
 /// - **Trimming whitespace or custom characters**
 /// - **Appending or prepending text**
-/// - etc.
+/// - **Map (apply sub-pipeline to each list item)**
+/// - **Sort, reverse, unique, pad, regex_extract**
 ///
 /// A `Template` can be created by parsing a string that follows the defined syntax (see
 /// `Template::parse`), and it can then be used to format input strings by applying the specified
@@ -28,11 +29,28 @@ use crate::pipeline::{StringOp, apply_ops, parser};
 /// ```rust
 /// use string_pipeline::Template;
 ///
-/// let template = Template::parse("{split:,:..|trim|append:!}").unwrap();
+/// let template = Template::parse("{split:,:..|map:{trim|append:!}}").unwrap();
 ///
 /// let result = template.format(" a, b,c , d , e ").unwrap();
 ///
 /// assert_eq!(result, "a!,b!,c!,d!,e!");
+/// ```
+///
+/// # Example: Map, Sort, Pad, Regex Extract
+/// ```rust
+/// use string_pipeline::Template;
+///
+/// let template = Template::parse("{split:,:..|map:{upper}|sort:desc|join:-}").unwrap();
+/// let result = template.format("a,b,c").unwrap();
+/// assert_eq!(result, "C-B-A");
+///
+/// let template = Template::parse("{split:,:..|map:{pad:3:*:both}}").unwrap();
+/// let result = template.format("a,bb,c").unwrap();
+/// assert_eq!(result, "*a*,bb*,*c*");
+///
+/// let template = Template::parse("{split:,:..|map:{regex_extract:\\d+}}").unwrap();
+/// let result = template.format("a1,b22,c333").unwrap();
+/// assert_eq!(result, "1,22,333");
 /// ```
 #[derive(Debug)]
 pub struct Template {
@@ -69,7 +87,7 @@ impl Template {
     ///   - `replace:s/<pattern>/<replacement>/<flags>`
     ///   - `upper`
     ///   - `lower`
-    ///   - `trim`
+    ///   - `trim[:left|right|both]`
     ///   - `strip:<chars>`
     ///   - `append:<suffix>`
     ///   - `prepend:<prefix>`
@@ -77,25 +95,38 @@ impl Template {
     ///   - `filter:<regex_pattern>`
     ///   - `filter_not:<regex_pattern>`
     ///   - `slice:<range>`
+    ///   - `map:{<operation_list>}`
+    ///   - `sort[:asc|desc]`
+    ///   - `reverse`
+    ///   - `unique`
+    ///   - `pad:<width>[:<char>][:left|right|both]`
+    ///   - `regex_extract:<pattern>[:<group>]`
     ///
     /// ## Supported Operations
     ///
-    /// | Operation | Syntax                                       | Description                               |
-    /// | --------- | -------------------------------------------- | ----------------------------------------- |
-    /// | Split     | `split:<sep>:<range>`                        | Split by separator, select by index/range |
-    /// | Join      | `join:<sep>`                                 | Join a list with separator                |
-    /// | Substring | `substring:<range>`                          | Extract substrings                        |
-    /// | Replace   | `replace:s/<pattern>/<replacement>/<flags>`  | Regex replace (sed-like)                  |
-    /// | Uppercase | `upper`                                      | Convert to uppercase                      |
-    /// | Lowercase | `lower`                                      | Convert to lowercase                      |
-    /// | Trim      | `trim`                                       | Trim whitespace                           |
-    /// | Strip     | `strip:<chars>`                              | Trim custom characters                    |
-    /// | Append    | `append:<suffix>`                            | Append text                               |
-    /// | Prepend   | `prepend:<prefix>`                           | Prepend text                              |
-    /// | StripAnsi | `strip_ansi`                                 | Removes ansi escape sequences             |
-    /// | Filter    | `filter:<regex_pattern>`                     | Keep only items matching regex pattern    |
-    /// | FilterNot | `filter_not:<regex_pattern>`                 | Remove items matching regex pattern       |
-    /// | Slice     | `slice:<range>`                              | Select elements from a list               |
+    /// | Operation    | Syntax                                      | Description                                         |
+    /// | ------------ | ------------------------------------------- | --------------------------------------------------- |
+    /// | Split        | `split:<sep>:<range>`                       | Split by separator, select by index/range           |
+    /// | Join         | `join:<sep>`                                | Join a list with separator                          |
+    /// | Substring    | `substring:<range>`                         | Extract substring(s) by character index/range       |
+    /// | Replace      | `replace:s/<pattern>/<replacement>/<flags>` | Regex replace (sed-like, supports flags)            |
+    /// | Uppercase    | `upper`                                     | Convert to uppercase                                |
+    /// | Lowercase    | `lower`                                     | Convert to lowercase                                |
+    /// | Trim         | `trim[:left|right|both]`                    | Trim whitespace (or side-specific)                  |
+    /// | Strip        | `strip:<chars>`                             | Strip custom characters from both ends              |
+    /// | Append       | `append:<suffix>`                           | Append text                                         |
+    /// | Prepend      | `prepend:<prefix>`                          | Prepend text                                        |
+    /// | StripAnsi    | `strip_ansi`                                | Remove ANSI escape sequences                        |
+    /// | Filter       | `filter:<regex_pattern>`                    | Keep only items matching regex pattern              |
+    /// | FilterNot    | `filter_not:<regex_pattern>`                | Remove items matching regex pattern                 |
+    /// | Slice        | `slice:<range>`                             | Select elements from a list by index/range          |
+    /// | Map          | `map:{<operation_list>}`                    | Apply a sub-pipeline to each list item              |
+    /// | Sort         | `sort[:asc|desc]`                           | Sort list ascending/descending                      |
+    /// | Reverse      | `reverse`                                   | Reverse string or list                              |
+    /// | Unique       | `unique`                                    | Remove duplicate items from a list                  |
+    /// | Pad          | `pad:<width>[:<char>][:left|right|both]`    | Pad string/list items to width with char/side       |
+    /// | RegexExtract | `regex_extract:<pattern>[:<group>]`         | Extract first match or group from string/list items |
+    ///
     ///
     /// ## Range Specifications
     ///
@@ -109,7 +140,7 @@ impl Template {
     /// | `N..`   | From N to end             | `{split:,:2..}`   → from 2nd to end  |
     /// | `..N`   | From start to N           | `{split:,:..3}`   → first 3 elements |
     /// | `..=N`  | From start to N inclusive | `{split:,:..=2}`  → first 3 elements |
-    /// | `..`    | All elements              | `{split:,:..)`    → all elements     |
+    /// | `..`    | All elements              | `{split:,:..}`    → all elements     |
     ///
     /// Negative indices count from the end:
     ///
