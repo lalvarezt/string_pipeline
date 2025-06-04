@@ -15,7 +15,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("process_complex", |b| {
         b.iter(|| {
             Template::parse(black_box(
-                "{split:,:0..2|trim|prepend:num\\: |join: - |upper}",
+                "{split:,:0..2|map:{trim|prepend:num\\: }|join: - |upper}",
             ))
             .unwrap()
             .format(black_box("18,   4.92, Unknown"))
