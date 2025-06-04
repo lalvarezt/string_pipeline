@@ -27,7 +27,9 @@ pub enum StringOp {
     },
     Upper,
     Lower,
-    Trim,
+    Trim {
+        direction: TrimDirection,
+    },
     Substring {
         range: RangeSpec,
     },
@@ -50,12 +52,49 @@ pub enum StringOp {
     Slice {
         range: RangeSpec,
     },
+    Map {
+        operation: Box<StringOp>,
+    },
+    Sort {
+        direction: SortDirection,
+    },
+    Reverse,
+    Unique,
+    Pad {
+        width: usize,
+        char: char,
+        direction: PadDirection,
+    },
+    RegexExtract {
+        pattern: String,
+        group: Option<usize>,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum RangeSpec {
     Index(isize),
     Range(Option<isize>, Option<isize>, bool), // (start, end, inclusive)
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum TrimDirection {
+    Both,
+    Left,
+    Right,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum SortDirection {
+    Asc,
+    Desc,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum PadDirection {
+    Left,
+    Right,
+    Both,
 }
 
 fn resolve_index(idx: isize, len: usize) -> usize {
@@ -245,10 +284,25 @@ pub fn apply_ops(input: &str, ops: &[StringOp], debug: bool) -> Result<String, S
                     val = Value::List(list.iter().map(|s| s.to_lowercase()).collect())
                 }
             },
-            StringOp::Trim => match &val {
-                Value::Str(s) => val = Value::Str(s.trim().to_string()),
+            StringOp::Trim { direction } => match &val {
+                Value::Str(s) => {
+                    let trimmed = match direction {
+                        TrimDirection::Both => s.trim().to_string(),
+                        TrimDirection::Left => s.trim_start().to_string(),
+                        TrimDirection::Right => s.trim_end().to_string(),
+                    };
+                    val = Value::Str(trimmed);
+                }
                 Value::List(list) => {
-                    val = Value::List(list.iter().map(|s| s.trim().to_string()).collect())
+                    let trimmed: Vec<String> = list
+                        .iter()
+                        .map(|s| match direction {
+                            TrimDirection::Both => s.trim().to_string(),
+                            TrimDirection::Left => s.trim_start().to_string(),
+                            TrimDirection::Right => s.trim_end().to_string(),
+                        })
+                        .collect();
+                    val = Value::List(trimmed);
                 }
             },
             StringOp::Strip { chars } => {
@@ -348,6 +402,168 @@ pub fn apply_ops(input: &str, ops: &[StringOp], debug: bool) -> Result<String, S
                 if let Value::List(list) = &val {
                     let taken = apply_range(list, range);
                     val = Value::List(taken);
+                }
+            }
+            StringOp::Map { operation } => match &val {
+                Value::List(list) => {
+                    let mut mapped: Vec<String> = Vec::new();
+                    for item in list {
+                        let result = apply_ops(item, &[(**operation).clone()], false)?;
+                        mapped.push(result);
+                    }
+                    val = Value::List(mapped);
+                }
+                Value::Str(_) => {
+                    return Err("Map operation can only be applied to lists".to_string());
+                }
+            },
+            StringOp::Sort { direction } => match &val {
+                Value::List(list) => {
+                    let mut sorted = list.clone();
+                    match direction {
+                        SortDirection::Asc => sorted.sort(),
+                        SortDirection::Desc => {
+                            sorted.sort();
+                            sorted.reverse();
+                        }
+                    }
+                    val = Value::List(sorted);
+                }
+                Value::Str(_) => {
+                    return Err("Sort operation can only be applied to lists".to_string());
+                }
+            },
+            StringOp::Reverse => match &val {
+                Value::Str(s) => {
+                    let reversed: String = s.chars().rev().collect();
+                    val = Value::Str(reversed);
+                }
+                Value::List(list) => {
+                    let mut reversed = list.clone();
+                    reversed.reverse();
+                    val = Value::List(reversed);
+                }
+            },
+            StringOp::Unique => match &val {
+                Value::List(list) => {
+                    let mut unique = Vec::new();
+                    let mut seen = std::collections::HashSet::new();
+                    for item in list {
+                        if seen.insert(item.clone()) {
+                            unique.push(item.clone());
+                        }
+                    }
+                    val = Value::List(unique);
+                }
+                Value::Str(_) => {
+                    return Err("Unique operation can only be applied to lists".to_string());
+                }
+            },
+            StringOp::Pad {
+                width,
+                char,
+                direction,
+            } => match &val {
+                Value::Str(s) => {
+                    let current_len = s.chars().count();
+                    if current_len >= *width {
+                        val = Value::Str(s.clone());
+                    } else {
+                        let padding_needed = *width - current_len;
+                        let padded = match direction {
+                            PadDirection::Left => {
+                                format!("{}{}", char.to_string().repeat(padding_needed), s)
+                            }
+                            PadDirection::Right => {
+                                format!("{}{}", s, char.to_string().repeat(padding_needed))
+                            }
+                            PadDirection::Both => {
+                                let left_pad = padding_needed / 2;
+                                let right_pad = padding_needed - left_pad;
+                                format!(
+                                    "{}{}{}",
+                                    char.to_string().repeat(left_pad),
+                                    s,
+                                    char.to_string().repeat(right_pad)
+                                )
+                            }
+                        };
+                        val = Value::Str(padded);
+                    }
+                }
+                Value::List(list) => {
+                    let padded: Vec<String> = list
+                        .iter()
+                        .map(|s| {
+                            let current_len = s.chars().count();
+                            if current_len >= *width {
+                                s.clone()
+                            } else {
+                                let padding_needed = *width - current_len;
+                                match direction {
+                                    PadDirection::Left => {
+                                        format!("{}{}", char.to_string().repeat(padding_needed), s)
+                                    }
+                                    PadDirection::Right => {
+                                        format!("{}{}", s, char.to_string().repeat(padding_needed))
+                                    }
+                                    PadDirection::Both => {
+                                        let left_pad = padding_needed / 2;
+                                        let right_pad = padding_needed - left_pad;
+                                        format!(
+                                            "{}{}{}",
+                                            char.to_string().repeat(left_pad),
+                                            s,
+                                            char.to_string().repeat(right_pad)
+                                        )
+                                    }
+                                }
+                            }
+                        })
+                        .collect();
+                    val = Value::List(padded);
+                }
+            },
+            StringOp::RegexExtract { pattern, group } => {
+                let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
+                match &val {
+                    Value::Str(s) => {
+                        let extracted = if let Some(group_idx) = group {
+                            if let Some(caps) = re.captures(s) {
+                                caps.get(*group_idx)
+                                    .map(|m| m.as_str().to_string())
+                                    .unwrap_or_else(String::new)
+                            } else {
+                                String::new()
+                            }
+                        } else {
+                            re.find(s)
+                                .map(|m| m.as_str().to_string())
+                                .unwrap_or_else(String::new)
+                        };
+                        val = Value::Str(extracted);
+                    }
+                    Value::List(list) => {
+                        let extracted: Vec<String> = list
+                            .iter()
+                            .map(|s| {
+                                if let Some(group_idx) = group {
+                                    if let Some(caps) = re.captures(s) {
+                                        caps.get(*group_idx)
+                                            .map(|m| m.as_str().to_string())
+                                            .unwrap_or_else(String::new)
+                                    } else {
+                                        String::new()
+                                    }
+                                } else {
+                                    re.find(s)
+                                        .map(|m| m.as_str().to_string())
+                                        .unwrap_or_else(String::new)
+                                }
+                            })
+                            .collect();
+                        val = Value::List(extracted);
+                    }
                 }
             }
         }
@@ -2349,5 +2565,315 @@ mod tests {
             assert!(result.is_ok());
             assert_eq!(result.unwrap(), "a");
         }
+    }
+
+    // Map operation tests
+    #[test]
+    fn test_map_new_syntax_substring() {
+        assert_eq!(
+            process("hello,world,test", "{split:,:..|map:{substring:0..2}}").unwrap(),
+            "he,wo,te"
+        );
+    }
+
+    #[test]
+    fn test_map_new_syntax_upper() {
+        assert_eq!(
+            process("hello,world,test", "{split:,:..|map:{upper}}").unwrap(),
+            "HELLO,WORLD,TEST"
+        );
+    }
+
+    #[test]
+    fn test_map_new_syntax_append() {
+        assert_eq!(
+            process("a,b,c", "{split:,:..|map:{append:!}}").unwrap(),
+            "a!,b!,c!"
+        );
+    }
+
+    #[test]
+    fn test_map_new_syntax_pad() {
+        assert_eq!(
+            process("a,bb,c", "{split:,:..|map:{pad:3:*:both}}").unwrap(),
+            "*a*,bb*,*c*"
+        );
+    }
+
+    #[test]
+    fn test_map_new_syntax_replace() {
+        assert_eq!(
+            process("hello,world", "{split:,:..|map:{replace:s/l/L/g}}").unwrap(),
+            "heLLo,worLd"
+        );
+    }
+
+    #[test]
+    fn test_map_new_syntax_trim() {
+        assert_eq!(
+            process(" a , b , c ", "{split:,:..|map:{trim:both}}").unwrap(),
+            "a,b,c"
+        );
+    }
+
+    #[test]
+    fn test_map_new_syntax_regex_extract() {
+        let input = "user123,admin456,guest789";
+        assert_eq!(
+            process(input, r"{split:,:..|map:{regex_extract:\d+}}").unwrap(),
+            "123,456,789"
+        );
+    }
+
+    #[test]
+    fn test_map_new_syntax_complex() {
+        assert_eq!(
+            process(
+                "  hello  ,  world  ",
+                "{split:,:..|map:{trim:both}|map:{upper}|join:-}"
+            )
+            .unwrap(),
+            "HELLO-WORLD"
+        );
+    }
+
+    #[test]
+    fn test_map_nested_ranges() {
+        assert_eq!(
+            process("hello,world,testing", "{split:,:..|map:{substring:1..=3}}").unwrap(),
+            "ell,orl,est"
+        );
+    }
+
+    #[test]
+    fn test_map_error_cases() {
+        // Missing braces should error
+        assert!(process("a,b,c", "{split:,:..|map:upper}").is_err());
+
+        // Invalid operation inside map should error
+        assert!(process("a,b,c", "{split:,:..|map:{invalid_op}}").is_err());
+    }
+
+    // Sort operation tests
+    #[test]
+    fn test_sort_asc() {
+        assert_eq!(
+            process("zebra,apple,banana", "{split:,:..|sort}").unwrap(),
+            "apple,banana,zebra"
+        );
+    }
+
+    #[test]
+    fn test_sort_desc() {
+        assert_eq!(
+            process("zebra,apple,banana", "{split:,:..|sort:desc}").unwrap(),
+            "zebra,banana,apple"
+        );
+    }
+
+    #[test]
+    fn test_sort_asc_explicit() {
+        assert_eq!(process("c,a,b", "{split:,:..|sort:asc}").unwrap(), "a,b,c");
+    }
+
+    #[test]
+    fn test_sort_on_string_error() {
+        assert!(process("hello", "{sort}").is_err());
+    }
+
+    // Reverse operation tests
+    #[test]
+    fn test_reverse_string() {
+        assert_eq!(process("hello", "{reverse}").unwrap(), "olleh");
+    }
+
+    #[test]
+    fn test_reverse_list() {
+        assert_eq!(
+            process("a,b,c,d", "{split:,:..|reverse}").unwrap(),
+            "d,c,b,a"
+        );
+    }
+
+    #[test]
+    fn test_reverse_unicode_string() {
+        assert_eq!(process("café", "{reverse}").unwrap(), "éfac");
+    }
+
+    // Unique operation tests
+    #[test]
+    fn test_unique_basic() {
+        assert_eq!(
+            process("a,b,a,c,b,d", "{split:,:..|unique}").unwrap(),
+            "a,b,c,d"
+        );
+    }
+
+    #[test]
+    fn test_unique_empty_list() {
+        assert_eq!(process("", "{split:,:..|unique}").unwrap(), "");
+    }
+
+    #[test]
+    fn test_unique_no_duplicates() {
+        assert_eq!(process("a,b,c", "{split:,:..|unique}").unwrap(), "a,b,c");
+    }
+
+    #[test]
+    fn test_unique_on_string_error() {
+        assert!(process("hello", "{unique}").is_err());
+    }
+
+    // Pad operation tests
+    #[test]
+    fn test_pad_right_default() {
+        assert_eq!(process("hi", "{pad:5}").unwrap(), "hi   ");
+    }
+
+    #[test]
+    fn test_pad_left() {
+        assert_eq!(process("hi", "{pad:5: :left}").unwrap(), "   hi");
+    }
+
+    #[test]
+    fn test_pad_both() {
+        assert_eq!(process("hi", "{pad:6: :both}").unwrap(), "  hi  ");
+    }
+
+    #[test]
+    fn test_pad_custom_char() {
+        assert_eq!(process("hi", "{pad:5:*:right}").unwrap(), "hi***");
+    }
+
+    #[test]
+    fn test_pad_already_long_enough() {
+        assert_eq!(process("hello", "{pad:3}").unwrap(), "hello");
+    }
+
+    #[test]
+    fn test_pad_list() {
+        assert_eq!(
+            process("a,bb,ccc", "{split:,:..|pad:4:0:left}").unwrap(),
+            "000a,00bb,0ccc"
+        );
+    }
+
+    #[test]
+    fn test_pad_unicode() {
+        assert_eq!(process("café", "{pad:6:*:both}").unwrap(), "*café*");
+    }
+
+    // Regex extract operation tests
+    #[test]
+    fn test_regex_extract_basic() {
+        assert_eq!(
+            process("hello123world", r"{regex_extract:\d+}").unwrap(),
+            "123"
+        );
+    }
+
+    #[test]
+    fn test_regex_extract_no_match() {
+        assert_eq!(process("hello world", r"{regex_extract:\d+}").unwrap(), "");
+    }
+
+    #[test]
+    fn test_regex_extract_group() {
+        assert_eq!(
+            process("email@domain.com", r"{regex_extract:(\w+)@(\w+):1}").unwrap(),
+            "email"
+        );
+    }
+
+    #[test]
+    fn test_regex_extract_group_2() {
+        assert_eq!(
+            process("email@domain.com", r"{regex_extract:(\w+)@(\w+):2}").unwrap(),
+            "domain"
+        );
+    }
+
+    #[test]
+    fn test_regex_extract_list() {
+        assert_eq!(
+            process("test123,abc456,xyz", r"{split:,:..|regex_extract:\d+}").unwrap(),
+            "123,456,"
+        );
+    }
+
+    #[test]
+    fn test_regex_extract_invalid_regex() {
+        assert!(process("test", r"{regex_extract:[}").is_err());
+    }
+
+    // Modified trim operation tests
+    #[test]
+    fn test_trim_both_default() {
+        assert_eq!(process("  hello  ", "{trim}").unwrap(), "hello");
+    }
+
+    #[test]
+    fn test_trim_left() {
+        assert_eq!(process("  hello  ", "{trim:left}").unwrap(), "hello  ");
+    }
+
+    #[test]
+    fn test_trim_right() {
+        assert_eq!(process("  hello  ", "{trim:right}").unwrap(), "  hello");
+    }
+
+    #[test]
+    fn test_trim_both_explicit() {
+        assert_eq!(process("  hello  ", "{trim:both}").unwrap(), "hello");
+    }
+
+    #[test]
+    fn test_trim_list() {
+        assert_eq!(
+            process(" a , b , c ", "{split:,:..|trim:both}").unwrap(),
+            "a,b,c"
+        );
+    }
+
+    // Complex pipeline tests with new operations
+    #[test]
+    fn test_complex_pipeline_with_new_ops() {
+        assert_eq!(
+            process("  c,a,b,a,c  ", "{trim|split:,:..|trim|unique|sort}").unwrap(),
+            "a,b,c"
+        );
+    }
+
+    #[test]
+    fn test_pipeline_with_map_and_pad() {
+        assert_eq!(
+            process("a,bb,c", "{split:,:..|map:{pad:3:*:both}}").unwrap(),
+            "*a*,bb*,*c*"
+        );
+    }
+
+    #[test]
+    fn test_regex_extract_with_map() {
+        let input = "user123,admin456,guest789";
+        assert_eq!(
+            process(input, r"{split:,:..|map:{regex_extract:\d+}|join:-}").unwrap(),
+            "123-456-789"
+        );
+    }
+
+    #[test]
+    fn test_sort_reverse_combination() {
+        assert_eq!(
+            process("b,a,d,c", "{split:,:..|sort|reverse}").unwrap(),
+            "d,c,b,a"
+        );
+    }
+
+    #[test]
+    fn test_pad_trim_combination() {
+        assert_eq!(
+            process("  hello  ", "{trim:both|pad:20:*:both}").unwrap(),
+            "*******hello********"
+        );
     }
 }

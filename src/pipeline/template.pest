@@ -21,6 +21,12 @@ operation = {
   | filter
   | filter_not
   | slice
+  | regex_extract
+  | map
+  | sort
+  | reverse
+  | unique
+  | pad
 }
 
 shorthand_index = { number }
@@ -33,22 +39,63 @@ shorthand_range = {
   | range_full
 }
 
-split      = { "split" ~ ":" ~ split_arg ~ ":" ~ range_spec? }
-join       = { "join" ~ ":" ~ arg }
-substring  = { "substring" ~ ":" ~ range_spec }
-replace    = { "replace" ~ ":" ~ sed_string }
-upper      = { "upper" }
-lower      = { "lower" }
-trim       = { "trim" }
-strip      = { "strip" ~ ":" ~ arg }
-append     = { "append" ~ ":" ~ arg }
-prepend    = { "prepend" ~ ":" ~ arg }
-strip_ansi = { "strip_ansi" }
-filter     = { "filter" ~ ":" ~ regex_arg }
-filter_not = { "filter_not" ~ ":" ~ regex_arg }
-slice      = { "slice" ~ ":" ~ range_spec }
+// Order of operations matter
+regex_extract = { "regex_extract" ~ ":" ~ regex_arg ~ (":" ~ number)? }
+filter_not    = { "filter_not" ~ ":" ~ regex_arg }
+filter        = { "filter" ~ ":" ~ regex_arg }
+strip_ansi    = { "strip_ansi" }
+map           = { "map" ~ ":" ~ map_operation }
+split         = { "split" ~ ":" ~ split_arg ~ ":" ~ range_spec? }
+substring     = { "substring" ~ ":" ~ range_spec }
+replace       = { "replace" ~ ":" ~ sed_string }
+append        = { "append" ~ ":" ~ arg }
+prepend       = { "prepend" ~ ":" ~ arg }
+upper         = { "upper" }
+lower         = { "lower" }
+trim          = { "trim" ~ (":" ~ direction)? }
+strip         = { "strip" ~ ":" ~ arg }
+join          = { "join" ~ ":" ~ arg }
+slice         = { "slice" ~ ":" ~ range_spec }
+sort          = { "sort" ~ (":" ~ sort_direction)? }
+reverse       = { "reverse" }
+unique        = { "unique" }
+pad           = { "pad" ~ ":" ~ number ~ (":" ~ pad_char)? ~ (":" ~ direction)? }
 
-// Regular arguments (with proper escape handling)
+// Direction specifiers
+direction      =  { "left" | "right" | "both" }
+sort_direction =  { "asc" | "desc" }
+pad_char       = @{ (escaped_char | normal_char)+ }
+
+// Map operation
+map_operation       = { "{" ~ map_inner_operation ~ "}" }
+map_inner_operation = {
+    map_regex_extract
+  | map_filter_not
+  | map_filter
+  | strip_ansi
+  | split
+  | substring
+  | replace
+  | append
+  | prepend
+  | upper
+  | lower
+  | trim
+  | strip
+  | join
+  | slice
+  | sort
+  | reverse
+  | unique
+  | pad
+}
+
+// Map-specific operations that use map_regex_arg
+map_regex_extract = { "regex_extract" ~ ":" ~ map_regex_arg ~ (":" ~ number)? }
+map_filter_not    = { "filter_not" ~ ":" ~ map_regex_arg }
+map_filter        = { "filter" ~ ":" ~ map_regex_arg }
+
+// Regular arguments
 arg          = { (escaped_char | normal_char | " " | "\t")* }
 normal_char  = { !(":" | "|" | "}" | "{" | "\\") ~ ANY }
 escaped_char = { "\\" ~ (":" | "|" | "\\" | "n" | "t" | "r" | "/" | "{" | "}") }
@@ -58,18 +105,28 @@ split_arg          = @{ (split_escaped_char | split_pipe_or_char)* }
 split_pipe_or_char =  { split_pipe | split_normal_char }
 split_pipe         =  { "|" ~ !operation_name }
 split_normal_char  =  {
-    !(":" ~ (operation_name | range_spec | number)) ~ !("|" ~ operation_name) ~ !("}" ~ EOI) ~ ANY
+    !(":" ~ (operation_name | range_spec | number)) ~ !("|" ~ operation_name) ~ !("}" ~ (EOI | !(split_any_char*))) ~ ANY
 }
 split_escaped_char =  { "\\" ~ ANY }
+split_any_char     =  { ANY }
 
 // Regex arguments - allow pipes unless followed by operation names, and handle braces
 regex_arg          = @{ (regex_escaped_char | regex_pipe_or_char)* }
 regex_pipe_or_char =  { regex_pipe | regex_normal_char }
 regex_pipe         =  { "|" ~ !operation_name }
 regex_normal_char  =  {
-    !(":" ~ (operation_name | range_spec | number)) ~ !("|" ~ operation_name) ~ !("}" ~ EOI) ~ ANY
+    !(":" ~ (operation_name | range_spec | number)) ~ !("|" ~ operation_name) ~ !("}" ~ (EOI | "|")) ~ ANY
 }
 regex_escaped_char =  { "\\" ~ ANY }
+
+// Regex arguments for map operations (stop at any })
+map_regex_arg          = @{ (map_regex_escaped_char | map_regex_pipe_or_char)* }
+map_regex_pipe_or_char =  { map_regex_pipe | map_regex_normal_char }
+map_regex_pipe         =  { "|" ~ !operation_name }
+map_regex_normal_char  =  {
+    !(":" ~ (operation_name | range_spec | number)) ~ !("|" ~ operation_name) ~ !"}" ~ ANY
+}
+map_regex_escaped_char =  { "\\" ~ ANY }
 
 // Operation names for lookahead
 operation_name = {
@@ -87,6 +144,12 @@ operation_name = {
   | "filter_not"
   | "filter"
   | "slice"
+  | "regex_extract"
+  | "map"
+  | "sort"
+  | "reverse"
+  | "unique"
+  | "pad"
 }
 
 // Sed strings (preserve sed/regex escape sequences)
@@ -98,6 +161,7 @@ sed_normal_char  =  { !("/" | "\\") ~ ANY }
 sed_escaped_char =  { "\\" ~ ANY }
 sed_flags        = @{ ASCII_ALPHA* }
 
+// Range specifications
 range_spec = {
     range_to_inclusive
   | range_to
