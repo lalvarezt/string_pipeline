@@ -119,12 +119,13 @@ regex_normal_char  =  {
 }
 regex_escaped_char =  { "\\" ~ ANY }
 
-// Regex arguments for map operations (stop at any })
-map_regex_arg          = @{ (map_regex_escaped_char | map_regex_pipe_or_char)* }
+// Regex arguments for map operations (improved to handle braces in regex)
+map_regex_arg          = @{ (map_regex_escaped_char | map_regex_balanced_brace | map_regex_pipe_or_char)* }
 map_regex_pipe_or_char =  { map_regex_pipe | map_regex_normal_char }
 map_regex_pipe         =  { "|" ~ !operation_name }
+map_regex_balanced_brace = { "{" ~ (!("}" ~ &("|" | "}" | EOI | (":" ~ number))) ~ ANY)* ~ "}" }
 map_regex_normal_char  =  {
-    !(":" ~ (operation_name | range_spec | number)) ~ !("|" ~ operation_name) ~ !("}" ~ ("|" | EOI)) ~ ANY
+    !(":" ~ (operation_name | range_spec | number)) ~ !("|" ~ operation_name) ~ !("{" | ("}" ~ &("|" | "}" | EOI | (":" ~ number)))) ~ ANY
 }
 map_regex_escaped_char =  { "\\" ~ ANY }
 
