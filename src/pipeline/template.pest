@@ -78,22 +78,14 @@ map_inner_operation = {
   | upper
   | lower
   | trim
-  | strip  
+  | strip
   | pad
-  | join
-  | slice
-  | sort
   | reverse
-  | unique
   | map_regex_extract
-  | map_filter_not
-  | map_filter
 }
 
 // Map-specific operations that use map_regex_arg
 map_regex_extract = { "regex_extract" ~ ":" ~ map_regex_arg ~ (":" ~ number)? }
-map_filter_not    = { "filter_not" ~ ":" ~ map_regex_arg }
-map_filter        = { "filter" ~ ":" ~ map_regex_arg }
 
 // Regular arguments
 arg          = { (escaped_char | normal_char | " " | "\t")* }

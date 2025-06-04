@@ -102,11 +102,11 @@ fn parse_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String
             Ok(StringOp::Prepend { prefix })
         }
         Rule::strip_ansi => Ok(StringOp::StripAnsi),
-        Rule::filter | Rule::map_filter => {
+        Rule::filter => {
             let pattern = pair.into_inner().next().unwrap().as_str().to_string();
             Ok(StringOp::Filter { pattern })
         }
-        Rule::filter_not | Rule::map_filter_not => {
+        Rule::filter_not => {
             let pattern = pair.into_inner().next().unwrap().as_str().to_string();
             Ok(StringOp::FilterNot { pattern })
         }
