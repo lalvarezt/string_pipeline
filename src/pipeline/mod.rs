@@ -287,6 +287,7 @@ fn apply_single_operation(
     default_sep: &mut String,
 ) -> Result<Value, String> {
     match op {
+        // List operations - work on lists
         StringOp::Split { sep, range } => {
             let parts: Vec<String> = match &val {
                 Value::Str(s) => s.split(sep).map(str::to_string).collect(),
@@ -298,136 +299,39 @@ fn apply_single_operation(
             *default_sep = sep.clone();
             Ok(Value::List(apply_range(&parts, range)))
         }
-        StringOp::Substring { range } => {
-            let apply = |s: &str| {
-                let chars: Vec<char> = s.chars().collect();
-                apply_range(&chars, range).into_iter().collect()
-            };
-            Ok(match val {
-                Value::Str(s) => Value::Str(apply(&s)),
-                Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
-            })
-        }
         StringOp::Join { sep } => {
             let result = match val {
                 Value::List(list) => Value::Str(list.join(sep)),
-                Value::Str(s) => Value::Str(s),
+                Value::Str(s) => Value::Str(s), // Pass through strings unchanged
             };
             *default_sep = sep.clone();
             Ok(result)
         }
-        StringOp::Replace {
-            pattern,
-            replacement,
-            flags,
-        } => {
-            let mut pattern_to_use = pattern.clone();
-            let mut inline_flags = String::new();
-            for (flag, c) in [('i', 'i'), ('m', 'm'), ('s', 's'), ('x', 'x')] {
-                if flags.contains(flag) {
-                    inline_flags.push(c);
-                }
-            }
-            if !inline_flags.is_empty() {
-                pattern_to_use = format!("(?{}){}", inline_flags, pattern_to_use);
-            }
-            let re =
-                Regex::new(&pattern_to_use).map_err(|e| format!("Invalid regex pattern: {}", e))?;
-            let apply = |s: &str| {
-                if flags.contains('g') {
-                    re.replace_all(s, replacement.as_str()).to_string()
-                } else {
-                    re.replace(s, replacement.as_str()).to_string()
-                }
-            };
-            Ok(match val {
-                Value::Str(s) => Value::Str(apply(&s)),
-                Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
-            })
-        }
-        StringOp::Upper => Ok(match val {
-            Value::Str(s) => Value::Str(s.to_uppercase()),
-            Value::List(list) => Value::List(list.iter().map(|s| s.to_uppercase()).collect()),
-        }),
-        StringOp::Lower => Ok(match val {
-            Value::Str(s) => Value::Str(s.to_lowercase()),
-            Value::List(list) => Value::List(list.iter().map(|s| s.to_lowercase()).collect()),
-        }),
-        StringOp::Trim { direction } => {
-            let apply = |s: &str| {
-                match direction {
-                    TrimDirection::Both => s.trim(),
-                    TrimDirection::Left => s.trim_start(),
-                    TrimDirection::Right => s.trim_end(),
-                }
-                .to_string()
-            };
-            Ok(match val {
-                Value::Str(s) => Value::Str(apply(&s)),
-                Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
-            })
-        }
-        StringOp::Strip { chars } => {
-            let chars: Vec<char> = if chars.trim().is_empty() {
-                vec![' ', '\t', '\n', '\r']
+        StringOp::Slice { range } => {
+            if let Value::List(list) = val {
+                Ok(Value::List(apply_range(&list, range)))
             } else {
-                chars.chars().collect()
-            };
-            let apply = |s: &str| s.trim_matches(|c| chars.contains(&c)).to_string();
-            Ok(match val {
-                Value::Str(s) => Value::Str(apply(&s)),
-                Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
-            })
-        }
-        StringOp::Append { suffix } => {
-            let apply = |s: &str| format!("{}{}", s, suffix);
-            Ok(match val {
-                Value::Str(s) => Value::Str(apply(&s)),
-                Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
-            })
-        }
-        StringOp::Prepend { prefix } => {
-            let apply = |s: &str| format!("{}{}", prefix, s);
-            Ok(match val {
-                Value::Str(s) => Value::Str(apply(&s)),
-                Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
-            })
-        }
-        StringOp::StripAnsi => {
-            let apply = |s: &str| {
-                String::from_utf8(strip(s.as_bytes()))
-                    .map_err(|_| "Failed to convert stripped bytes to UTF-8".to_string())
-            };
-            Ok(match val {
-                Value::Str(s) => Value::Str(apply(&s)?),
-                Value::List(list) => {
-                    Value::List(list.iter().map(|s| apply(s)).collect::<Result<_, _>>()?)
-                }
-            })
+                Err("Slice operation can only be applied to lists".to_string())
+            }
         }
         StringOp::Filter { pattern } => {
             let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
-            Ok(match val {
-                Value::List(list) => {
-                    Value::List(list.into_iter().filter(|s| re.is_match(s)).collect())
-                }
-                Value::Str(s) => Value::Str(if re.is_match(&s) { s } else { String::new() }),
-            })
+            match val {
+                Value::List(list) => Ok(Value::List(
+                    list.into_iter().filter(|s| re.is_match(s)).collect(),
+                )),
+                Value::Str(s) => Ok(Value::Str(if re.is_match(&s) { s } else { String::new() })),
+            }
         }
         StringOp::FilterNot { pattern } => {
             let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
-            Ok(match val {
-                Value::List(list) => {
-                    Value::List(list.into_iter().filter(|s| !re.is_match(s)).collect())
-                }
-                Value::Str(s) => Value::Str(if re.is_match(&s) { String::new() } else { s }),
-            })
+            match val {
+                Value::List(list) => Ok(Value::List(
+                    list.into_iter().filter(|s| !re.is_match(s)).collect(),
+                )),
+                Value::Str(s) => Ok(Value::Str(if re.is_match(&s) { String::new() } else { s })),
+            }
         }
-        StringOp::Slice { range } => Ok(if let Value::List(list) = val {
-            Value::List(apply_range(&list, range))
-        } else {
-            val
-        }),
         StringOp::Sort { direction } => {
             if let Value::List(mut list) = val {
                 match direction {
@@ -442,13 +346,13 @@ fn apply_single_operation(
                 Err("Sort operation can only be applied to lists".to_string())
             }
         }
-        StringOp::Reverse => Ok(match val {
-            Value::Str(s) => Value::Str(s.chars().rev().collect()),
+        StringOp::Reverse => match val {
+            Value::Str(s) => Ok(Value::Str(s.chars().rev().collect())),
             Value::List(mut list) => {
                 list.reverse();
-                Value::List(list)
+                Ok(Value::List(list))
             }
-        }),
+        },
         StringOp::Unique => {
             if let Value::List(list) = val {
                 let mut seen = std::collections::HashSet::new();
@@ -461,15 +365,138 @@ fn apply_single_operation(
                 Err("Unique operation can only be applied to lists".to_string())
             }
         }
+
+        // String operations - work only on strings
+        StringOp::Substring { range } => {
+            if let Value::Str(s) = val {
+                let chars: Vec<char> = s.chars().collect();
+                let result: String = apply_range(&chars, range).into_iter().collect();
+                Ok(Value::Str(result))
+            } else {
+                Err("Substring operation can only be applied to strings. Use map to apply to lists.".to_string())
+            }
+        }
+        StringOp::Replace {
+            pattern,
+            replacement,
+            flags,
+        } => {
+            if let Value::Str(s) = val {
+                let mut pattern_to_use = pattern.clone();
+                let mut inline_flags = String::new();
+                for (flag, c) in [('i', 'i'), ('m', 'm'), ('s', 's'), ('x', 'x')] {
+                    if flags.contains(flag) {
+                        inline_flags.push(c);
+                    }
+                }
+                if !inline_flags.is_empty() {
+                    pattern_to_use = format!("(?{}){}", inline_flags, pattern_to_use);
+                }
+                let re = Regex::new(&pattern_to_use)
+                    .map_err(|e| format!("Invalid regex pattern: {}", e))?;
+                let result = if flags.contains('g') {
+                    re.replace_all(&s, replacement.as_str()).to_string()
+                } else {
+                    re.replace(&s, replacement.as_str()).to_string()
+                };
+                Ok(Value::Str(result))
+            } else {
+                Err(
+                    "Replace operation can only be applied to strings. Use map to apply to lists."
+                        .to_string(),
+                )
+            }
+        }
+        StringOp::Upper => {
+            if let Value::Str(s) = val {
+                Ok(Value::Str(s.to_uppercase()))
+            } else {
+                Err(
+                    "Upper operation can only be applied to strings. Use map to apply to lists."
+                        .to_string(),
+                )
+            }
+        }
+        StringOp::Lower => {
+            if let Value::Str(s) = val {
+                Ok(Value::Str(s.to_lowercase()))
+            } else {
+                Err(
+                    "Lower operation can only be applied to strings. Use map to apply to lists."
+                        .to_string(),
+                )
+            }
+        }
+        StringOp::Trim { direction } => {
+            if let Value::Str(s) = val {
+                let result = match direction {
+                    TrimDirection::Both => s.trim(),
+                    TrimDirection::Left => s.trim_start(),
+                    TrimDirection::Right => s.trim_end(),
+                }
+                .to_string();
+                Ok(Value::Str(result))
+            } else {
+                Err(
+                    "Trim operation can only be applied to strings. Use map to apply to lists."
+                        .to_string(),
+                )
+            }
+        }
+        StringOp::Strip { chars } => {
+            if let Value::Str(s) = val {
+                let chars: Vec<char> = if chars.trim().is_empty() {
+                    vec![' ', '\t', '\n', '\r']
+                } else {
+                    chars.chars().collect()
+                };
+                let result = s.trim_matches(|c| chars.contains(&c)).to_string();
+                Ok(Value::Str(result))
+            } else {
+                Err(
+                    "Strip operation can only be applied to strings. Use map to apply to lists."
+                        .to_string(),
+                )
+            }
+        }
+        StringOp::Append { suffix } => {
+            if let Value::Str(s) = val {
+                Ok(Value::Str(format!("{}{}", s, suffix)))
+            } else {
+                Err(
+                    "Append operation can only be applied to strings. Use map to apply to lists."
+                        .to_string(),
+                )
+            }
+        }
+        StringOp::Prepend { prefix } => {
+            if let Value::Str(s) = val {
+                Ok(Value::Str(format!("{}{}", prefix, s)))
+            } else {
+                Err(
+                    "Prepend operation can only be applied to strings. Use map to apply to lists."
+                        .to_string(),
+                )
+            }
+        }
+        StringOp::StripAnsi => {
+            if let Value::Str(s) = val {
+                let result = String::from_utf8(strip(s.as_bytes()))
+                    .map_err(|_| "Failed to convert stripped bytes to UTF-8".to_string())?;
+                Ok(Value::Str(result))
+            } else {
+                Err("StripAnsi operation can only be applied to strings. Use map to apply to lists.".to_string())
+            }
+        }
         StringOp::Pad {
             width,
             char,
             direction,
         } => {
-            let apply = |s: &str| {
+            if let Value::Str(s) = val {
                 let current_len = s.chars().count();
-                if current_len >= *width {
-                    s.to_string()
+                let result = if current_len >= *width {
+                    s
                 } else {
                     let padding_needed = *width - current_len;
                     match direction {
@@ -490,31 +517,32 @@ fn apply_single_operation(
                             )
                         }
                     }
-                }
-            };
-            Ok(match val {
-                Value::Str(s) => Value::Str(apply(&s)),
-                Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
-            })
+                };
+                Ok(Value::Str(result))
+            } else {
+                Err(
+                    "Pad operation can only be applied to strings. Use map to apply to lists."
+                        .to_string(),
+                )
+            }
         }
         StringOp::RegexExtract { pattern, group } => {
-            let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
-            let apply = |s: &str| {
-                if let Some(group_idx) = group {
-                    re.captures(s)
+            if let Value::Str(s) = val {
+                let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
+                let result = if let Some(group_idx) = group {
+                    re.captures(&s)
                         .and_then(|caps| caps.get(*group_idx))
                         .map(|m| m.as_str().to_string())
                         .unwrap_or_default()
                 } else {
-                    re.find(s)
+                    re.find(&s)
                         .map(|m| m.as_str().to_string())
                         .unwrap_or_default()
-                }
-            };
-            Ok(match val {
-                Value::Str(s) => Value::Str(apply(&s)),
-                Value::List(list) => Value::List(list.iter().map(|s| apply(s)).collect()),
-            })
+                };
+                Ok(Value::Str(result))
+            } else {
+                Err("RegexExtract operation can only be applied to strings. Use map to apply to lists.".to_string())
+            }
         }
         StringOp::Map { .. } => Err("Map operations should be handled separately".to_string()),
     }
@@ -1285,7 +1313,7 @@ mod tests {
             #[test]
             fn test_split_upper() {
                 assert_eq!(
-                    process("hello,world", "{split:,:..|upper}").unwrap(),
+                    process("hello,world", "{split:,:..|map:{upper}}").unwrap(),
                     "HELLO,WORLD"
                 );
             }
@@ -1293,16 +1321,8 @@ mod tests {
             #[test]
             fn test_split_lower() {
                 assert_eq!(
-                    process("HELLO,WORLD", "{split:,:..|lower}").unwrap(),
+                    process("HELLO,WORLD", "{split:,:..|map:{lower}}").unwrap(),
                     "hello,world"
-                );
-            }
-
-            #[test]
-            fn test_split_upper_with_index() {
-                assert_eq!(
-                    process("hello,world,test", "{split:,:1|upper}").unwrap(),
-                    "WORLD"
                 );
             }
 
@@ -1310,7 +1330,7 @@ mod tests {
             #[test]
             fn test_split_trim() {
                 assert_eq!(
-                    process(" a , b , c ", "{split:,:..|trim}").unwrap(),
+                    process(" a , b , c ", "{split:,:..|map:{trim}}").unwrap(),
                     "a,b,c"
                 );
             }
@@ -1318,7 +1338,7 @@ mod tests {
             #[test]
             fn test_split_trim_with_range() {
                 assert_eq!(
-                    process(" a , b , c , d ", "{split:,:1..3|trim}").unwrap(),
+                    process(" a , b , c , d ", "{split:,:1..3|map:{trim}}").unwrap(),
                     "b,c"
                 );
             }
@@ -1327,7 +1347,7 @@ mod tests {
             #[test]
             fn test_split_strip() {
                 assert_eq!(
-                    process("xa,yb,zc", "{split:,:..|strip:xyz}").unwrap(),
+                    process("xa,yb,zc", "{split:,:..|map:{strip:xyz}}").unwrap(),
                     "a,b,c"
                 );
             }
@@ -1336,7 +1356,7 @@ mod tests {
             #[test]
             fn test_split_append() {
                 assert_eq!(
-                    process("a,b,c", "{split:,:..|append:!}").unwrap(),
+                    process("a,b,c", "{split:,:..|map:{append:!}}").unwrap(),
                     "a!,b!,c!"
                 );
             }
@@ -1344,7 +1364,7 @@ mod tests {
             #[test]
             fn test_split_prepend() {
                 assert_eq!(
-                    process("a,b,c", "{split:,:..|prepend:->}").unwrap(),
+                    process("a,b,c", "{split:,:..|map:{prepend:->}}").unwrap(),
                     "->a,->b,->c"
                 );
             }
@@ -1352,7 +1372,7 @@ mod tests {
             #[test]
             fn test_split_append_with_index() {
                 assert_eq!(
-                    process("a,b,c", "{split:,:1|append:_test}").unwrap(),
+                    process("a,b,c", "{split:,:1|map:{append:_test}}").unwrap(),
                     "b_test"
                 );
             }
@@ -1361,7 +1381,7 @@ mod tests {
             #[test]
             fn test_split_replace() {
                 assert_eq!(
-                    process("hello,world,test", "{split:,:..|replace:s/l/L/g}").unwrap(),
+                    process("hello,world,test", "{split:,:..|map:{replace:s/l/L/g}}").unwrap(),
                     "heLLo,worLd,test"
                 );
             }
@@ -1369,7 +1389,7 @@ mod tests {
             #[test]
             fn test_split_replace_with_range() {
                 assert_eq!(
-                    process("hello,world,test", "{split:,:0..2|replace:s/o/0/g}").unwrap(),
+                    process("hello,world,test", "{split:,:0..2|map:{replace:s/o/0/g}}").unwrap(),
                     "hell0,w0rld"
                 );
             }
@@ -1501,14 +1521,14 @@ mod tests {
                 // ANSI sequences in list items
                 let input = "\x1b[31mred\x1b[0m,\x1b[32mgreen\x1b[0m,\x1b[34mblue\x1b[0m";
                 assert_eq!(
-                    process(input, "{split:,:..|strip_ansi}").unwrap(),
+                    process(input, "{split:,:..|map:{strip_ansi}}").unwrap(),
                     "red,green,blue"
                 );
 
                 // Mixed ANSI and plain text in list
                 let input = "plain,\x1b[1mbold\x1b[0m,\x1b[3mitalic\x1b[0m";
                 assert_eq!(
-                    process(input, "{split:,:..|strip_ansi}").unwrap(),
+                    process(input, "{split:,:..|map:{strip_ansi}}").unwrap(),
                     "plain,bold,italic"
                 );
             }
@@ -1553,7 +1573,7 @@ mod tests {
 
             #[test]
             fn test_operation_on_empty_split() {
-                assert_eq!(process("", "{split:,:..|upper}").unwrap(), "");
+                assert_eq!(process("", "{split:,:..|map:{upper}}").unwrap(), "");
             }
 
             // Invalid range combinations
@@ -1573,7 +1593,7 @@ mod tests {
             #[test]
             fn test_split_upper_join() {
                 assert_eq!(
-                    process("hello,world,test", "{split:,:..|upper|join:-}").unwrap(),
+                    process("hello,world,test", "{split:,:..|map:{upper}|join:-}").unwrap(),
                     "HELLO-WORLD-TEST"
                 );
             }
@@ -1581,7 +1601,7 @@ mod tests {
             #[test]
             fn test_split_lower_join() {
                 assert_eq!(
-                    process("HELLO,WORLD,TEST", "{split:,:..|lower|join:_}").unwrap(),
+                    process("HELLO,WORLD,TEST", "{split:,:..|map:{lower}|join:_}").unwrap(),
                     "hello_world_test"
                 );
             }
@@ -1589,7 +1609,7 @@ mod tests {
             #[test]
             fn test_split_trim_join() {
                 assert_eq!(
-                    process(" a , b , c ", r"{split:,:..|trim|join:\|}").unwrap(),
+                    process(" a , b , c ", r"{split:,:..|map:{trim}|join:\|}").unwrap(),
                     "a|b|c"
                 );
             }
@@ -1597,7 +1617,7 @@ mod tests {
             #[test]
             fn test_split_append_join() {
                 assert_eq!(
-                    process("a,b,c", "{split:,:..|append:!|join: }").unwrap(),
+                    process("a,b,c", "{split:,:..|map:{append:!}|join: }").unwrap(),
                     "a! b! c!"
                 );
             }
@@ -1605,7 +1625,7 @@ mod tests {
             #[test]
             fn test_split_prepend_join() {
                 assert_eq!(
-                    process("a,b,c", "{split:,:..|prepend:->|join:\\n}").unwrap(),
+                    process("a,b,c", "{split:,:..|map:{prepend:->}|join:\\n}").unwrap(),
                     "->a\n->b\n->c"
                 );
             }
@@ -1613,7 +1633,11 @@ mod tests {
             #[test]
             fn test_split_replace_join() {
                 assert_eq!(
-                    process("hello,world,test", "{split:,:..|replace:s/l/L/g|join:;}").unwrap(),
+                    process(
+                        "hello,world,test",
+                        "{split:,:..|map:{replace:s/l/L/g}|join:;}"
+                    )
+                    .unwrap(),
                     "heLLo;worLd;test"
                 );
             }
@@ -1621,7 +1645,7 @@ mod tests {
             #[test]
             fn test_split_strip_join() {
                 assert_eq!(
-                    process("xa,yb,zc", "{split:,:..|strip:xyz|join:-}").unwrap(),
+                    process("xa,yb,zc", "{split:,:..|map:{strip:xyz}|join:-}").unwrap(),
                     "a-b-c"
                 );
             }
@@ -1647,7 +1671,7 @@ mod tests {
             #[test]
             fn test_split_range_upper_join() {
                 assert_eq!(
-                    process("a,b,c,d,e", "{split:,:1..3|upper|join:-}").unwrap(),
+                    process("a,b,c,d,e", "{split:,:1..3|map:{upper}|join:-}").unwrap(),
                     "B-C"
                 );
             }
@@ -1655,7 +1679,7 @@ mod tests {
             #[test]
             fn test_split_range_append_join() {
                 assert_eq!(
-                    process("a,b,c,d,e", "{split:,:0..3|append:_item|join: }").unwrap(),
+                    process("a,b,c,d,e", "{split:,:0..3|map:{append:_item}|join: }").unwrap(),
                     "a_item b_item c_item"
                 );
             }
@@ -1663,7 +1687,7 @@ mod tests {
             #[test]
             fn test_split_index_transform_append() {
                 assert_eq!(
-                    process("hello,world,test", "{split:,:1|upper|append:!}").unwrap(),
+                    process("hello,world,test", "{split:,:1|map:{upper|append:!}}").unwrap(),
                     "WORLD!"
                 );
             }
@@ -1672,7 +1696,7 @@ mod tests {
             #[test]
             fn test_trim_split_upper() {
                 assert_eq!(
-                    process("  hello,world  ", "{trim|split:,:..|upper}").unwrap(),
+                    process("  hello,world  ", "{trim|split:,:..|map:{upper}}").unwrap(),
                     "HELLO,WORLD"
                 );
             }
@@ -1733,7 +1757,7 @@ mod tests {
             #[test]
             fn test_split_trim_upper() {
                 assert_eq!(
-                    process(" a , b , c ", "{split:,:..|trim|upper}").unwrap(),
+                    process(" a , b , c ", "{split:,:..|map:{trim|upper}}").unwrap(),
                     "A,B,C"
                 );
             }
@@ -1741,7 +1765,7 @@ mod tests {
             #[test]
             fn test_split_strip_lower() {
                 assert_eq!(
-                    process("XA,YB,ZC", "{split:,:..|strip:XYZ|lower}").unwrap(),
+                    process("XA,YB,ZC", "{split:,:..|map:{strip:XYZ|lower}}").unwrap(),
                     "a,b,c"
                 );
             }
@@ -1749,7 +1773,7 @@ mod tests {
             #[test]
             fn test_split_replace_append() {
                 assert_eq!(
-                    process("hello,world", "{split:,:..|replace:s/l/L/g|append:!}").unwrap(),
+                    process("hello,world", "{split:,:..|map:{replace:s/l/L/g|append:!}}").unwrap(),
                     "heLLo!,worLd!"
                 );
             }
@@ -1758,7 +1782,7 @@ mod tests {
             #[test]
             fn test_split_range_trim_join() {
                 assert_eq!(
-                    process(" a , b , c , d ", r"{split:,:1..3|trim|join:\|}").unwrap(),
+                    process(" a , b , c , d ", r"{split:,:1..3|map:{trim}|join:\|}").unwrap(),
                     "b|c"
                 );
             }
@@ -1775,7 +1799,7 @@ mod tests {
             #[test]
             fn test_unicode_three_step() {
                 assert_eq!(
-                    process("café,naïve,résumé", "{split:,:..|upper|join:🔥}").unwrap(),
+                    process("café,naïve,résumé", "{split:,:..|map:{upper}|join:🔥}").unwrap(),
                     "CAFÉ🔥NAÏVE🔥RÉSUMÉ"
                 );
             }
@@ -1783,7 +1807,7 @@ mod tests {
             #[test]
             fn test_special_chars_pipeline() {
                 assert_eq!(
-                    process("a\tb\tc", "{split:\t:..|prepend:[|append:]|join: }").unwrap(),
+                    process("a\tb\tc", "{split:\t:..|map:{prepend:[|append:]}|join: }").unwrap(),
                     "[a] [b] [c]"
                 );
             }
@@ -1792,7 +1816,7 @@ mod tests {
             #[test]
             fn test_escaped_colons_pipeline() {
                 assert_eq!(
-                    process("a,b,c", "{split:,:..|append:\\:value|join: }").unwrap(),
+                    process("a,b,c", "{split:,:..|map:{append:\\:value}|join: }").unwrap(),
                     "a:value b:value c:value"
                 );
             }
@@ -1807,7 +1831,7 @@ mod tests {
             #[test]
             fn test_csv_processing() {
                 assert_eq!(
-                    process("Name,Age,City", "{split:,:..|lower|prepend:col_}").unwrap(),
+                    process("Name,Age,City", "{split:,:..|map:{lower|prepend:col_}}").unwrap(),
                     "col_name,col_age,col_city"
                 );
             }
@@ -1817,7 +1841,7 @@ mod tests {
                 assert_eq!(
                     process(
                         "/home/user/documents/file.txt",
-                        "{split:/:-1|split:.:..|append:_backup}"
+                        "{split:/:-1|split:.:..|map:{append:_backup}}"
                     )
                     .unwrap(),
                     "file_backup.txt_backup"
@@ -1827,7 +1851,7 @@ mod tests {
             #[test]
             fn test_log_processing() {
                 assert_eq!(
-                    process("2023-01-01 ERROR Failed", "{split: :1..|join:_|lower}").unwrap(),
+                    process("2023-01-01 ERROR Failed", "{split: :1..|join:_|lower}}").unwrap(),
                     "error_failed"
                 );
             }
@@ -1850,7 +1874,7 @@ mod tests {
                     .map(|i| i.to_string())
                     .collect::<Vec<_>>()
                     .join(",");
-                let result = process(&input, "{split:,:0..5|append:_num|join:-}").unwrap();
+                let result = process(&input, "{split:,:0..5|map:{append:_num}|join:-}").unwrap();
                 assert_eq!(result, "0_num-1_num-2_num-3_num-4_num");
             }
 
@@ -1858,7 +1882,11 @@ mod tests {
             #[test]
             fn test_nested_transformations() {
                 assert_eq!(
-                    process("  HELLO,WORLD  ", "{trim|split:,:..|lower|prepend:item_}").unwrap(),
+                    process(
+                        "  HELLO,WORLD  ",
+                        "{trim|split:,:..|map:{lower|prepend:item_}}"
+                    )
+                    .unwrap(),
                     "item_hello,item_world"
                 );
             }
@@ -1869,7 +1897,7 @@ mod tests {
                 // Chain with other operations
                 let input = "\x1b[31mHELLO\x1b[0m,\x1b[32mWORLD\x1b[0m";
                 assert_eq!(
-                    process(input, "{split:,:..|strip_ansi|lower|join: }").unwrap(),
+                    process(input, "{split:,:..|map:{strip_ansi|lower}|join: }").unwrap(),
                     "hello world"
                 );
 
@@ -2056,13 +2084,13 @@ mod tests {
 
                 // Filter then transform
                 assert_eq!(
-                    process(input, r"{split:,:..|filter:^[A-Z]|lower|join:,}").unwrap(),
+                    process(input, r"{split:,:..|filter:^[A-Z]|map:{lower}|join:,}").unwrap(),
                     "apple,cherry,kiwi"
                 );
 
                 // Transform then filter
                 assert_eq!(
-                    process(input, r"{split:,:..|lower|filter:^[ag]|join:,}").unwrap(),
+                    process(input, r"{split:,:..|map:{lower}|filter:^[ag]|join:,}").unwrap(),
                     "apple,grape"
                 );
 
@@ -2098,7 +2126,7 @@ mod tests {
                 assert_eq!(
                     process(
                         input,
-                        "{split:,:..|filter:test|replace:s/test/demo/g|join:,}"
+                        "{split:,:..|filter:test|map:{replace:s/test/demo/g}|join:,}"
                     )
                     .unwrap(),
                     "demo1,demo2"
@@ -2106,7 +2134,11 @@ mod tests {
 
                 // Replace then filter
                 assert_eq!(
-                    process(input, "{split:,:..|replace:s/\\d+//g|filter:^test$|join:,}").unwrap(),
+                    process(
+                        input,
+                        "{split:,:..|map:{replace:s/\\d+//g}|filter:^test$|join:,}"
+                    )
+                    .unwrap(),
                     "test,test"
                 );
             }
@@ -2119,7 +2151,7 @@ mod tests {
                 assert_eq!(
                     process(
                         input,
-                        r"{split:,:..|trim|filter:^[A-Z]|lower|append:-fruit|join: \| }"
+                        r"{split:,:..|map:{trim}|filter:^[A-Z]|map:{lower|append:-fruit}|join: \| }"
                     )
                     .unwrap(),
                     "apple-fruit | cherry-fruit | kiwi-fruit"
@@ -2128,7 +2160,7 @@ mod tests {
                 // Filter, sort-like operation with join
                 let input2 = "zebra,apple,banana,cherry";
                 assert_eq!(
-                    process(input2, "{split:,:..|filter:^[abc]|upper|join:-}").unwrap(),
+                    process(input2, "{split:,:..|filter:^[abc]|map:{upper}|join:-}").unwrap(),
                     "APPLE-BANANA-CHERRY"
                 );
             }
@@ -2279,12 +2311,12 @@ mod tests {
 
             #[test]
             fn test_invalid_final_operation() {
-                assert!(process("test", "{split:,:..|upper|invalid_op}").is_err());
+                assert!(process("test", "{split:,:..|map:{upper}|invalid_op}").is_err());
             }
 
             #[test]
             fn test_malformed_three_step() {
-                assert!(process("test", "{split:,|upper|}").is_err());
+                assert!(process("test", "{split:,|map:{upper}|}").is_err());
             }
 
             #[test]
@@ -2305,17 +2337,17 @@ mod tests {
             // Complex error cases
             #[test]
             fn test_invalid_regex_in_pipeline() {
-                assert!(process("test", "{split:,:..|replace:s/[/invalid/|upper}").is_err());
+                assert!(process("test", "{split:,:..|map:{replace:s/[/invalid/|upper}}").is_err());
             }
 
             #[test]
             fn test_invalid_range_in_three_step() {
-                assert!(process("a,b,c", "{split:,:abc|upper|join:-}").is_err());
+                assert!(process("a,b,c", "{split:,:abc|map:{upper}|join:-}").is_err());
             }
 
             #[test]
             fn test_empty_results_propagation() {
-                assert_eq!(process("", "{split:,:..|upper|join:-}").unwrap(), "");
+                assert_eq!(process("", "{split:,:..|map:{upper}|join:-}").unwrap(), "");
             }
 
             // Extremely long pipelines that should be rejected
@@ -2348,21 +2380,24 @@ mod tests {
 
         #[test]
         fn test_debug_flag_two_step() {
-            let result = process("hello,world", "{!split:,:..|upper}");
+            let result = process("hello,world", "{!split:,:..|map:{upper}}");
             assert!(result.is_ok());
             assert_eq!(result.unwrap(), "HELLO,WORLD");
         }
 
         #[test]
         fn test_debug_flag_three_step() {
-            let result = process("hello,world", "{!split:,:..|upper|join:-}");
+            let result = process("hello,world", "{!split:,:..|map:{upper}|join:-}");
             assert!(result.is_ok());
             assert_eq!(result.unwrap(), "HELLO-WORLD");
         }
 
         #[test]
         fn test_debug_flag_complex_pipeline() {
-            let result = process("  a , b , c  ", "{!trim|split:,:..|trim|upper|join:_}");
+            let result = process(
+                "  a , b , c  ",
+                "{!trim|split:,:..|map:{trim|upper}|join:_}",
+            );
             assert!(result.is_ok());
             assert_eq!(result.unwrap(), "A_B_C");
         }
@@ -2472,7 +2507,7 @@ mod tests {
 
         #[test]
         fn test_debug_flag_with_nested_operations() {
-            let result = process("hello world test", "{!split: :..|upper|join:_|lower}");
+            let result = process("hello world test", "{!split: :..|map:{upper}|join:_|lower}");
             assert!(result.is_ok());
             assert_eq!(result.unwrap(), "hello_world_test");
         }
@@ -2678,7 +2713,7 @@ mod tests {
     #[test]
     fn test_pad_list() {
         assert_eq!(
-            process("a,bb,ccc", "{split:,:..|pad:4:0:left}").unwrap(),
+            process("a,bb,ccc", "{split:,:..|map:{pad:4:0:left}}").unwrap(),
             "000a,00bb,0ccc"
         );
     }
@@ -2721,7 +2756,11 @@ mod tests {
     #[test]
     fn test_regex_extract_list() {
         assert_eq!(
-            process("test123,abc456,xyz", r"{split:,:..|regex_extract:\d+}").unwrap(),
+            process(
+                "test123,abc456,xyz",
+                r"{split:,:..|map:{regex_extract:\d+}}"
+            )
+            .unwrap(),
             "123,456,"
         );
     }
@@ -2755,7 +2794,7 @@ mod tests {
     #[test]
     fn test_trim_list() {
         assert_eq!(
-            process(" a , b , c ", "{split:,:..|trim:both}").unwrap(),
+            process(" a , b , c ", "{split:,:..|map:{trim:both}}").unwrap(),
             "a,b,c"
         );
     }
@@ -2764,7 +2803,7 @@ mod tests {
     #[test]
     fn test_complex_pipeline_with_new_ops() {
         assert_eq!(
-            process("  c,a,b,a,c  ", "{trim|split:,:..|trim|unique|sort}").unwrap(),
+            process("  c,a,b,a,c  ", "{trim|split:,:..|map:{trim}|unique|sort}").unwrap(),
             "a,b,c"
         );
     }
