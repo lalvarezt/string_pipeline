@@ -80,36 +80,36 @@ impl Template {
     ///
     /// ## Supported Operations
     ///
-    /// | Operation         | Syntax                                      | Description                                 |
-    /// |-------------------|---------------------------------------------|---------------------------------------------|
-    /// | Split             | `split:<sep>:<range>`                         | Split by separator, select by index/range   |
-    /// | Join              | `join:<sep>`                                  | Join a list with separator                  |
-    /// | Substring         | `slice:<range>`                               | Extract substrings                          |
-    /// | Replace           | `replace:s/<pattern>/<replacement>/<flags>`   | Regex replace (sed-like)                    |
-    /// | Uppercase         | `upper`                                       | Convert to uppercase                        |
-    /// | Lowercase         | `lower`                                       | Convert to lowercase                        |
-    /// | Trim              | `trim`                                        | Trim whitespace                             |
-    /// | Strip             | `strip:<chars>`                               | Trim custom characters                      |
-    /// | Append            | `append:<suffix>`                             | Append text                                 |
-    /// | Prepend           | `prepend:<prefix>`                            | Prepend text                                |
-    /// | StripAnsi         | `strip_ansi`                                  | Removes ansi escape sequences               |
-    /// | Filter            | `filter:<regex_pattern>`                      | Keep only items matching regex pattern      |
-    /// | FilterNot         | `filter_not:<regex_pattern>`                  | Remove items matching regex pattern         |
-    /// | Slice             | `filter_not:<regex_pattern>`                  | Select elements from a list                 |
+    /// | Operation | Syntax                                       | Description                               |
+    /// | --------- | -------------------------------------------- | ----------------------------------------- |
+    /// | Split     | `split:<sep>:<range>`                        | Split by separator, select by index/range |
+    /// | Join      | `join:<sep>`                                 | Join a list with separator                |
+    /// | Substring | `substring:<range>`                          | Extract substrings                        |
+    /// | Replace   | `replace:s/<pattern>/<replacement>/<flags>`  | Regex replace (sed-like)                  |
+    /// | Uppercase | `upper`                                      | Convert to uppercase                      |
+    /// | Lowercase | `lower`                                      | Convert to lowercase                      |
+    /// | Trim      | `trim`                                       | Trim whitespace                           |
+    /// | Strip     | `strip:<chars>`                              | Trim custom characters                    |
+    /// | Append    | `append:<suffix>`                            | Append text                               |
+    /// | Prepend   | `prepend:<prefix>`                           | Prepend text                              |
+    /// | StripAnsi | `strip_ansi`                                 | Removes ansi escape sequences             |
+    /// | Filter    | `filter:<regex_pattern>`                     | Keep only items matching regex pattern    |
+    /// | FilterNot | `filter_not:<regex_pattern>`                 | Remove items matching regex pattern       |
+    /// | Slice     | `slice:<range>`                              | Select elements from a list               |
     ///
     /// ## Range Specifications
     ///
     /// Ranges use Rust-like syntax and support negative indices like Python:
     ///
-    /// | Range | Description | Example |
-    /// |-------|-------------|---------|
-    /// | `N` | Single index | `{split:,:1}` → second element |
-    /// | `N..M` | Exclusive range | `{split:,:1..3}` → elements 1,2 |
-    /// | `N..=M` | Inclusive range | `{split:,:1..=3}` → elements 1,2,3 |
-    /// | `N..` | From N to end | `{split:,:2..}` → from 2nd to end |
-    /// | `..N` | From start to N | `{split:,:..3}` → first 3 elements |
-    /// | `..=N` | From start to N inclusive | `{split:,:..=2}` → first 3 elements |
-    /// | `..` | All elements | `{split:,:..)` → all elements |
+    /// | Range   | Description               | Example                              |
+    /// | ------- | ------------------------- | ------------------------------------ |
+    /// | `N`     | Single index              | `{split:,:1}`     → second element   |
+    /// | `N..M`  | Exclusive range           | `{split:,:1..3}`  → elements 1,2     |
+    /// | `N..=M` | Inclusive range           | `{split:,:1..=3}` → elements 1,2,3   |
+    /// | `N..`   | From N to end             | `{split:,:2..}`   → from 2nd to end  |
+    /// | `..N`   | From start to N           | `{split:,:..3}`   → first 3 elements |
+    /// | `..=N`  | From start to N inclusive | `{split:,:..=2}`  → first 3 elements |
+    /// | `..`    | All elements              | `{split:,:..)`    → all elements     |
     ///
     /// Negative indices count from the end:
     ///

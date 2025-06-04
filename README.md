@@ -1,4 +1,4 @@
-# String Template Processor
+# String Pipeline
 
 [![Crates.io](https://img.shields.io/crates/v/string_pipeline.svg)](https://crates.io/crates/string_pipeline)
 [![Docs.rs](https://docs.rs/string_pipeline/badge.svg)](https://docs.rs/string_pipeline)
@@ -161,36 +161,36 @@ Arguments to operations are separated by `:`.
 
 #### Supported Operations
 
-| Operation         | Syntax                                      | Description                                 |
-|-------------------|---------------------------------------------|---------------------------------------------|
-| Split             | `split:<sep>:<range>`                         | Split by separator, select by index/range   |
-| Join              | `join:<sep>`                                  | Join a list with separator                  |
-| Substring         | `slice:<range>`                               | Extract substrings                          |
-| Replace           | `replace:s/<pattern>/<replacement>/<flags>`   | Regex replace (sed-like)                    |
-| Uppercase         | `upper`                                       | Convert to uppercase                        |
-| Lowercase         | `lower`                                       | Convert to lowercase                        |
-| Trim              | `trim`                                        | Trim whitespace                             |
-| Strip             | `strip:<chars>`                               | Trim custom characters                      |
-| Append            | `append:<suffix>`                             | Append text                                 |
-| Prepend           | `prepend:<prefix>`                            | Prepend text                                |
-| StripAnsi         | `strip_ansi`                                  | Removes ansi escape sequences               |
-| Filter            | `filter:<regex_pattern>`                      | Keep only items matching regex pattern      |
-| FilterNot         | `filter_not:<regex_pattern>`                  | Remove items matching regex pattern         |
-| Slice             | `filter_not:<regex_pattern>`                  | Select elements from a list                 |
+| Operation  | Syntax                                    | Description                                 |
+| ---------- | ----------------------------------------- | ------------------------------------------- |
+| Split      | `split:<sep>:<range>`                       | Split by separator, select by index/range   |
+| Join       | `join:<sep>`                                | Join a list with separator                  |
+| Substring  | `substring:<range>`                         | Extract substrings                          |
+| Replace    | `replace:s/<pattern>/<replacement>/<flags>` | Regex replace (sed-like)                    |
+| Uppercase  | `upper`                                     | Convert to uppercase                        |
+| Lowercase  | `lower`                                     | Convert to lowercase                        |
+| Trim       | `trim`                                      | Trim whitespace                             |
+| Strip      | `strip:<chars>`                             | Trim custom characters                      |
+| Append     | `append:<suffix>`                           | Append text                                 |
+| Prepend    | `prepend:<prefix>`                          | Prepend text                                |
+| StripAnsi  | `strip_ansi`                                | Removes ansi escape sequences               |
+| Filter     | `filter:<regex_pattern>`                    | Keep only items matching regex pattern      |
+| FilterNot  | `filter_not:<regex_pattern>`                | Remove items matching regex pattern         |
+| Slice      | `slice:<range>`                             | Select elements from a list                 |
 
 #### Range Specifications
 
 Ranges use Rust-like syntax and support negative indices like Python:
 
-| Range | Description | Example |
-|-------|-------------|---------|
-| `N` | Single index | `{split:,:1}` → second element |
-| `N..M` | Exclusive range | `{split:,:1..3}` → elements 1,2 |
-| `N..=M` | Inclusive range | `{split:,:1..=3}` → elements 1,2,3 |
-| `N..` | From N to end | `{split:,:2..}` → from 2nd to end |
-| `..N` | From start to N | `{split:,:..3}` → first 3 elements |
-| `..=N` | From start to N inclusive | `{split:,:..=2}` → first 3 elements |
-| `..` | All elements | `{split:,:..)` → all elements |
+| Range | Description               | Example                            |
+| ----- | ------------------------- | ---------------------------------- |
+| `N`     | Single index              | `{split:,:1}`     → second element   |
+| `N..M`  | Exclusive range           | `{split:,:1..3}`  → elements 1,2     |
+| `N..=M` | Inclusive range           | `{split:,:1..=3}` → elements 1,2,3   |
+| `N..`   | From N to end             | `{split:,:2..}`   → from 2nd to end  |
+| `..N`   | From start to N           | `{split:,:..3}`   → first 3 elements |
+| `..=N`  | From start to N inclusive | `{split:,:..=2}`  → first 3 elements |
+| `..`    | All elements              | `{split:,:..)`    → all elements     |
 
 Negative indices count from the end:
 
@@ -230,9 +230,25 @@ The parser intelligently handles pipe characters (`|`) based on context:
 string-pipeline "{split:,:-1}" "a,b,c"
 # Output: c
 
+# Get the second word using the short form (only works with space separator)
+string-pipeline "{1}" "foo bar baz"
+# Output: bar
+
 # Get a range of items
 string-pipeline "{split:,:1..=3}" "a,b,c,d,e"
 # Output: b,c,d
+
+# Get a range of words using the short form (only works with space separator)
+string-pipeline "{1..3}" "foo bar baz qux"
+# Output: bar baz
+
+# Get a range of items, another way
+string-pipeline "{split:,:..|slice:1..=3}" "a,b,c,d,e"
+# Output: b,c,d
+
+# Substring string characters
+string-pipeline "{substring:1..=3}" "hello"
+# Output: ell
 
 # Replace 'foo' with 'bar' globally
 string-pipeline "{replace:s/foo/bar/g}" "foo foo"
@@ -245,6 +261,7 @@ string-pipeline "{upper|append:!}" "hello"
 # Prepend with a colon (escaped)
 string-pipeline "{prepend:\:foo}" "bar"
 # Output: :foobar
+
 ```
 
 ### Advanced
@@ -253,10 +270,6 @@ string-pipeline "{prepend:\:foo}" "bar"
 # Complex chaining: split, select range, join, replace, uppercase
 string-pipeline "{split:,:0..2|join:-|replace:s/a/X/|upper}" "a,b,c"
 # Output: X-B
-
-# Slice string characters
-string-pipeline "{slice:1..=3}" "hello"
-# Output: ell
 
 # Split, trim each item, then prepend
 echo " a , b , c " | string-pipeline "{split:,:..|trim|prepend:item_}"
@@ -287,7 +300,7 @@ echo "2023-01-01 ERROR Failed to connect" | string-pipeline "{split: :1..|join: 
 # Output: error failed to connect
 
 # Clean colored git output
-git log --oneline --color=always | string-pipeline "{split:\\n:..|strip_ansi|join:\\n}"
+git log --oneline --color=always | string-pipeline "{split:\n:..|strip_ansi|join:\n}"
 
 # Process ls colored output
 ls --color=always | string-pipeline "{strip_ansi}"
@@ -301,19 +314,7 @@ echo -e "\x1b[31mred\x1b[0m,\x1b[32mgreen\x1b[0m" | \
 # Output: RED | GREEN
 
 # Process log files with ANSI codes
-cat colored.log | string-pipeline "{split:\n:-10..|strip_ansi|join:\\n}"
-```
-
-### Shorthand
-
-```sh
-# Get the second word (space-separated)
-string-pipeline "{1}" "foo bar baz"
-# Output: bar
-
-# Get a range of words
-string-pipeline "{1..3}" "foo bar baz qux"
-# Output: bar baz
+cat colored.log | string-pipeline "{split:\n:-10..|strip_ansi|join:\n}"
 ```
 
 ### Debug Mode
@@ -348,6 +349,16 @@ Run the test suite:
 
 ```sh
 cargo test
+```
+
+---
+
+## Benchmarks
+
+Run the bench suite:
+
+```sh
+cargo bench
 ```
 
 ---
