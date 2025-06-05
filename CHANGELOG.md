@@ -3,6 +3,30 @@
 All notable changes to this project will be documented in this file.
 <!-- ignore lint rules that are often triggered by content generated from commits / git-cliff -->
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style -->
+## [0.8.1](https://github.com/lalvarezt/string_pipeline/compare/0.8.0..0.8.1) - 2025-06-05
+
+### 🐛 Bug Fixes
+
+- *(pest)* Remove invalid operations from map - ([f6deb58](https://github.com/lalvarezt/string_pipeline/commit/f6deb58ad3733f1499d7a08a66cc9718e29ea7c1))
+- *(pest)* Issue with closing braces in nested map extract_regex - ([59ba12d](https://github.com/lalvarezt/string_pipeline/commit/59ba12d87b8aa037c319cdf874c69b3a4490848c))
+
+### 🚜 Refactor
+
+- *(parser)* Shuffle some things around to make the code more expressive and hopefully maintainable - ([1e52190](https://github.com/lalvarezt/string_pipeline/commit/1e521908f824a624d0f6f20e845df11bfdc07699))
+
+### ⚡ Performance
+
+- *(pest)* Simplify grammar, remove unnecessary lookaheads - ([521a006](https://github.com/lalvarezt/string_pipeline/commit/521a0060886fd89e0462931dea5f8e6b7f25678d))
+
+### 🧪 Testing
+
+- *(pipeline)* Add new tests for map functionality - ([d685f63](https://github.com/lalvarezt/string_pipeline/commit/d685f63c251acfccab6c63288b11155a2816ca48))
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump to 0.8.1 - ([a49cd64](https://github.com/lalvarezt/string_pipeline/commit/a49cd64990b750d55629d107a7f43075e2b2e37d))
+
+
 ## [0.8.0](https://github.com/lalvarezt/string_pipeline/compare/0.7.0..0.8.0) - 2025-06-04
 
 ### ⛰️  Features
@@ -24,7 +48,9 @@ All notable changes to this project will be documented in this file.
 
 ### ⚙️ Miscellaneous Tasks
 
+- *(changelog)* Update changelog - ([7ded77f](https://github.com/lalvarezt/string_pipeline/commit/7ded77f2be3f0b1e1fe30d9de218938b9e02aaa2))
 - Bump to 0.8.0 - ([8f54253](https://github.com/lalvarezt/string_pipeline/commit/8f5425379ed3c12de551b7cd2e79eea352400e85))
+
 
 ## [0.7.0](https://github.com/lalvarezt/string_pipeline/compare/0.6.0..0.7.0) - 2025-06-03
 
@@ -73,6 +99,7 @@ All notable changes to this project will be documented in this file.
 - *(changelog)* Update changelog - ([1da1f0b](https://github.com/lalvarezt/string_pipeline/commit/1da1f0bb804607e68c465082e96857b8f746c77d))
 - Bump to 0.6.0 - ([2454007](https://github.com/lalvarezt/string_pipeline/commit/2454007ec7f35755e8edd101d410a50f5b990fbc))
 
+
 ## [0.5.0](https://github.com/lalvarezt/string_pipeline/compare/0.4.0..0.5.0) - 2025-06-02
 
 ### ⛰️  Features
@@ -99,6 +126,7 @@ All notable changes to this project will be documented in this file.
 ### Build
 
 - QoL workflow - ([13b82b1](https://github.com/lalvarezt/string_pipeline/commit/13b82b1487dc939356b409c5eeac3a5b306e3bcc))
+
 
 ## [0.4.0](https://github.com/lalvarezt/string_pipeline/compare/0.3.1..0.4.0) - 2025-06-02
 
@@ -132,11 +160,13 @@ All notable changes to this project will be documented in this file.
 
 - Add release workflow - ([4385840](https://github.com/lalvarezt/string_pipeline/commit/4385840ea1e0ebe92ff56b7cfbafe39992937d4b))
 
+
 ## [0.3.0](https://github.com/lalvarezt/string_pipeline/compare/0.2.0..0.3.0) - 2025-06-01
 
 ### 🚜 Refactor
 
 - Split into library and cli - ([dd647eb](https://github.com/lalvarezt/string_pipeline/commit/dd647eb9a3590b7dbdf9d42c39e843e65545a39b))
+
 
 ## [0.2.0] - 2025-05-31
 
