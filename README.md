@@ -32,7 +32,7 @@ A flexible, composable string transformation CLI tool and Rust library. `string_
 - **🔍 Regex support**: sed-like regex replace and pattern extraction
 - **🔧 List operations**: Filter, sort, reverse, unique, slice with regex patterns
 - **🗺️ Map operations**: Apply sub-pipelines to each list item individually
-- **🎨 Text formatting**: Case conversion, trim, strip, pad, append/prepend
+- **🎨 Text formatting**: Case conversion, trim, pad, append/prepend
 - **🌈 ANSI support**: Strip ANSI escape sequences for clean output
 - **🐛 Debug mode**: Visual step-by-step operation debugging with `!`
 - **📥 Flexible I/O**: CLI with stdin support and library for embedding
@@ -144,7 +144,7 @@ string-pipeline "{split:,:..|filter:\\.txt$|sort|map:{upper}}" "file.txt,doc.pdf
 # Output: FILE.TXT,README.TXT
 
 # Complex data cleaning
-string-pipeline "{split:,:..|map:{trim|strip:*|lower}|unique|sort}" "  *APPLE*, *banana*, *APPLE*  "
+string-pipeline "{split:,:..|map:{trim: *|lower}|unique|sort}" "  *APPLE*, *banana*, *APPLE*  "
 # Output: apple,banana
 
 # Debug mode to see each step

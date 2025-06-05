@@ -75,10 +75,8 @@ fn parse_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String
         Rule::upper => Ok(StringOp::Upper),
         Rule::lower => Ok(StringOp::Lower),
         Rule::trim => Ok(StringOp::Trim {
+            chars: parse_trim_chars(pair.clone()),
             direction: parse_trim_direction(pair),
-        }),
-        Rule::strip => Ok(StringOp::Strip {
-            chars: extract_single_arg_raw(pair)?,
         }),
         Rule::append => Ok(StringOp::Append {
             suffix: extract_single_arg(pair)?,
@@ -122,16 +120,30 @@ fn extract_range_arg(pair: pest::iterators::Pair<Rule>) -> Result<RangeSpec, Str
     parse_range_spec(pair.into_inner().next().unwrap())
 }
 
-fn parse_trim_direction(pair: pest::iterators::Pair<Rule>) -> TrimDirection {
-    pair.into_inner()
+fn parse_trim_chars(pair: pest::iterators::Pair<Rule>) -> String {
+    let mut parts = pair.into_inner();
+    // Get the first argument if it exists (chars)
+    parts
         .next()
-        .map(|p| match p.as_str() {
-            "left" => TrimDirection::Left,
-            "right" => TrimDirection::Right,
-            "both" => TrimDirection::Both,
-            _ => TrimDirection::Both,
-        })
-        .unwrap_or(TrimDirection::Both)
+        .filter(|p| p.as_str() != "left" && p.as_str() != "right" && p.as_str() != "both")
+        .map(|p| p.as_str().to_string())
+        .unwrap_or_default()
+}
+
+fn parse_trim_direction(pair: pest::iterators::Pair<Rule>) -> TrimDirection {
+    let parts = pair.into_inner();
+
+    // Look for direction in either first or second position
+    for part in parts {
+        match part.as_str() {
+            "left" => return TrimDirection::Left,
+            "right" => return TrimDirection::Right,
+            "both" => return TrimDirection::Both,
+            _ => continue,
+        }
+    }
+
+    TrimDirection::Both
 }
 
 fn parse_sort_direction(pair: pest::iterators::Pair<Rule>) -> SortDirection {

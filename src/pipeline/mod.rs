@@ -28,13 +28,11 @@ pub enum StringOp {
     Upper,
     Lower,
     Trim {
+        chars: String,
         direction: TrimDirection,
     },
     Substring {
         range: RangeSpec,
-    },
-    Strip {
-        chars: String,
     },
     Append {
         suffix: String,
@@ -429,14 +427,24 @@ fn apply_single_operation(
         }
         StringOp::Upper => apply_string_operation(val, |s| s.to_uppercase(), "Upper"),
         StringOp::Lower => apply_string_operation(val, |s| s.to_lowercase(), "Lower"),
-        StringOp::Trim { direction } => {
+        StringOp::Trim { chars, direction } => {
             if let Value::Str(s) = val {
+                let chars_to_trim: Vec<char> = if chars.trim().is_empty() {
+                    vec![' ', '\t', '\n', '\r']
+                } else {
+                    chars.chars().collect()
+                };
                 let result = match direction {
-                    TrimDirection::Both => s.trim(),
-                    TrimDirection::Left => s.trim_start(),
-                    TrimDirection::Right => s.trim_end(),
-                }
-                .to_string();
+                    TrimDirection::Both => {
+                        s.trim_matches(|c| chars_to_trim.contains(&c)).to_string()
+                    }
+                    TrimDirection::Left => s
+                        .trim_start_matches(|c| chars_to_trim.contains(&c))
+                        .to_string(),
+                    TrimDirection::Right => s
+                        .trim_end_matches(|c| chars_to_trim.contains(&c))
+                        .to_string(),
+                };
                 Ok(Value::Str(result))
             } else {
                 Err(
@@ -445,22 +453,7 @@ fn apply_single_operation(
                 )
             }
         }
-        StringOp::Strip { chars } => {
-            if let Value::Str(s) = val {
-                let chars: Vec<char> = if chars.trim().is_empty() {
-                    vec![' ', '\t', '\n', '\r']
-                } else {
-                    chars.chars().collect()
-                };
-                let result = s.trim_matches(|c| chars.contains(&c)).to_string();
-                Ok(Value::Str(result))
-            } else {
-                Err(
-                    "Strip operation can only be applied to strings. Use map to apply to lists."
-                        .to_string(),
-                )
-            }
-        }
+
         StringOp::Append { suffix } => {
             apply_string_operation(val, |s| format!("{}{}", s, suffix), "Append")
         }
@@ -832,40 +825,54 @@ mod tests {
                 assert_eq!(process("", "{trim}").unwrap(), "");
             }
 
-            // Strip operation tests
             #[test]
-            fn test_strip_basic() {
-                assert_eq!(process("xyhelloxy", "{strip:xy}").unwrap(), "hello");
+            fn test_trim_custom_chars_basic() {
+                assert_eq!(process("xyhelloxy", "{trim:xy}").unwrap(), "hello");
             }
 
             #[test]
-            fn test_strip_single_char() {
-                assert_eq!(process("aaahelloaaa", "{strip:a}").unwrap(), "hello");
+            fn test_trim_custom_chars_single_char() {
+                assert_eq!(process("aaahelloaaa", "{trim:a}").unwrap(), "hello");
             }
 
             #[test]
-            fn test_strip_multiple_chars() {
-                assert_eq!(process("xyzhellopqr", "{strip:xyzpqr}").unwrap(), "hello");
+            fn test_trim_custom_chars_multiple_chars() {
+                assert_eq!(process("xyzhellopqr", "{trim:xyzpqr}").unwrap(), "hello");
             }
 
             #[test]
-            fn test_strip_no_chars_to_strip() {
-                assert_eq!(process("hello", "{strip:xyz}").unwrap(), "hello");
+            fn test_trim_custom_chars_no_match() {
+                assert_eq!(process("hello", "{trim:xyz}").unwrap(), "hello");
             }
 
             #[test]
-            fn test_strip_all_chars() {
-                assert_eq!(process("aaaa", "{strip:a}").unwrap(), "");
+            fn test_trim_custom_chars_all_chars() {
+                assert_eq!(process("aaaa", "{trim:a}").unwrap(), "");
             }
 
             #[test]
-            fn test_strip_empty_chars() {
-                assert_eq!(process("hello", "{strip:}").unwrap(), "hello");
+            fn test_trim_custom_chars_empty() {
+                assert_eq!(process("hello", "{trim:}").unwrap(), "hello");
             }
 
             #[test]
-            fn test_strip_unicode() {
-                assert_eq!(process("🔥hello🔥", "{strip:🔥}").unwrap(), "hello");
+            fn test_trim_custom_chars_unicode() {
+                assert_eq!(process("🔥hello🔥", "{trim:🔥}").unwrap(), "hello");
+            }
+
+            #[test]
+            fn test_trim_custom_chars_left() {
+                assert_eq!(process("xyhelloxy", "{trim:xy:left}").unwrap(), "helloxy");
+            }
+
+            #[test]
+            fn test_trim_custom_chars_right() {
+                assert_eq!(process("xyhelloxy", "{trim:xy:right}").unwrap(), "xyhello");
+            }
+
+            #[test]
+            fn test_trim_custom_chars_both_explicit() {
+                assert_eq!(process("xyhelloxy", "{trim:xy:both}").unwrap(), "hello");
             }
 
             // substring operation tests
@@ -1194,12 +1201,12 @@ mod tests {
                 assert!(process("hello", "{substring:1..abc}").is_err());
             }
 
-            // Strip operation negative tests
+            // Trim operation negative tests
             #[test]
-            fn test_strip_missing_argument() {
+            fn test_trim_missing_argument() {
                 // This should be handled gracefully or error
-                let result = process("hello", "{strip}");
-                assert!(result.is_err());
+                let result = process("hello", "{trim}");
+                assert!(result.is_ok()); // trim without arguments should work (default whitespace)
             }
 
             // Append/Prepend operation negative tests
@@ -1333,9 +1340,9 @@ mod tests {
 
             // Split + Strip operations
             #[test]
-            fn test_split_strip() {
+            fn test_split_trim_custom_chars() {
                 assert_eq!(
-                    process("xa,yb,zc", "{split:,:..|map:{strip:xyz}}").unwrap(),
+                    process("xa,yb,zc", "{split:,:..|map:{trim:xyz}}").unwrap(),
                     "a,b,c"
                 );
             }
@@ -1474,14 +1481,14 @@ mod tests {
 
             // Strip + operations
             #[test]
-            fn test_strip_upper() {
-                assert_eq!(process("xyhelloxy", "{strip:xy|upper}").unwrap(), "HELLO");
+            fn test_trim_custom_chars_upper() {
+                assert_eq!(process("xyhelloxy", "{trim:xy|upper}").unwrap(), "HELLO");
             }
 
             #[test]
-            fn test_strip_split() {
+            fn test_trim_custom_chars_split() {
                 assert_eq!(
-                    process("xya,b,cxy", "{strip:xy|split:,:..}").unwrap(),
+                    process("xya,b,cxy", "{trim:xy|split:,:..}").unwrap(),
                     "a,b,c"
                 );
             }
@@ -1631,9 +1638,9 @@ mod tests {
             }
 
             #[test]
-            fn test_split_strip_join() {
+            fn test_split_trim_custom_chars_join() {
                 assert_eq!(
-                    process("xa,yb,zc", "{split:,:..|map:{strip:xyz}|join:-}").unwrap(),
+                    process("xa,yb,zc", "{split:,:..|map:{trim:xyz}|join:-}").unwrap(),
                     "a-b-c"
                 );
             }
@@ -1751,9 +1758,9 @@ mod tests {
             }
 
             #[test]
-            fn test_split_strip_lower() {
+            fn test_split_trim_custom_chars_lower() {
                 assert_eq!(
-                    process("XA,YB,ZC", "{split:,:..|map:{strip:XYZ|lower}}").unwrap(),
+                    process("XA,YB,ZC", "{split:,:..|map:{trim:XYZ|lower}}").unwrap(),
                     "a,b,c"
                 );
             }
@@ -2440,8 +2447,8 @@ mod tests {
         }
 
         #[test]
-        fn test_debug_flag_with_strip() {
-            let result = process("xyhelloxy", "{!strip:xy}");
+        fn test_debug_flag_with_trim_custom_chars() {
+            let result = process("xyhelloxy", "{!trim:xy}");
             assert!(result.is_ok());
             assert_eq!(result.unwrap(), "hello");
         }
@@ -2932,10 +2939,9 @@ mod tests {
                 }
 
                 #[test]
-                fn test_map_strip_basic() {
+                fn test_map_trim_custom_chars_basic() {
                     assert_eq!(
-                        process("xappleX,xbananaX,xcherryX", "{split:,:..|map:{strip:xX}}")
-                            .unwrap(),
+                        process("xappleX,xbananaX,xcherryX", "{split:,:..|map:{trim:xX}}").unwrap(),
                         "apple,banana,cherry"
                     );
                 }
@@ -3218,9 +3224,9 @@ mod tests {
             }
 
             #[test]
-            fn test_map_strip_escaped_chars() {
+            fn test_map_trim_escaped_chars() {
                 assert_eq!(
-                    process(":apple:,|banana|", r"{split:,:..|map:{strip:\:\|}}").unwrap(),
+                    process(":apple:,|banana|", r"{split:,:..|map:{trim:\:\|}}").unwrap(),
                     "apple,banana"
                 );
             }
@@ -3311,9 +3317,9 @@ mod tests {
             }
 
             #[test]
-            fn test_map_pipeline_pad_strip() {
+            fn test_map_pipeline_pad_trim() {
                 assert_eq!(
-                    process("a,bb,ccc", "{split:,:..|map:{pad:5:*:both|strip:*}}").unwrap(),
+                    process("a,bb,ccc", "{split:,:..|map:{pad:5:*:both|trim:*}}").unwrap(),
                     "a,bb,ccc"
                 );
             }

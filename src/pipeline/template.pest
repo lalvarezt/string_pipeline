@@ -14,7 +14,6 @@ operation = {
   | upper
   | lower
   | trim
-  | strip
   | append
   | prepend
   | strip_ansi
@@ -52,8 +51,7 @@ append        = { "append" ~ ":" ~ simple_arg }
 prepend       = { "prepend" ~ ":" ~ simple_arg }
 upper         = { "upper" }
 lower         = { "lower" }
-trim          = { "trim" ~ (":" ~ direction)? }
-strip         = { "strip" ~ ":" ~ simple_arg }
+trim          = { "trim" ~ (":" ~ simple_arg)? ~ (":" ~ direction)? }
 join          = { "join" ~ ":" ~ simple_arg }
 slice         = { "slice" ~ ":" ~ range_spec }
 sort          = { "sort" ~ (":" ~ sort_direction)? }
@@ -78,7 +76,6 @@ map_inner_operation = {
   | upper
   | lower
   | trim
-  | strip
   | pad
   | reverse
   | map_regex_extract
@@ -120,7 +117,6 @@ operation_keyword = {
   | "upper"
   | "lower"
   | "trim"
-  | "strip"
   | "append"
   | "prepend"
   | "strip_ansi"

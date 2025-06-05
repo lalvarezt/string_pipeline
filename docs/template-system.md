@@ -129,9 +129,9 @@ Extracts characters from a string using range notation.
 
 #### Trim
 
-Removes whitespace from strings.
+Removes specified characters from the beginning and end of strings.
 
-**Syntax:** `trim[:DIRECTION]`
+**Syntax:** `trim[:CHARACTERS][:DIRECTION]`
 
 | Direction | Description |
 |-----------|-------------|
@@ -145,20 +145,9 @@ Removes whitespace from strings.
 {trim}           # Remove whitespace from both ends
 {trim:left}      # Remove from start only
 {trim:right}     # Remove from end only
-```
-
-#### Strip
-
-Removes specified characters from the beginning and end of strings.
-
-**Syntax:** `strip:CHARACTERS`
-
-**Examples:**
-
-```text
-{strip:xy}       # Remove 'x' and 'y' from ends
-{strip:*-+}      # Remove *, -, + from ends
-{strip:\t\n}     # Remove tabs and newlines
+{trim:xy}        # Remove 'x' and 'y' from ends
+{trim:*-+}       # Remove *, -, + from ends
+{trim:\t\n}      # Remove tabs and newlines
 ```
 
 #### Pad
@@ -409,7 +398,7 @@ map:{operation1|operation2|...}
 ✅ **Allowed:**
 
 - `upper`, `lower`
-- `trim`, `strip`
+- `trim`
 - `append`, `prepend`
 - `substring`
 - `replace`

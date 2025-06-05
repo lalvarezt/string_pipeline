@@ -87,8 +87,7 @@ impl Template {
     ///   - `replace:s/<pattern>/<replacement>/<flags>`
     ///   - `upper`
     ///   - `lower`
-    ///   - `trim[:left|right|both]`
-    ///   - `strip:<chars>`
+    ///   - `trim[:<chars>][:left|right|both]`
     ///   - `append:<suffix>`
     ///   - `prepend:<prefix>`
     ///   - `strip_ansi`
@@ -112,8 +111,7 @@ impl Template {
     /// | Replace      | `replace:s/<pattern>/<replacement>/<flags>` | Regex replace (sed-like, supports flags)            |
     /// | Uppercase    | `upper`                                     | Convert to uppercase                                |
     /// | Lowercase    | `lower`                                     | Convert to lowercase                                |
-    /// | Trim         | `trim[:left|right|both]`                    | Trim whitespace (or side-specific)                  |
-    /// | Strip        | `strip:<chars>`                             | Strip custom characters from both ends              |
+    /// | Trim         | `trim[:<chars>][:left|right|both]`          | Trim whitespace (or side-specific)                  |
     /// | Append       | `append:<suffix>`                           | Append text                                         |
     /// | Prepend      | `prepend:<prefix>`                          | Prepend text                                        |
     /// | StripAnsi    | `strip_ansi`                                | Remove ANSI escape sequences                        |
