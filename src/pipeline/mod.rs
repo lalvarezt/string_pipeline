@@ -281,6 +281,34 @@ struct DebugContext {
     total_items: usize,
 }
 
+fn apply_string_operation<F>(val: Value, transform: F, op_name: &str) -> Result<Value, String>
+where
+    F: FnOnce(String) -> String,
+{
+    if let Value::Str(s) = val {
+        Ok(Value::Str(transform(s)))
+    } else {
+        Err(format!(
+            "{} operation can only be applied to strings. Use map to apply to lists.",
+            op_name
+        ))
+    }
+}
+
+fn apply_list_operation<F>(val: Value, transform: F, op_name: &str) -> Result<Value, String>
+where
+    F: FnOnce(Vec<String>) -> Vec<String>,
+{
+    if let Value::List(list) = val {
+        Ok(Value::List(transform(list)))
+    } else {
+        Err(format!(
+            "{} operation can only be applied to lists",
+            op_name
+        ))
+    }
+}
+
 fn apply_single_operation(
     op: &StringOp,
     val: Value,
@@ -308,11 +336,7 @@ fn apply_single_operation(
             Ok(result)
         }
         StringOp::Slice { range } => {
-            if let Value::List(list) = val {
-                Ok(Value::List(apply_range(&list, range)))
-            } else {
-                Err("Slice operation can only be applied to lists".to_string())
-            }
+            apply_list_operation(val, |list| apply_range(&list, range), "Slice")
         }
         StringOp::Filter { pattern } => {
             let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
@@ -353,18 +377,16 @@ fn apply_single_operation(
                 Ok(Value::List(list))
             }
         },
-        StringOp::Unique => {
-            if let Value::List(list) = val {
+        StringOp::Unique => apply_list_operation(
+            val,
+            |list| {
                 let mut seen = std::collections::HashSet::new();
-                let unique = list
-                    .into_iter()
+                list.into_iter()
                     .filter(|item| seen.insert(item.clone()))
-                    .collect();
-                Ok(Value::List(unique))
-            } else {
-                Err("Unique operation can only be applied to lists".to_string())
-            }
-        }
+                    .collect()
+            },
+            "Unique",
+        ),
         StringOp::Substring { range } => {
             if let Value::Str(s) = val {
                 let chars: Vec<char> = s.chars().collect();
@@ -405,26 +427,8 @@ fn apply_single_operation(
                 )
             }
         }
-        StringOp::Upper => {
-            if let Value::Str(s) = val {
-                Ok(Value::Str(s.to_uppercase()))
-            } else {
-                Err(
-                    "Upper operation can only be applied to strings. Use map to apply to lists."
-                        .to_string(),
-                )
-            }
-        }
-        StringOp::Lower => {
-            if let Value::Str(s) = val {
-                Ok(Value::Str(s.to_lowercase()))
-            } else {
-                Err(
-                    "Lower operation can only be applied to strings. Use map to apply to lists."
-                        .to_string(),
-                )
-            }
-        }
+        StringOp::Upper => apply_string_operation(val, |s| s.to_uppercase(), "Upper"),
+        StringOp::Lower => apply_string_operation(val, |s| s.to_lowercase(), "Lower"),
         StringOp::Trim { direction } => {
             if let Value::Str(s) = val {
                 let result = match direction {
@@ -458,24 +462,10 @@ fn apply_single_operation(
             }
         }
         StringOp::Append { suffix } => {
-            if let Value::Str(s) = val {
-                Ok(Value::Str(format!("{}{}", s, suffix)))
-            } else {
-                Err(
-                    "Append operation can only be applied to strings. Use map to apply to lists."
-                        .to_string(),
-                )
-            }
+            apply_string_operation(val, |s| format!("{}{}", s, suffix), "Append")
         }
         StringOp::Prepend { prefix } => {
-            if let Value::Str(s) = val {
-                Ok(Value::Str(format!("{}{}", prefix, s)))
-            } else {
-                Err(
-                    "Prepend operation can only be applied to strings. Use map to apply to lists."
-                        .to_string(),
-                )
-            }
+            apply_string_operation(val, |s| format!("{}{}", prefix, s), "Prepend")
         }
         StringOp::StripAnsi => {
             if let Value::Str(s) = val {

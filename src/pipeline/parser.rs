@@ -58,14 +58,12 @@ fn parse_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String
                 .map_or_else(|| Ok(RangeSpec::Range(None, None, false)), parse_range_spec)?;
             Ok(StringOp::Split { sep, range })
         }
-        Rule::join => {
-            let sep = process_arg(pair.into_inner().next().unwrap().as_str());
-            Ok(StringOp::Join { sep })
-        }
-        Rule::substring => {
-            let range = parse_range_spec(pair.into_inner().next().unwrap())?;
-            Ok(StringOp::Substring { range })
-        }
+        Rule::join => Ok(StringOp::Join {
+            sep: extract_single_arg(pair)?,
+        }),
+        Rule::substring => Ok(StringOp::Substring {
+            range: extract_range_arg(pair)?,
+        }),
         Rule::replace => {
             let sed_parts = parse_sed_string(pair.into_inner().next().unwrap())?;
             Ok(StringOp::Replace {
@@ -76,105 +74,124 @@ fn parse_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String
         }
         Rule::upper => Ok(StringOp::Upper),
         Rule::lower => Ok(StringOp::Lower),
-        Rule::trim => {
-            let direction = pair
-                .into_inner()
-                .next()
-                .map(|p| match p.as_str() {
-                    "left" => TrimDirection::Left,
-                    "right" => TrimDirection::Right,
-                    "both" => TrimDirection::Both,
-                    _ => TrimDirection::Both,
-                })
-                .unwrap_or(TrimDirection::Both);
-            Ok(StringOp::Trim { direction })
-        }
-        Rule::strip => {
-            let chars = pair.into_inner().next().unwrap().as_str().to_string();
-            Ok(StringOp::Strip { chars })
-        }
-        Rule::append => {
-            let suffix = process_arg(pair.into_inner().next().unwrap().as_str());
-            Ok(StringOp::Append { suffix })
-        }
-        Rule::prepend => {
-            let prefix = process_arg(pair.into_inner().next().unwrap().as_str());
-            Ok(StringOp::Prepend { prefix })
-        }
+        Rule::trim => Ok(StringOp::Trim {
+            direction: parse_trim_direction(pair),
+        }),
+        Rule::strip => Ok(StringOp::Strip {
+            chars: extract_single_arg_raw(pair)?,
+        }),
+        Rule::append => Ok(StringOp::Append {
+            suffix: extract_single_arg(pair)?,
+        }),
+        Rule::prepend => Ok(StringOp::Prepend {
+            prefix: extract_single_arg(pair)?,
+        }),
         Rule::strip_ansi => Ok(StringOp::StripAnsi),
-        Rule::filter => {
-            let pattern = pair.into_inner().next().unwrap().as_str().to_string();
-            Ok(StringOp::Filter { pattern })
-        }
-        Rule::filter_not => {
-            let pattern = pair.into_inner().next().unwrap().as_str().to_string();
-            Ok(StringOp::FilterNot { pattern })
-        }
-        Rule::slice => {
-            let range = parse_range_spec(pair.into_inner().next().unwrap())?;
-            Ok(StringOp::Slice { range })
-        }
-        Rule::sort => {
-            let direction = pair
-                .into_inner()
-                .next()
-                .map(|p| match p.as_str() {
-                    "desc" => SortDirection::Desc,
-                    "asc" => SortDirection::Asc,
-                    _ => SortDirection::Asc,
-                })
-                .unwrap_or(SortDirection::Asc);
-            Ok(StringOp::Sort { direction })
-        }
+        Rule::filter => Ok(StringOp::Filter {
+            pattern: extract_single_arg_raw(pair)?,
+        }),
+        Rule::filter_not => Ok(StringOp::FilterNot {
+            pattern: extract_single_arg_raw(pair)?,
+        }),
+        Rule::slice => Ok(StringOp::Slice {
+            range: extract_range_arg(pair)?,
+        }),
+        Rule::sort => Ok(StringOp::Sort {
+            direction: parse_sort_direction(pair),
+        }),
         Rule::reverse => Ok(StringOp::Reverse),
         Rule::unique => Ok(StringOp::Unique),
-        Rule::pad => {
-            let mut parts = pair.into_inner();
-            let width = parts
-                .next()
-                .unwrap()
-                .as_str()
-                .parse()
-                .map_err(|_| "Invalid padding width")?;
-            let char = parts
-                .next()
-                .map(|p| process_arg(p.as_str()).chars().next().unwrap_or(' '))
-                .unwrap_or(' ');
-            let direction = parts
-                .next()
-                .map(|p| match p.as_str() {
-                    "left" => PadDirection::Left,
-                    "right" => PadDirection::Right,
-                    "both" => PadDirection::Both,
-                    _ => PadDirection::Right,
-                })
-                .unwrap_or(PadDirection::Right);
-            Ok(StringOp::Pad {
-                width,
-                char,
-                direction,
-            })
-        }
-        Rule::regex_extract | Rule::map_regex_extract => {
-            let mut parts = pair.into_inner();
-            let pattern = parts.next().unwrap().as_str().to_string();
-            let group = parts.next().and_then(|p| p.as_str().parse().ok());
-            Ok(StringOp::RegexExtract { pattern, group })
-        }
-        Rule::map => {
-            let map_op_pair = pair.into_inner().next().unwrap();
-            let operation_list_pair = map_op_pair.into_inner().next().unwrap();
-
-            let mut operations = Vec::new();
-            for op_pair in operation_list_pair.into_inner() {
-                let inner_op_pair = op_pair.into_inner().next().unwrap();
-                operations.push(parse_operation(inner_op_pair)?);
-            }
-
-            Ok(StringOp::Map { operations })
-        }
+        Rule::pad => parse_pad_operation(pair),
+        Rule::regex_extract | Rule::map_regex_extract => parse_regex_extract_operation(pair),
+        Rule::map => parse_map_operation(pair),
         _ => Err(format!("Unsupported operation: {:?}", pair.as_rule())),
     }
+}
+
+// Helper functions to reduce repetition
+
+fn extract_single_arg(pair: pest::iterators::Pair<Rule>) -> Result<String, String> {
+    Ok(process_arg(pair.into_inner().next().unwrap().as_str()))
+}
+
+fn extract_single_arg_raw(pair: pest::iterators::Pair<Rule>) -> Result<String, String> {
+    Ok(pair.into_inner().next().unwrap().as_str().to_string())
+}
+
+fn extract_range_arg(pair: pest::iterators::Pair<Rule>) -> Result<RangeSpec, String> {
+    parse_range_spec(pair.into_inner().next().unwrap())
+}
+
+fn parse_trim_direction(pair: pest::iterators::Pair<Rule>) -> TrimDirection {
+    pair.into_inner()
+        .next()
+        .map(|p| match p.as_str() {
+            "left" => TrimDirection::Left,
+            "right" => TrimDirection::Right,
+            "both" => TrimDirection::Both,
+            _ => TrimDirection::Both,
+        })
+        .unwrap_or(TrimDirection::Both)
+}
+
+fn parse_sort_direction(pair: pest::iterators::Pair<Rule>) -> SortDirection {
+    pair.into_inner()
+        .next()
+        .map(|p| match p.as_str() {
+            "desc" => SortDirection::Desc,
+            "asc" => SortDirection::Asc,
+            _ => SortDirection::Asc,
+        })
+        .unwrap_or(SortDirection::Asc)
+}
+
+fn parse_pad_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String> {
+    let mut parts = pair.into_inner();
+    let width = parts
+        .next()
+        .unwrap()
+        .as_str()
+        .parse()
+        .map_err(|_| "Invalid padding width")?;
+    let char = parts
+        .next()
+        .map(|p| process_arg(p.as_str()).chars().next().unwrap_or(' '))
+        .unwrap_or(' ');
+    let direction = parts
+        .next()
+        .map(|p| match p.as_str() {
+            "left" => PadDirection::Left,
+            "right" => PadDirection::Right,
+            "both" => PadDirection::Both,
+            _ => PadDirection::Right,
+        })
+        .unwrap_or(PadDirection::Right);
+
+    Ok(StringOp::Pad {
+        width,
+        char,
+        direction,
+    })
+}
+
+fn parse_regex_extract_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String> {
+    let mut parts = pair.into_inner();
+    let pattern = parts.next().unwrap().as_str().to_string();
+    let group = parts.next().and_then(|p| p.as_str().parse().ok());
+    Ok(StringOp::RegexExtract { pattern, group })
+}
+
+fn parse_map_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String> {
+    let map_op_pair = pair.into_inner().next().unwrap();
+    let operation_list_pair = map_op_pair.into_inner().next().unwrap();
+
+    let mut operations = Vec::new();
+    for op_pair in operation_list_pair.into_inner() {
+        let inner_op_pair = op_pair.into_inner().next().unwrap();
+        operations.push(parse_operation(inner_op_pair)?);
+    }
+
+    Ok(StringOp::Map { operations })
 }
 
 fn process_arg(s: &str) -> String {
