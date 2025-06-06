@@ -3,6 +3,27 @@
 All notable changes to this project will be documented in this file.
 <!-- ignore lint rules that are often triggered by content generated from commits / git-cliff -->
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style -->
+## [0.9.0](https://github.com/lalvarezt/string_pipeline/compare/0.8.1..0.9.0) - 2025-06-06
+
+### 🚜 Refactor
+
+- *(parser)* [**breaking**] Merge strip and trim functionality, now trim allows for custom charset - ([cbcfd24](https://github.com/lalvarezt/string_pipeline/commit/cbcfd24da56091eff4f5960b44927ecea4ff3f08))
+
+### 📚 Documentation
+
+- *(readme)* Improved documentation, edge cases, examples - ([d1bc63f](https://github.com/lalvarezt/string_pipeline/commit/d1bc63fb4f28d8f74adb4f7d0218fe92cae3a7ff))
+- *(readme)* Updated readme and split template system to a separate file - ([e9e7af1](https://github.com/lalvarezt/string_pipeline/commit/e9e7af1374faa52db788f883717acc225d7e505e))
+- *(template)* Improved documentation, edge cases, examples - ([69e5d59](https://github.com/lalvarezt/string_pipeline/commit/69e5d59ab8b987351049137753041abc59e99524))
+
+### ⚡ Performance
+
+- *(parser)* Minor performance changes, preallocations and early exits - ([4e1722e](https://github.com/lalvarezt/string_pipeline/commit/4e1722edece1596aa40dfe78590911c50cbf72c6))
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump to 0.9.0 - ([eb89a99](https://github.com/lalvarezt/string_pipeline/commit/eb89a99667b7b7a47e263b8211000b1dbb80e74f))
+
+
 ## [0.8.1](https://github.com/lalvarezt/string_pipeline/compare/0.8.0..0.8.1) - 2025-06-05
 
 ### 🐛 Bug Fixes
@@ -24,6 +45,7 @@ All notable changes to this project will be documented in this file.
 
 ### ⚙️ Miscellaneous Tasks
 
+- *(changelog)* Update changelog - ([743b75e](https://github.com/lalvarezt/string_pipeline/commit/743b75edba85e9cee4ed4fbc03505ba377c67c87))
 - Bump to 0.8.1 - ([a49cd64](https://github.com/lalvarezt/string_pipeline/commit/a49cd64990b750d55629d107a7f43075e2b2e37d))
 
 
