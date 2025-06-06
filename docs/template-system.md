@@ -6,13 +6,46 @@ A powerful string processing template system with support for splitting, transfo
 
 - [🚀 Quick Start](#-quick-start)
 - [🏗️ Template Syntax](#️-template-syntax)
+  - [Basic Structure](#basic-structure)
+  - [Operation Chaining](#operation-chaining)
+  - [List Rendering Behavior](#list-rendering-behavior)
 - [📊 Operations Reference](#-operations-reference)
+  - [🔪 Split](#-split) - Split text into parts
+  - [🍰 Slice](#-slice) - Extract range of items
+  - [🔗 Join](#-join) - Combine items with separator
+  - [✂️ Substring](#️-substring) - Extract characters from string
+  - [✨ Trim](#-trim) - Remove characters from ends
+  - [📐 Pad](#-pad) - Add padding to reach width
+  - [🔠 Upper](#-upper) - Convert to uppercase
+  - [🔡 Lower](#-lower) - Convert to lowercase
+  - [➡️ Append](#️-append) - Add text to end
+  - [⬅️ Prepend](#️-prepend) - Add text to beginning
+  - [⚡ Replace](#-replace) - Find and replace with regex
+  - [🎯 Regex Extract](#-regex-extract) - Extract with regex pattern
+  - [🗂️ Sort](#️-sort) - Sort items alphabetically
+  - [🪞 Reverse](#-reverse) - Reverse order or characters
+  - [⭐ Unique](#-unique) - Remove duplicates
+  - [🧪 Filter](#-filter) - Keep items matching pattern
+  - [🚫 Filter Not](#-filter-not) - Remove items matching pattern
+  - [🧹 Strip ANSI](#-strip-ansi) - Remove color codes
 - [🎯 Range Specifications](#-range-specifications)
-- [🔤 Escaping Rules](#-escaping-rules)
+  - [Syntax Summary](#syntax-summary)
+  - [Negative Indexing](#negative-indexing)
+  - [Edge Case Handling](#edge-case-handling)
+- [🛡️ Escaping Rules](#️-escaping-rules)
+  - [Simple Arguments](#simple-arguments-append-prepend-join-etc)
+  - [Regex Arguments](#regex-arguments-filter-regex_extract)
+  - [Split Arguments](#split-arguments)
+  - [Special Sequences](#special-sequences)
 - [🗺️ Map Operations](#️-map-operations)
 - [🐛 Debug Mode](#-debug-mode)
 - [💡 Examples](#-examples)
 - [⚠️ Troubleshooting](#️-troubleshooting)
+  - [Common Errors](#common-errors)
+  - [Best Practices](#best-practices)
+    - [✅ Do's](#-dos)
+    - [❌ Don'ts](#-donts)
+    - [Performance Tips](#performance-tips)
 
 ## 🚀 Quick Start
 
@@ -57,11 +90,47 @@ Operations are processed left-to-right, with each operation receiving the output
 3. `map:{upper}` - Convert each part to uppercase
 4. `join:_` - Join with underscores
 
+### List Rendering Behavior
+
+When a template produces a list as the final result, the system automatically renders it as a string. The separator used for this automatic rendering is determined by the **last operation that used a separator** in the processing chain.
+
+**Examples:**
+
+```text
+# Last separator was comma in split - list renders with commas
+{split:,:..}                    # "a,b,c" → outputs: "a,b,c"
+
+# Last separator was space in split - list renders with spaces
+{split: :..}                    # "a b c" → outputs: "a b c"
+
+# Explicit join overrides automatic behavior
+{split:,:..|join:-}             # "a,b,c" → outputs: "a-b-c"
+
+# Operations after split don't change the separator
+{split:,:..|sort}               # "c,a,b" → outputs: "a,b,c" (comma separator preserved)
+```
+
+**Separator Change Example:**
+
+```text
+Input: "apple|banana|cherry"
+
+{split:\|:..}                   # Split on | → outputs: "apple|banana|cherry"
+{split:\|:..|split:a:..}        # Split on |, then on 'a' → outputs: "apple a banana a cherry"
+```
+
+In this example:
+
+1. First `split:\|:..` uses `|` as separator
+2. Second `split:a:..` uses `a` as separator (this becomes the **last separator**)
+3. Final output uses `a` to join the list, not the original `|`
+
+> 💡 **Note:** To have full control over the output format, always use an explicit `join` operation as the final step.
+> 🐛 **Debug Tip:** Use [Debug Mode](#-debug-mode) (`{!...}`) to see exactly which separator is being tracked and used for final rendering. This helps identify when and how the separator changes during processing.
+
 ## 📊 Operations Reference
 
-### 🔪 Splitting Operations
-
-#### Split
+### 🔪 Split
 
 Splits input into a list using a separator.
 
@@ -72,6 +141,25 @@ Splits input into a list using a separator.
 | SEPARATOR | string | ✅ | Character(s) to split on |
 | RANGE     | range  | ❌ | Which parts to keep (default: all) |
 
+> 💡 **Note:** For detailed range syntax and examples, see [🎯 Range Specifications](#-range-specifications).
+
+**Behavior on Different Input Types:**
+
+- **String:** Splits the string by the separator into a list of parts
+- **List:** Splits each item in the list by the separator, then flattens all results into a single list
+
+**Example of List Behavior:**
+
+```bash
+# First, create a list where each item contains commas
+string-pipeline '{split: :..|map:{append:,data,more}}' 'hello world'
+# Creates: ["hello,data,more", "world,data,more"]
+
+# Then split each item by comma - this flattens all results
+string-pipeline '{split: :..|map:{append:,data,more}|split:,:..|join:-}' 'hello world'
+# Output: "hello-data-more-world-data-more"
+```
+
 **Examples:**
 
 ```text
@@ -81,11 +169,17 @@ Splits input into a list using a separator.
 {split:\n:-1}          # Split on newline, keep last item
 ```
 
-#### Slice
+### 🍰 Slice
 
 Extracts a range of items from a list.
 
 **Syntax:** `slice:RANGE`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| RANGE     | range  | ✅ | Which items to extract from the list |
+
+> 💡 **Note:** For detailed range syntax and examples, see [🎯 Range Specifications](#-range-specifications).
 
 **Examples:**
 
@@ -94,13 +188,22 @@ Extracts a range of items from a list.
 {split: :..|slice:-3..}   # Take last 3 items
 ```
 
-### 🔗 Joining Operations
-
-#### Join
+### 🔗 Join
 
 Combines list items into a single string with a separator.
 
 **Syntax:** `join:SEPARATOR`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| SEPARATOR | string | ❌ | Character(s) to place between items (default: empty) |
+
+**Behavior on Different Input Types:**
+
+- **List:** Joins items with the separator in their current order (no sorting applied)
+- **String:** Returns the string unchanged (treats as single-item list)
+
+> 💡 **Note:** If you don't use `join`, lists are automatically rendered using the separator from the last operation that used one. See [List Rendering Behavior](#list-rendering-behavior) for details.
 
 **Examples:**
 
@@ -110,13 +213,17 @@ Combines list items into a single string with a separator.
 {split:,:..|join:}        # Join with no separator
 ```
 
-### ✂️ String Manipulation
-
-#### Substring
+### ✂️ Substring
 
 Extracts characters from a string using range notation.
 
 **Syntax:** `substring:RANGE`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| RANGE     | range  | ✅ | Which characters to extract from the string |
+
+> 💡 **Note:** For detailed range syntax and examples, see [🎯 Range Specifications](#-range-specifications).
 
 **Examples:**
 
@@ -127,17 +234,18 @@ Extracts characters from a string using range notation.
 {substring:2}        # Single character at index 2
 ```
 
-#### Trim
+### ✨ Trim
 
 Removes specified characters from the beginning and end of strings.
 
 **Syntax:** `trim[:CHARACTERS][:DIRECTION]`
 
-| Direction | Description |
-|-----------|-------------|
-| `both` (default) | Remove from both ends |
-| `left` | Remove from start only |
-| `right` | Remove from end only |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| CHARACTERS | string | ❌ | Characters to remove (default: whitespace) |
+| DIRECTION | enum | ❌ | Where to trim: `both`, `left`, `right` (default: both) |
+
+**Whitespace Characters:** When no characters are specified, removes standard whitespace: spaces, tabs (`\t`), newlines (`\n`), and carriage returns (`\r`).
 
 **Examples:**
 
@@ -150,17 +258,17 @@ Removes specified characters from the beginning and end of strings.
 {trim:\t\n}      # Remove tabs and newlines
 ```
 
-#### Pad
+### 📐 Pad
 
 Adds padding characters to reach a specified width.
 
 **Syntax:** `pad:WIDTH[:CHAR[:DIRECTION]]`
 
-| Parameter | Default | Options |
-|-----------|---------|---------|
-| WIDTH | - | Number of total characters |
-| CHAR | space | Any single character |
-| DIRECTION | `right` | `left`, `right`, `both` |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| WIDTH     | number | ✅ | Total width to pad to |
+| CHAR      | string | ❌ | Character to use for padding (default: space) |
+| DIRECTION | enum | ❌ | Padding direction: `left`, `right`, `both` (default: right) |
 
 **Examples:**
 
@@ -170,46 +278,88 @@ Adds padding characters to reach a specified width.
 {pad:8:*:both}       # Pad to 8 chars with * (center)
 ```
 
-### 🔄 Case Operations
-
-#### Upper
+### 🔠 Upper
 
 Converts text to uppercase.
 
 **Syntax:** `upper`
 
-#### Lower
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| *(none)* | - | - | No parameters required |
+
+**Examples:**
+
+```text
+{upper}                      # "hello world" → "HELLO WORLD"
+{split:,:..|map:{upper}}     # "a,b,c" → "A,B,C"
+{split: :..|map:{upper}|join:_}  # "hello world" → "HELLO_WORLD"
+```
+
+### 🔡 Lower
 
 Converts text to lowercase.
 
 **Syntax:** `lower`
 
-### 🔧 Text Processing
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| *(none)* | - | - | No parameters required |
 
-#### Append
+**Examples:**
+
+```text
+{lower}                      # "HELLO WORLD" → "hello world"
+{split:,:..|map:{lower}}     # "A,B,C" → "a,b,c"
+```
+
+### ➡️ Append
 
 Adds text to the end of each string.
 
 **Syntax:** `append:TEXT`
 
-#### Prepend
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| TEXT      | string | ✅ | Text to add to the end of each string |
+
+**Examples:**
+
+```text
+{append:.txt}                    # "file" → "file.txt"
+{split:,:..|map:{append:!}}      # "a,b,c" → "a!,b!,c!"
+```
+
+### ⬅️ Prepend
 
 Adds text to the beginning of each string.
 
 **Syntax:** `prepend:TEXT`
 
-#### Replace
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| TEXT      | string | ✅ | Text to add to the beginning of each string |
+
+**Examples:**
+
+```text
+{prepend:/home/user/}            # "file.txt" → "/home/user/file.txt"
+{split:,:..|map:{prepend:- }}    # "a,b,c" → "- a,- b,- c"
+```
+
+### ⚡ Replace
 
 Performs regex-based find and replace using sed-like syntax.
 
 **Syntax:** `replace:s/PATTERN/REPLACEMENT/FLAGS`
 
-| Flag | Description |
-|------|-------------|
-| `g` | Replace all occurrences (global) |
-| `i` | Case-insensitive matching |
-| `m` | Multiline mode |
-| `s` | Dot matches newlines |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| PATTERN   | regex | ✅ | Regular expression to find |
+| REPLACEMENT | string | ✅ | Text to replace matches with |
+| FLAGS     | string | ❌ | Modifiers: `g` (global), `i` (case-insensitive), `m` (multiline), `s` (dot-all) |
+
+**Performance Optimization:** For simple string patterns without regex metacharacters and without global flag, a fast string replacement is used instead of regex compilation.
 
 **Examples:**
 
@@ -220,57 +370,103 @@ Performs regex-based find and replace using sed-like syntax.
 {replace:s/(.+)/[$1]/}       # Wrap in brackets using capture group
 ```
 
-#### Regex Extract
+### 🎯 Regex Extract
 
 Extracts text matching a regex pattern.
 
 **Syntax:** `regex_extract:PATTERN[:GROUP]`
 
-| Parameter | Description |
-|-----------|-------------|
-| PATTERN | Regular expression |
-| GROUP | Capture group number (0 = whole match) |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| PATTERN   | regex | ✅ | Regular expression to match |
+| GROUP     | number | ❌ | Capture group number (default: 0 = whole match) |
+
+**No Match Behavior:** Returns empty string when pattern doesn't match.
 
 **Examples:**
 
 ```text
 {regex_extract:\d+}          # Extract first number
-{regex_extract:@(.+):1}      # Extract domain from email
+{regex_extract:@(.+):1}      # Extract domain from email, get 1st group
 {regex_extract:\w+}          # Extract first word
 ```
 
-### 📝 List Operations
-
-#### Sort
+### 🗂️ Sort
 
 Sorts list items alphabetically.
 
 **Syntax:** `sort[:DIRECTION]`
 
-| Direction | Description |
-|-----------|-------------|
-| `asc` (default) | Ascending order |
-| `desc` | Descending order |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| DIRECTION | enum | ❌ | Sort order: `asc` (ascending, default), `desc` (descending) |
 
-#### Reverse
+**Examples:**
 
-Reverses the order of list items (see `map` section for examples) or characters in a string
+```text
+{split:,:..|sort}                # "c,a,b" → "a,b,c"
+{split:,:..|sort:desc}           # "a,b,c" → "c,b,a"
+{split:,:..|unique|sort}         # "c,a,b,a,c" → "a,b,c"
+```
+
+### 🪞 Reverse
+
+Reverses the order of list items or characters in a string.
 
 **Syntax:** `reverse`
 
-#### Unique
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| *(none)* | - | - | No parameters required |
+
+**Behavior on Different Input Types:**
+
+- **String:** Reverses character order
+- **List:** Reverses item order
+
+**Examples:**
+
+```text
+{reverse}                        # "hello" → "olleh"
+{split:,:..|reverse}             # "a,b,c" → "c,b,a"
+{split:,:..|map:{reverse}}       # "abc,def" → "cba,fed"
+```
+
+### ⭐ Unique
 
 Removes duplicate items from a list, preserving order.
 
 **Syntax:** `unique`
 
-### 🔍 Filtering Operations
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| *(none)* | - | - | No parameters required |
 
-#### Filter
+**Order Preservation:** The first occurrence of each item is kept, maintaining the original order.
+
+**Examples:**
+
+```text
+{split:,:..|unique}              # "a,b,a,c,b" → "a,b,c"
+{split: :..|unique|sort}         # "cat dog cat bird" → "bird cat dog"
+{split:,:..|unique|join:-}       # "x,y,x,z,y" → "x-y-z"
+{split:\n:..|unique}             # Remove duplicate lines
+```
+
+### 🧪 Filter
 
 Keeps only items matching a regex pattern.
 
 **Syntax:** `filter:PATTERN`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| PATTERN   | regex | ✅ | Regular expression to match items against |
+
+**Behavior on Different Input Types:**
+
+- **List:** Keeps items that match the pattern
+- **String:** Returns the string if it matches, empty string otherwise
 
 **Examples:**
 
@@ -280,11 +476,20 @@ Keeps only items matching a regex pattern.
 {split:,:..|filter:\.txt$}   # Keep .txt files
 ```
 
-#### Filter Not
+### 🚫 Filter Not
 
 Removes items matching a regex pattern.
 
 **Syntax:** `filter_not:PATTERN`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| PATTERN   | regex | ✅ | Regular expression to match items for removal |
+
+**Behavior on Different Input Types:**
+
+- **List:** Removes items that match the pattern
+- **String:** Returns empty string if it matches, original string otherwise
 
 **Examples:**
 
@@ -293,13 +498,24 @@ Removes items matching a regex pattern.
 {split:,:..|filter_not:^$}   # Remove empty lines
 ```
 
-### 🎨 Formatting Operations
-
-#### Strip ANSI
+### 🧹 Strip ANSI
 
 Removes ANSI escape sequences (colors, formatting) from text.
 
 **Syntax:** `strip_ansi`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| *(none)* | - | - | No parameters required |
+
+**Sequence Types Removed:** Color codes, cursor movement, text formatting, and other ANSI escape sequences.
+
+**Examples:**
+
+```text
+{strip_ansi}                     # "\e[31mRed Text\e[0m" → "Red Text"
+{split:\n:..|map:{strip_ansi}}   # Clean colored log lines
+```
 
 ## 🎯 Range Specifications
 
@@ -327,21 +543,41 @@ Negative numbers count from the end:
 | `-2` | Second to last |
 | `-3` | Third to last |
 
+### Edge Case Handling
+
+The range system includes robust edge case handling:
+
+**Out of Bounds:**
+
+- **Single Index:** If index is beyond bounds, returns the last valid item
+- **Range:** Automatically clamps to valid boundaries, returns empty if no valid range
+
+**Empty Input:**
+
+- Returns empty result for any range operation on empty input
+
+**Invalid Ranges:**
+
+- When start index >= end index, returns empty result
+- Negative ranges are resolved relative to length before validation
+
 **Examples:**
 
 ```text
 {split:,:-1}               # Last item after split
 {substring:-3..}           # Last 3 characters
 {split: :..|slice:-2..-1}  # Second to last item
+{substring:100}            # If string has 5 chars, returns last char
+{split:,:..|slice:10..15}  # If list has 3 items, returns empty
 ```
 
-## 🔤 Escaping Rules
+## 🛡️ Escaping Rules
 
 ### When is Escaping Required?
 
 Different argument types have different escaping requirements:
 
-#### Simple Arguments (append, prepend, join, etc.)
+### Simple Arguments (append, prepend, join, etc.)
 
 | Character | Escape | Reason                |
 |-----------|--------|----------------------|
@@ -351,11 +587,11 @@ Different argument types have different escaping requirements:
 | `{`       | `\{`   | Starts template      |
 | `\`       | `\\`   | Escape character     |
 
-#### Regex Arguments (filter, regex_extract)
+### Regex Arguments (filter, regex_extract)
 
 Regex patterns can contain most characters naturally.
 
-#### Split Arguments
+### Split Arguments
 
 Split separators can contain most characters. Only escape:
 
@@ -370,7 +606,10 @@ Split separators can contain most characters. Only escape:
 | `\n` | newline | Line break |
 | `\t` | tab | Tab character |
 | `\r` | carriage return | Windows line ending |
+| `\/` | `/` | Forward slash (for sed patterns) |
 | `\\` | `\` | Literal backslash |
+
+**Fallback Behavior:** Any escape sequence not listed above (`\X`) will result in the character `X` being inserted literally.
 
 ### Example
 
@@ -495,116 +734,105 @@ HELLO-WORLD
 
 ### 📄 Data Processing
 
-#### CSV Column Extraction
+### CSV Column Extraction
 
 ```bash
 # Extract and format names from CSV
-Input: "John Doe,30,Engineer"
-Template: "{split:,:0|upper}"
-Output: "JOHN DOE"
+string-pipeline '{split:,:0|map:{upper}}' 'John Doe,30,Engineer'
+# Output: "JOHN DOE"
 ```
 
-#### Log Analysis
+### Log Analysis
 
 ```bash
 # Extract timestamps from log lines
-Input: "2023-01-01 10:30:00 ERROR Failed to connect"
-Template: "{regex_extract:\\d{4}-\\d{2}-\\d{2}}"
-Output: "2023-01-01"
+string-pipeline '{regex_extract:\d{4}-\d{2}-\d{2}}' '2023-01-01 10:30:00 ERROR Failed to connect'
+# Output: "2023-01-01"
 ```
 
-#### File Processing
+### File Processing
 
 ```bash
 # Get file extensions and convert to uppercase
-Input: "file1.txt,image.png,doc.pdf"
-Template: "{split:,:..|map:{regex_extract:\.\w+$|upper}}"
-Output: ".TXT,.PNG,.PDF"
+string-pipeline '{split:,:..|map:{regex_extract:\.\w+$|upper}}' 'file1.txt,image.png,doc.pdf'
+# Output: ".TXT,.PNG,.PDF"
 ```
 
 ### 🔄 Text Transformation
 
-#### Path Manipulation
+### Path Manipulation
 
 ```bash
 # Convert Unix path to Windows path
-Input: "/home/user/documents/file.txt"
-Template: "{replace:s/\//\\\\/g}"
-Output: "\\home\\user\\documents\\file.txt"
+string-pipeline '{replace:s/\//\\\\/g}' '/home/user/documents/file.txt'
+# Output: "\\home\\user\\documents\\file.txt"
 ```
 
-#### Case Conversion with Formatting
+### Case Conversion with Formatting
 
 ```bash
 # Uppercase with underscores
-Input: "hello world test"
-Template: "{split: :..|map:{upper}|join:_}"
-Output: "HELLO_WORLD_TEST"
+string-pipeline '{split: :..|map:{upper}}' 'hello world test'
+# Output: "HELLO_WORLD_TEST"
 ```
 
-#### Cleaning Messy Data
+### Cleaning Messy Data
 
 ```bash
 # Clean and format user input
-Input: "  John123  ,  Jane456  ,  Bob789  "
-Template: "{split:,:..|map:{trim|regex_extract:[A-Za-z]+|lower|prepend:user_}}"
-Output: "user_john,user_jane,user_bob"
+string-pipeline '{split:,:..|map:{trim|regex_extract:[A-Za-z]+|lower|prepend:user_}}' '  John123  ,  Jane456  ,  Bob789  '
+# Output: "user_john,user_jane,user_bob"
 ```
 
 ### 📋 List Processing
 
-#### Filtering and Sorting
+### Filtering and Sorting
 
 ```bash
 # Filter files and sort
-Input: "readme.md,script.py,data.json,test.py,config.yaml"
-Template: "{split:,:..|filter:\.py$|sort}"
-Output: "script.py,test.py"
+string-pipeline '{split:,:..|filter:\.py$|sort}' 'readme.md,script.py,data.json,test.py,config.yaml'
+# Output: "script.py,test.py"
 ```
 
-#### Deduplication
+### Deduplication
 
 ```bash
 # Remove duplicates and sort
-Input: "apple,banana,apple,cherry,banana"
-Template: "{split:,:..|unique|sort}"
-Output: "apple,banana,cherry"
+string-pipeline '{split:,:..|unique|sort}' 'apple,banana,apple,cherry,banana'
+# Output: "apple,banana,cherry"
 ```
 
-#### Padding for Alignment
+### Padding for Alignment
 
 ```bash
 # Create aligned output
-Input: "1,22,333"
-Template: "{split:,:..|map:{pad:4:0:left}}"
-Output: "0001,0022,0333"
+string-pipeline '{split:,:..|map:{pad:4:0:left}}' '1,22,333'
+# Output: "0001,0022,0333"
 ```
 
 ### 🎨 Formatting
 
-#### Creating Tables
+### Creating Tables
 
 ```bash
 # Format as table row
-Input: "a,b,c"
-Template: "{split:,:..|map:{pad:15: :both}|join:\||append:\||prepend:\|}"
-Output: "|       a       |       b       |       c       |"
+string-pipeline '{split:,:..|map:{pad:15: :both}|join:\||append:\||prepend:\|}' 'a,b,c'
+# Output: "|       a       |       b       |       c       |"
 ```
 
-#### Adding Decorations
+### Adding Decorations
 
 ```bash
 # Add bullets and formatting
-Input: "First item,Second item,Third item"
-Template: "{split:,:..|map:{prepend:• |append: ✓}}"
-Output: "• First item ✓,• Second item ✓,• Third item ✓"
+string-pipeline '{split:,:..|map:{prepend:• |append: ✓}}' 'First item,Second item,Third item'
+# Output: "• First item ✓,• Second item ✓,• Third item ✓"
 ```
 
 ## ⚠️ Troubleshooting
 
 ### Common Errors
 
-#### ❌ Parse Errors
+### Parse Errors
 
 **Problem:** `Parse error: Expected operation`
 
@@ -626,7 +854,7 @@ Output: "• First item ✓,• Second item ✓,• Third item ✓"
 {split:,:..}
 ```
 
-#### ❌ Operation Errors
+### Operation Errors
 
 **Problem:** `Operation can only be applied to lists`
 
@@ -649,7 +877,7 @@ Template: "{split: :..|join:-}"
 {filter:\\[}
 ```
 
-#### ❌ Range Errors
+### Range Errors
 
 **Problem:** `Invalid range specification`
 
@@ -663,7 +891,7 @@ Template: "{split: :..|join:-}"
 
 ### Best Practices
 
-#### ✅ Do's
+### ✅ Do's
 
 1. **Use debug mode** when developing complex templates:
 
@@ -697,7 +925,7 @@ Template: "{split: :..|join:-}"
    {append:\:value}  # Safe
    ```
 
-#### ❌ Don'ts
+### ❌ Don'ts
 
 1. **Don't use map operations that work on lists:**
 
