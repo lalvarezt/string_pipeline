@@ -103,27 +103,36 @@ fn resolve_index(idx: isize, len: usize) -> usize {
 
 fn apply_range<T: Clone>(items: &[T], range: &RangeSpec) -> Vec<T> {
     let len = items.len();
+    if len == 0 {
+        return Vec::new();
+    }
+
     match range {
         RangeSpec::Index(idx) => {
-            if len == 0 {
-                return vec![];
-            }
             let i = resolve_index(*idx, len).min(len - 1);
-            items.get(i).cloned().map_or(vec![], |v| vec![v])
+            if let Some(item) = items.get(i) {
+                vec![item.clone()]
+            } else {
+                Vec::new()
+            }
         }
         RangeSpec::Range(start, end, inclusive) => {
-            if len == 0 {
-                return vec![];
-            }
             let s_idx = start.map_or(0, |s| resolve_index(s, len));
+            if s_idx >= len {
+                return Vec::new();
+            }
+
             let mut e_idx = end.map_or(len, |e| resolve_index(e, len));
             if *inclusive {
                 e_idx = e_idx.saturating_add(1);
             }
-            if s_idx >= len {
-                vec![]
+            let e_idx = e_idx.min(len);
+
+            if s_idx >= e_idx {
+                Vec::new()
             } else {
-                items[s_idx..e_idx.min(len)].to_vec()
+                // Use slice.to_vec() which is optimized for copying contiguous memory
+                items[s_idx..e_idx].to_vec()
             }
         }
     }
@@ -316,7 +325,12 @@ fn apply_single_operation(
         // List operations - work on lists
         StringOp::Split { sep, range } => {
             let parts: Vec<String> = match &val {
-                Value::Str(s) => s.split(sep).map(str::to_string).collect(),
+                Value::Str(s) => {
+                    let estimated_parts = s.matches(sep).count() + 1;
+                    let mut parts = Vec::with_capacity(estimated_parts);
+                    parts.extend(s.split(sep).map(str::to_string));
+                    parts
+                }
                 Value::List(list) => list
                     .iter()
                     .flat_map(|s| s.split(sep).map(str::to_string))
@@ -387,9 +401,18 @@ fn apply_single_operation(
         ),
         StringOp::Substring { range } => {
             if let Value::Str(s) = val {
-                let chars: Vec<char> = s.chars().collect();
-                let result: String = apply_range(&chars, range).into_iter().collect();
-                Ok(Value::Str(result))
+                if s.is_ascii() {
+                    let bytes = s.as_bytes();
+                    let result_bytes = apply_range(bytes, range);
+                    // Safe to unwrap since we know it's ASCII
+                    let result = String::from_utf8(result_bytes).unwrap();
+                    Ok(Value::Str(result))
+                } else {
+                    // UTF-8 handling for Unicode strings
+                    let chars: Vec<char> = s.chars().collect();
+                    let result: String = apply_range(&chars, range).into_iter().collect();
+                    Ok(Value::Str(result))
+                }
             } else {
                 Err("Substring operation can only be applied to strings. Use map to apply to lists.".to_string())
             }
@@ -400,16 +423,32 @@ fn apply_single_operation(
             flags,
         } => {
             if let Value::Str(s) = val {
-                let mut pattern_to_use = pattern.clone();
-                let mut inline_flags = String::new();
-                for (flag, c) in [('i', 'i'), ('m', 'm'), ('s', 's'), ('x', 'x')] {
-                    if flags.contains(flag) {
-                        inline_flags.push(c);
+                // Early exit for simple string patterns (not regex)
+                if !flags.contains('g')
+                    && !pattern.contains([
+                        '\\', '.', '*', '+', '?', '^', '$', '|', '[', ']', '(', ')', '{', '}',
+                    ])
+                    && !s.contains(pattern)
+                {
+                    return Ok(Value::Str(s));
+                }
+
+                let pattern_to_use = if flags.is_empty() {
+                    pattern.clone()
+                } else {
+                    let mut inline_flags = String::with_capacity(4);
+                    for (flag, c) in [('i', 'i'), ('m', 'm'), ('s', 's'), ('x', 'x')] {
+                        if flags.contains(flag) {
+                            inline_flags.push(c);
+                        }
                     }
-                }
-                if !inline_flags.is_empty() {
-                    pattern_to_use = format!("(?{}){}", inline_flags, pattern_to_use);
-                }
+                    if inline_flags.is_empty() {
+                        pattern.clone()
+                    } else {
+                        format!("(?{}){}", inline_flags, pattern)
+                    }
+                };
+
                 let re = Regex::new(&pattern_to_use)
                     .map_err(|e| format!("Invalid regex pattern: {}", e))?;
                 let result = if flags.contains('g') {
@@ -429,21 +468,27 @@ fn apply_single_operation(
         StringOp::Lower => apply_string_operation(val, |s| s.to_lowercase(), "Lower"),
         StringOp::Trim { chars, direction } => {
             if let Value::Str(s) = val {
-                let chars_to_trim: Vec<char> = if chars.trim().is_empty() {
-                    vec![' ', '\t', '\n', '\r']
-                } else {
-                    chars.chars().collect()
-                };
-                let result = match direction {
-                    TrimDirection::Both => {
-                        s.trim_matches(|c| chars_to_trim.contains(&c)).to_string()
+                // Fast path for default whitespace trimming
+                let result = if chars.is_empty() || chars.trim().is_empty() {
+                    match direction {
+                        TrimDirection::Both => s.trim().to_string(),
+                        TrimDirection::Left => s.trim_start().to_string(),
+                        TrimDirection::Right => s.trim_end().to_string(),
                     }
-                    TrimDirection::Left => s
-                        .trim_start_matches(|c| chars_to_trim.contains(&c))
-                        .to_string(),
-                    TrimDirection::Right => s
-                        .trim_end_matches(|c| chars_to_trim.contains(&c))
-                        .to_string(),
+                } else {
+                    // Custom character trimming with optimized character set
+                    let chars_to_trim: Vec<char> = chars.chars().collect();
+                    match direction {
+                        TrimDirection::Both => {
+                            s.trim_matches(|c| chars_to_trim.contains(&c)).to_string()
+                        }
+                        TrimDirection::Left => s
+                            .trim_start_matches(|c| chars_to_trim.contains(&c))
+                            .to_string(),
+                        TrimDirection::Right => s
+                            .trim_end_matches(|c| chars_to_trim.contains(&c))
+                            .to_string(),
+                    }
                 };
                 Ok(Value::Str(result))
             } else {

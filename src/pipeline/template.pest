@@ -8,23 +8,23 @@ operation = {
     shorthand_range
   | shorthand_index
   | split
-  | join
-  | substring
-  | replace
   | upper
   | lower
   | trim
   | append
   | prepend
-  | strip_ansi
+  | join
+  | substring
+  | replace
+  | map
   | filter
   | filter_not
   | slice
-  | regex_extract
-  | map
   | sort
   | reverse
   | unique
+  | regex_extract
+  | strip_ansi
   | pad
 }
 
@@ -111,23 +111,23 @@ escaped_char = { "\\" ~ ANY }
 // Operation keywords for lookahead (simplified list)
 operation_keyword = {
     "split"
-  | "join"
-  | "substring"
-  | "replace"
   | "upper"
   | "lower"
   | "trim"
   | "append"
   | "prepend"
-  | "strip_ansi"
-  | "filter_not"
-  | "filter"
-  | "slice"
-  | "regex_extract"
+  | "join"
+  | "substring"
+  | "replace"
   | "map"
+  | "filter"
+  | "filter_not"
+  | "slice"
   | "sort"
   | "reverse"
   | "unique"
+  | "regex_extract"
+  | "strip_ansi"
   | "pad"
 }
 

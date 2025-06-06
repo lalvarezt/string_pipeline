@@ -13,7 +13,8 @@ pub fn parse_template(template: &str) -> Result<(Vec<StringOp>, bool), String> {
         .next()
         .unwrap();
 
-    let mut ops = Vec::new();
+    // Pre-allocate operations vector with estimated capacity
+    let mut ops = Vec::with_capacity(16);
     let mut debug = false;
 
     for pair in pairs.into_inner() {
@@ -52,10 +53,13 @@ fn parse_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String
         }
         Rule::split => {
             let mut parts = pair.into_inner();
-            let sep = process_arg(parts.next().unwrap().as_str());
-            let range = parts
-                .next()
-                .map_or_else(|| Ok(RangeSpec::Range(None, None, false)), parse_range_spec)?;
+            let sep_part = parts.next().unwrap();
+            let sep = process_arg(sep_part.as_str());
+            let range = if let Some(range_part) = parts.next() {
+                parse_range_spec(range_part)?
+            } else {
+                RangeSpec::Range(None, None, false)
+            };
             Ok(StringOp::Split { sep, range })
         }
         Rule::join => Ok(StringOp::Join {
@@ -74,10 +78,11 @@ fn parse_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String
         }
         Rule::upper => Ok(StringOp::Upper),
         Rule::lower => Ok(StringOp::Lower),
-        Rule::trim => Ok(StringOp::Trim {
-            chars: parse_trim_chars(pair.clone()),
-            direction: parse_trim_direction(pair),
-        }),
+        Rule::trim => {
+            let chars = parse_trim_chars(pair.clone());
+            let direction = parse_trim_direction(pair);
+            Ok(StringOp::Trim { chars, direction })
+        }
         Rule::append => Ok(StringOp::Append {
             suffix: extract_single_arg(pair)?,
         }),
@@ -106,10 +111,9 @@ fn parse_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String
     }
 }
 
-// Helper functions to reduce repetition
-
 fn extract_single_arg(pair: pest::iterators::Pair<Rule>) -> Result<String, String> {
-    Ok(process_arg(pair.into_inner().next().unwrap().as_str()))
+    let inner = pair.into_inner().next().unwrap();
+    Ok(process_arg(inner.as_str()))
 }
 
 fn extract_single_arg_raw(pair: pest::iterators::Pair<Rule>) -> Result<String, String> {
@@ -122,24 +126,49 @@ fn extract_range_arg(pair: pest::iterators::Pair<Rule>) -> Result<RangeSpec, Str
 
 fn parse_trim_chars(pair: pest::iterators::Pair<Rule>) -> String {
     let mut parts = pair.into_inner();
-    // Get the first argument if it exists (chars)
-    parts
-        .next()
-        .filter(|p| p.as_str() != "left" && p.as_str() != "right" && p.as_str() != "both")
-        .map(|p| p.as_str().to_string())
-        .unwrap_or_default()
+
+    // Fast path: if no arguments, return empty string
+    let first = match parts.next() {
+        Some(p) => p,
+        None => return String::new(),
+    };
+
+    // Check if there's a second argument
+    if let Some(_second) = parts.next() {
+        // If there are two arguments, first is chars, second is direction
+        // (regardless of what the first argument contains)
+        first.as_str().to_string()
+    } else {
+        // Only one argument - check if it's a direction or chars
+        match first.as_str() {
+            "left" | "right" | "both" => String::new(), // It's a direction, no chars
+            chars => chars.to_string(),                 // It's chars
+        }
+    }
 }
 
 fn parse_trim_direction(pair: pest::iterators::Pair<Rule>) -> TrimDirection {
-    let parts = pair.into_inner();
+    let mut parts = pair.into_inner();
 
-    // Look for direction in either first or second position
-    for part in parts {
-        match part.as_str() {
-            "left" => return TrimDirection::Left,
-            "right" => return TrimDirection::Right,
-            "both" => return TrimDirection::Both,
-            _ => continue,
+    // Check first argument
+    if let Some(first) = parts.next() {
+        // Check if there's a second argument
+        if let Some(second) = parts.next() {
+            // If there are two arguments, second is the direction
+            match second.as_str() {
+                "left" => return TrimDirection::Left,
+                "right" => return TrimDirection::Right,
+                "both" => return TrimDirection::Both,
+                _ => return TrimDirection::Both,
+            }
+        } else {
+            // Only one argument - check if it's a direction
+            match first.as_str() {
+                "left" => return TrimDirection::Left,
+                "right" => return TrimDirection::Right,
+                "both" => return TrimDirection::Both,
+                _ => return TrimDirection::Both,
+            }
         }
     }
 
@@ -147,14 +176,14 @@ fn parse_trim_direction(pair: pest::iterators::Pair<Rule>) -> TrimDirection {
 }
 
 fn parse_sort_direction(pair: pest::iterators::Pair<Rule>) -> SortDirection {
-    pair.into_inner()
-        .next()
-        .map(|p| match p.as_str() {
+    if let Some(p) = pair.into_inner().next() {
+        match p.as_str() {
             "desc" => SortDirection::Desc,
-            "asc" => SortDirection::Asc,
             _ => SortDirection::Asc,
-        })
-        .unwrap_or(SortDirection::Asc)
+        }
+    } else {
+        SortDirection::Asc
+    }
 }
 
 fn parse_pad_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String> {
@@ -165,10 +194,14 @@ fn parse_pad_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, St
         .as_str()
         .parse()
         .map_err(|_| "Invalid padding width")?;
-    let char = parts
-        .next()
-        .map(|p| process_arg(p.as_str()).chars().next().unwrap_or(' '))
-        .unwrap_or(' ');
+
+    let char = if let Some(char_part) = parts.next() {
+        let processed = process_arg(char_part.as_str());
+        processed.chars().next().unwrap_or(' ')
+    } else {
+        ' '
+    };
+
     let direction = parts
         .next()
         .map(|p| match p.as_str() {
@@ -197,7 +230,7 @@ fn parse_map_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, St
     let map_op_pair = pair.into_inner().next().unwrap();
     let operation_list_pair = map_op_pair.into_inner().next().unwrap();
 
-    let mut operations = Vec::new();
+    let mut operations = Vec::with_capacity(16);
     for op_pair in operation_list_pair.into_inner() {
         let inner_op_pair = op_pair.into_inner().next().unwrap();
         operations.push(parse_operation(inner_op_pair)?);
@@ -207,52 +240,26 @@ fn parse_map_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, St
 }
 
 fn process_arg(s: &str) -> String {
-    let mut result = String::new();
-    let mut chars = s.chars().peekable();
+    if !s.contains('\\') {
+        return s.to_string();
+    }
+
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars();
 
     while let Some(c) = chars.next() {
         if c == '\\' {
-            match chars.peek() {
-                Some('n') => {
-                    result.push('\n');
-                    chars.next();
-                }
-                Some('t') => {
-                    result.push('\t');
-                    chars.next();
-                }
-                Some('r') => {
-                    result.push('\r');
-                    chars.next();
-                }
-                Some(':') => {
-                    result.push(':');
-                    chars.next();
-                }
-                Some('|') => {
-                    result.push('|');
-                    chars.next();
-                }
-                Some('\\') => {
-                    result.push('\\');
-                    chars.next();
-                }
-                Some('/') => {
-                    result.push('/');
-                    chars.next();
-                }
-                Some('{') => {
-                    result.push('{');
-                    chars.next();
-                }
-                Some('}') => {
-                    result.push('}');
-                    chars.next();
-                }
-                Some(&next) => {
-                    result.push(next);
-                    chars.next();
-                }
+            match chars.next() {
+                Some('n') => result.push('\n'),
+                Some('t') => result.push('\t'),
+                Some('r') => result.push('\r'),
+                Some(':') => result.push(':'),
+                Some('|') => result.push('|'),
+                Some('\\') => result.push('\\'),
+                Some('/') => result.push('/'),
+                Some('{') => result.push('{'),
+                Some('}') => result.push('}'),
+                Some(next) => result.push(next),
                 None => result.push('\\'),
             }
         } else {
@@ -265,17 +272,19 @@ fn process_arg(s: &str) -> String {
 fn parse_sed_string(pair: pest::iterators::Pair<Rule>) -> Result<(String, String, String), String> {
     let mut parts = pair.into_inner();
 
-    let pattern = parts.next().unwrap().as_str().to_string();
-    let replacement = parts.next().unwrap().as_str().to_string();
-    let flags = parts
-        .next()
-        .map_or_else(String::new, |p| p.as_str().to_string());
+    let pattern_str = parts.next().unwrap().as_str();
+    let replacement_str = parts.next().unwrap().as_str();
+    let flags_str = parts.next().map(|p| p.as_str()).unwrap_or("");
 
-    if pattern.is_empty() {
+    if pattern_str.is_empty() {
         return Err("Empty pattern in sed string".to_string());
     }
 
-    Ok((pattern, replacement, flags))
+    Ok((
+        pattern_str.to_string(),
+        replacement_str.to_string(),
+        flags_str.to_string(),
+    ))
 }
 
 fn parse_range_spec(pair: pest::iterators::Pair<Rule>) -> Result<RangeSpec, String> {
@@ -307,7 +316,10 @@ fn parse_range_spec(pair: pest::iterators::Pair<Rule>) -> Result<RangeSpec, Stri
         }
         Rule::range_full => Ok(RangeSpec::Range(None, None, false)),
         Rule::index => {
-            let idx = inner.into_inner().next().unwrap().as_str().parse().unwrap();
+            let idx_str = inner.into_inner().next().unwrap().as_str();
+            let idx = idx_str
+                .parse()
+                .map_err(|_| format!("Invalid index: {}", idx_str))?;
             Ok(RangeSpec::Index(idx))
         }
         _ => Err(format!("Unknown range spec: {:?}", inner.as_rule())),
