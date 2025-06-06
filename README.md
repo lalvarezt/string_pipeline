@@ -190,6 +190,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 🎯 **[📖 Read the Full Template System Documentation](docs/template-system.md)**
 
+🔗 **[⚙️ Complete CLI Options & Usage Guide](/docs/command-line-options.md)**
+
 **Everything you need to master String Pipeline:**
 
 - **🏗️ Template Syntax** - Structure, chaining, escaping rules
