@@ -1,212 +1,214 @@
-# String Pipeline
+# 🔗 String Pipeline
 
 [![Crates.io](https://img.shields.io/crates/v/string_pipeline.svg)](https://crates.io/crates/string_pipeline)
 [![Docs.rs](https://docs.rs/string_pipeline/badge.svg)](https://docs.rs/string_pipeline)
 [![CI](https://github.com/lalvarezt/string_pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/lalvarezt/string_pipeline/actions)
 [![License](https://img.shields.io/crates/l/string_pipeline.svg)](https://github.com/lalvarezt/string_pipeline/blob/main/LICENSE)
 
----
-
-A flexible, composable string transformation CLI tool and Rust library. `string_pipeline` lets you chain operations like split, join, slice, replace, case conversion, trim, and more, using a concise template syntax. It is ideal for quick text manipulation, scripting, and data extraction.
+A powerful string transformation CLI tool and Rust library that makes complex text processing simple. Transform data using intuitive **template syntax** — chain operations like **split**, **join**, **replace**, **filter**, and **20+ others** in a single readable expression.
 
 ---
 
-## Table of Contents
+## 📋 Table of Contents
 
-- [Features](#features)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Documentation](#documentation)
-- [Examples](#examples)
-- [Testing](#testing)
-- [Contributing](#contributing)
-- [License](#license)
+- [🌟 Why String Pipeline?](#-why-string-pipeline)
+- [⚡ Quick Examples](#-quick-examples)
+- [🚀 Installation](#-installation)
+- [🏃 Quick Start](#-quick-start)
+- [📚 Complete Documentation](#-complete-documentation)
+- [🧪 Testing](#-testing)
+- [🤝 Contributing](#-contributing)
+- [📄 License](#-license)
 
----
+## 🌟 Why String Pipeline?
 
-## Features
+**Transform complex text processing into simple, readable templates:**
 
-- **🔗 Composable operations**: Chain multiple string operations in a single template
-- **✂️ Split and join**: Extract and reassemble parts of strings with flexible separators
-- **🎯 Range operations**: Python-like negative indices with Rust-like syntax (`1..3`, `..=5`, `-2..`)
-- **🔍 Regex support**: sed-like regex replace and pattern extraction
-- **🔧 List operations**: Filter, sort, reverse, unique, slice with regex patterns
-- **🗺️ Map operations**: Apply sub-pipelines to each list item individually
-- **🎨 Text formatting**: Case conversion, trim, pad, append/prepend
-- **🌈 ANSI support**: Strip ANSI escape sequences for clean output
-- **🐛 Debug mode**: Visual step-by-step operation debugging with `!`
-- **📥 Flexible I/O**: CLI with stdin support and library for embedding
-- **⚡ Smart parsing**: Context-aware escaping - pipes work naturally in most cases
+```bash
+# Traditional approach (multiple commands)
+echo "john.doe@email.com,jane.smith@company.org" | \
+  tr ',' '\n' | \
+  grep -o '@[^,]*' | \
+  tr -d '@' | \
+  sort | \
+  tr '\n' ','
 
-## Installation
+# String Pipeline (single template)
+string-pipeline "{split:,:..|map:{regex_extract:@(.+):1}|sort}" "john.doe@email.com,jane.smith@company.org"
+# Output: "company.org,email.com"
+```
 
-### CLI Tool
+### ✨ Key Features
 
-```sh
-# From source
+- **🔗 Chainable Operations**: Pipe operations together naturally
+- **🎯 Precise Control**: Python-like ranges with Rust syntax (`-2..`, `1..=3`)
+- **🗺️ Powerful Mapping**: Apply sub-pipelines to each list item
+- **🔍 Regex Support**: sed-like patterns for complex transformations
+- **🐛 Debug Mode**: Step-by-step operation visualization
+- **📥 Flexible I/O**: CLI tool + embeddable Rust library
+
+## ⚡ Quick Examples
+
+### 🔥 Basic Transformations
+
+```bash
+# Extract middle items from list
+string-pipeline "{split:,:1..3}" "a,b,c,d,e"
+# Output: "b,c"
+
+# Clean and format names
+string-pipeline '{split:,:..|map:{trim|upper|append:!}}' "  john  , jane , bob  "
+# Output: "JOHN!,JANE!,BOB!"
+
+# Extract numbers and pad with zeros
+string-pipeline '{split:,:..|map:{regex_extract:\d+|pad:3:0:left}}' "item1,thing22,stuff333"
+# Output: "001,022,333"
+```
+
+### 🧠 Advanced Processing
+
+```bash
+# Filter files, format as list
+string-pipeline '{split:,:..|filter:\.py$|sort|map:{prepend:• }|join:\n}' "app.py,readme.md,test.py,data.json"
+# Output: "• app.py\n• test.py"
+
+# Extract domains from URLs
+string-pipeline '{split:,:..|map:{regex_extract://([^/]+):1|upper}}' "https://github.com,https://google.com"
+# Output: "GITHUB.COM,GOOGLE.COM"
+
+# Debug complex processing
+string-pipeline "{!split: :..|filter:^[A-Z]|sort:desc}" "apple Banana cherry Date"
+# Shows step-by-step processing + final output: "Date,Banana"
+# DEBUG: Initial value: Str("apple Banana cherry Date")
+# DEBUG: Applying operation 1: Split { sep: " ", range: Range(None, None, false) }
+# DEBUG: Result: List with 4 items:
+# DEBUG:   [0]: "apple"
+# DEBUG:   [1]: "Banana"
+# DEBUG:   [2]: "cherry"
+# DEBUG:   [3]: "Date"
+# DEBUG: ---
+# DEBUG: Applying operation 2: Filter { pattern: "^[A-Z]" }
+# DEBUG: Result: List with 2 items:
+# DEBUG:   [0]: "Banana"
+# DEBUG:   [1]: "Date"
+# DEBUG: ---
+# DEBUG: Applying operation 3: Sort { direction: Desc }
+# DEBUG: Result: List with 2 items:
+# DEBUG:   [0]: "Date"
+# DEBUG:   [1]: "Banana"
+# DEBUG: ---
+# Date Banana
+```
+
+> 💡 **Want to see more?** Check out the [📚 Complete Documentation](#-complete-documentation) with 20+ operations and real-world examples!
+
+## 🚀 Installation
+
+### 📦 CLI Tool
+
+```bash
+# Install from crates.io
+cargo install string_pipeline
+
+# Or build from source
 git clone https://github.com/lalvarezt/string_pipeline.git
 cd string_pipeline
 cargo install --path .
-
-# Or run directly
-cargo run -- "{template}" "input string"
 ```
 
-### Rust Library
+### 📚 Rust Library
 
-Find the crate on [crates.io](https://crates.io/crates/string_pipeline):
+Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-string_pipeline = "0.8.1"
+string_pipeline = "0.9.0"
 ```
 
-## Quick Start
+## 🏃 Quick Start
 
-### CLI Usage
+### 💻 CLI Usage
 
-```sh
-# With input argument
-string-pipeline "{template}" "input string"
+```bash
+# With argument
+string-pipeline '{template}' "input string"
 
-# With stdin input
-echo "input string" | string-pipeline "{template}"
+# With stdin
+echo "input" | string-pipeline '{template}'
 
-# Debug mode - see each step
-string-pipeline "{!split:,:..|map:{upper}}" "a,b,c"
+# Debug mode (shows each step)
+string-pipeline '{!split:,:..|map:{upper}}' "a,b,c"
+# DEBUG: Initial value: Str("a,b,c")
+# DEBUG: Applying operation 1: Split { sep: ",", range: Range(None, None, false) }
+# DEBUG: Result: List with 3 items:
+# DEBUG:   [0]: "a"
+# DEBUG:   [1]: "b"
+# DEBUG:   [2]: "c"
+# DEBUG: ---
+# DEBUG: Applying operation 2: Map { operations: [Upper] }
+# DEBUG: Map operation starting with 3 items
+# DEBUG: Map operations to apply: 1 steps
+# DEBUG:   Step 1: Upper
+# DEBUG: Processing item 1 of 3: "a"
+# DEBUG:   Item 1/3 initial value: Str("a")
+# DEBUG:   Item 1/3 applying step 1: Upper
+# DEBUG:   Item 1/3 step 1 result: String("A")
+# DEBUG: Processing item 2 of 3: "b"
+# DEBUG:   Item 2/3 initial value: Str("b")
+# DEBUG:   Item 2/3 applying step 1: Upper
+# DEBUG:   Item 2/3 step 1 result: String("B")
+# DEBUG: Processing item 3 of 3: "c"
+# DEBUG:   Item 3/3 initial value: Str("c")
+# DEBUG:   Item 3/3 applying step 1: Upper
+# DEBUG:   Item 3/3 step 1 result: String("C")
+# DEBUG: Map operation completed. Results:
+# DEBUG:   Item 1: "A"
+# DEBUG:   Item 2: "B"
+# DEBUG:   Item 3: "C"
+# DEBUG: Result: List with 3 items:
+# DEBUG:   [0]: "A"
+# DEBUG:   [1]: "B"
+# DEBUG:   [2]: "C"
+# DEBUG: ---
+# A,B,C
 ```
 
-### Library Usage
+### 🦀 Library Usage
 
 ```rust
 use string_pipeline::Template;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let template = Template::parse("{split:,:..|map:{upper}|join:-}")?;
-    let result = template.format("hello,world,test")?;
-    assert_eq!(result, "HELLO-WORLD-TEST");
+    let result = template.format("hello,world,rust")?;
+    println!("{}", result); // "HELLO-WORLD-RUST"
     Ok(())
 }
 ```
 
-## Documentation
+## 📚 Complete Documentation
 
-📚 **[Complete Documentation](docs/template-system.md)** - Comprehensive guide covering:
+🎯 **[📖 Read the Full Template System Documentation](docs/template-system.md)**
 
-- 🏗️ Template syntax and structure
-- 📊 All operations with examples
-- 🎯 Range specifications and negative indexing
-- 🔤 Escaping rules and special characters
-- 🗺️ Map operations for per-item processing
-- 🐛 Debug mode for troubleshooting
-- 💡 Real-world examples and best practices
-- ⚠️ Common pitfalls and solutions
+**Everything you need to master String Pipeline:**
 
-## Examples
+- **🏗️ Template Syntax** - Structure, chaining, escaping rules
+- **📊 Operations Reference** - 20+ operations with examples
+  - 🔪 **Split & Join** - Parse and reassemble text
+  - ✂️ **Slice & Range** - Extract with Python-like indices
+  - 🎨 **Transform** - Case, trim, pad, append/prepend
+  - 🔍 **Regex** - Pattern matching and replacement
+  - 🗂️ **List Ops** - Filter, sort, unique, reverse
+  - 🗺️ **Map** - Apply operations to each item
+- **🎯 Range Specifications** - Negative indexing, edge cases
+- **🛡️ Escaping Rules** - When and how to escape characters
+- **🐛 Debug Mode** - Visual operation debugging
+- **💡 Real-world Examples** - Data processing, log analysis, formatting
+- **⚠️ Troubleshooting** - Common errors and best practices
 
-### Basic Operations
+## 🧪 Testing
 
-```sh
-# Extract second item from comma-separated list
-string-pipeline "{split:,:1}" "a,b,c,d"
-# Output: b
-
-# Shorthand for splitting on spaces
-string-pipeline "{1}" "foo bar baz"
-# Output: bar
-
-# Range selection with inclusive end
-string-pipeline "{split:,:1..=3}" "a,b,c,d,e"
-# Output: b,c,d
-```
-
-### Text Transformation
-
-```sh
-# Replace and convert case
-string-pipeline "{replace:s/ /_/g|upper}" "hello world"
-# Output: HELLO_WORLD
-
-# Process each item in a list
-string-pipeline "{split:,:..|map:{trim|upper|append:!}}" " a, b , c "
-# Output: A!,B!,C!
-
-# Extract and format data
-string-pipeline "{split:,:..|map:{regex_extract:\\d+|pad:3:0:left}}" "a1,b22,c333"
-# Output: 001,022,333
-```
-
-### Advanced Processing
-
-```sh
-# Filter, sort, and format
-string-pipeline "{split:,:..|filter:\\.txt$|sort|map:{upper}}" "file.txt,doc.pdf,readme.txt,image.png"
-# Output: FILE.TXT,README.TXT
-
-# Complex data cleaning
-string-pipeline "{split:,:..|map:{trim: *|lower}|unique|sort}" "  *APPLE*, *banana*, *APPLE*  "
-# Output: apple,banana
-
-# Debug mode to see each step
-string-pipeline "{!split: :..|map:{upper}|join:_}" "hello world test"
-# DEBUG: Initial value: Str("hello world test")
-# DEBUG: Applying operation 1: Split { sep: " ", range: Range(None, None, false) }
-# DEBUG: Result: List with 3 items:
-# DEBUG:   [0]: "hello"
-# DEBUG:   [1]: "world"
-# DEBUG:   [2]: "test"
-# DEBUG: ---
-# DEBUG: Applying operation 2: Map { operations: [Upper] }
-# DEBUG: Map operation starting with 3 items
-# DEBUG: Map operations to apply: 1 steps
-# DEBUG:   Step 1: Upper
-# DEBUG: Processing item 1 of 3: "hello"
-# DEBUG:   Item 1/3 initial value: Str("hello")
-# DEBUG:   Item 1/3 applying step 1: Upper
-# DEBUG:   Item 1/3 step 1 result: String("HELLO")
-# DEBUG: Processing item 2 of 3: "world"
-# DEBUG:   Item 2/3 initial value: Str("world")
-# DEBUG:   Item 2/3 applying step 1: Upper
-# DEBUG:   Item 2/3 step 1 result: String("WORLD")
-# DEBUG: Processing item 3 of 3: "test"
-# DEBUG:   Item 3/3 initial value: Str("test")
-# DEBUG:   Item 3/3 applying step 1: Upper
-# DEBUG:   Item 3/3 step 1 result: String("TEST")
-# DEBUG: Map operation completed. Results:
-# DEBUG:   Item 1: "HELLO"
-# DEBUG:   Item 2: "WORLD"
-# DEBUG:   Item 3: "TEST"
-# DEBUG: Result: List with 3 items:
-# DEBUG:   [0]: "HELLO"
-# DEBUG:   [1]: "WORLD"
-# DEBUG:   [2]: "TEST"
-# DEBUG: ---
-# DEBUG: Applying operation 3: Join { sep: "_" }
-# DEBUG: Result: String("HELLO_WORLD_TEST")
-# DEBUG: ---
-# HELLO_WORLD_TEST
-```
-
-### Real-world Use Cases
-
-```sh
-# Extract domains from URLs
-echo "https://github.com,https://google.com" | string-pipeline "{split:,:..|map:{regex_extract://([^/]+):1}}"
-# Output: github.com,google.com
-
-# Format CSV data
-echo "John,25,Engineer" | string-pipeline "{split:,:..|map:{pad:15: :both}|join:\||append:\||prepend:\|}"
-# Output: |     John      |      25       |   Engineer    |
-
-# Clean log data
-echo "2023-01-01 ERROR Failed,2023-01-02 INFO Success" | string-pipeline "{split:,:..|map:{regex_extract:\\d{4}-\\d{2}-\\d{2}}|join:\\n}"
-# Output: 2023-01-01
-#         2023-01-02
-```
-
-## Testing
-
-```sh
+```bash
 # Run all tests
 cargo test
 
@@ -217,20 +219,20 @@ cargo test -- --nocapture
 cargo bench
 ```
 
-## Contributing
+## 🤝 Contributing
 
-Contributions welcome! Please see our [documentation](docs/template-system.md) for syntax details.
+We welcome contributions! 🎉
 
-- 🐛 Report bugs via [GitHub Issues](https://github.com/lalvarezt/string_pipeline/issues)
-- 💡 Suggest features or improvements
-- 🔧 Submit pull requests
+- 🐛 **Report bugs** via [GitHub Issues](https://github.com/lalvarezt/string_pipeline/issues)
+- 💡 **Suggest features** or improvements
+- 🔧 **Submit pull requests**
 
-## License
+📖 Please see our [comprehensive documentation](docs/template-system.md) for syntax details and examples.
+
+## 📄 License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
 ---
 
 **⚡ Fast, composable string transformations made simple!**
-
-📖 **[Read the full documentation](docs/template-system.md)** for complete syntax reference and advanced examples.
