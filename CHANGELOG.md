@@ -3,6 +3,24 @@
 All notable changes to this project will be documented in this file.
 <!-- ignore lint rules that are often triggered by content generated from commits / git-cliff -->
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style -->
+## [0.10.0](https://github.com/lalvarezt/string_pipeline/compare/0.9.0..0.10.0) - 2025-06-07
+
+### ⛰️  Features
+
+- *(cli)* Improve cli support and documentation - ([0a16243](https://github.com/lalvarezt/string_pipeline/commit/0a16243bb9498031269e556dd5be82d679c24aff))
+- *(mod)* Better debug system - ([424fe6b](https://github.com/lalvarezt/string_pipeline/commit/424fe6bb851db54814c158833761cf0df286b05a))
+- *(parser)* Add list operations inside map - ([5eb803c](https://github.com/lalvarezt/string_pipeline/commit/5eb803c4149d7226d95727103becd6c27dd1a85c))
+
+### 📚 Documentation
+
+- *(lib)* Update library documentation - ([6a905da](https://github.com/lalvarezt/string_pipeline/commit/6a905da6688a5d95b3906badcf618834f7ab61d1))
+- *(readme)* Update doc to include new debug system and support list operations inside map - ([4d49340](https://github.com/lalvarezt/string_pipeline/commit/4d4934092941f15e964a5fa95d94cb4914331838))
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump to 0.10.0 - ([c37dc2d](https://github.com/lalvarezt/string_pipeline/commit/c37dc2d4d111a2890cd2503e77658f12be43d4c1))
+
+
 ## [0.9.0](https://github.com/lalvarezt/string_pipeline/compare/0.8.1..0.9.0) - 2025-06-06
 
 ### 🚜 Refactor
@@ -21,6 +39,7 @@ All notable changes to this project will be documented in this file.
 
 ### ⚙️ Miscellaneous Tasks
 
+- *(changelog)* Update changelog - ([113e44e](https://github.com/lalvarezt/string_pipeline/commit/113e44e7ec4c43955cbd848cf759b3f96b22e2e9))
 - Bump to 0.9.0 - ([eb89a99](https://github.com/lalvarezt/string_pipeline/commit/eb89a99667b7b7a47e263b8211000b1dbb80e74f))
 
 
