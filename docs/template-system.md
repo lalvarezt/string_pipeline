@@ -10,6 +10,7 @@ A powerful string processing template system with support for splitting, transfo
   - [Operation Chaining](#operation-chaining)
   - [List Rendering Behavior](#list-rendering-behavior)
 - [📊 Operations Reference](#-operations-reference)
+  - [🎯 Operation Type System](#-operation-type-system) - Understanding input/output types
   - [🔪 Split](#-split) - Split text into parts
   - [🍰 Slice](#-slice) - Extract range of items
   - [🔗 Join](#-join) - Combine items with separator
@@ -130,6 +131,160 @@ In this example:
 
 ## 📊 Operations Reference
 
+### 🎯 Operation Type System
+
+Understanding how operations handle different input types is crucial for building effective templates. The String Pipeline system has a well-designed type system that ensures predictable behavior and clear error messages.
+
+#### 📋 Complete Type Matrix
+
+| Operation | Accepts String | Accepts List | Returns String | Returns List | Notes |
+|-----------|----------------|--------------|----------------|--------------|-------|
+| **Split** | ✅ | ✅ | ✅* | ✅* | *Single index → String, Range → List |
+| **Join** | ✅ | ✅ | ✅ | ❌ | String input passes through unchanged |
+| **Replace** | ✅ | ❌ | ✅ | ❌ | String-only operation |
+| **Upper** | ✅ | ❌ | ✅ | ❌ | String-only operation |
+| **Lower** | ✅ | ❌ | ✅ | ❌ | String-only operation |
+| **Trim** | ✅ | ❌ | ✅ | ❌ | String-only operation |
+| **Substring** | ✅ | ❌ | ✅ | ❌ | String-only operation |
+| **Append** | ✅ | ❌ | ✅ | ❌ | String-only operation |
+| **Prepend** | ✅ | ❌ | ✅ | ❌ | String-only operation |
+| **StripAnsi** | ✅ | ❌ | ✅ | ❌ | String-only operation |
+| **Pad** | ✅ | ❌ | ✅ | ❌ | String-only operation |
+| **RegexExtract** | ✅ | ❌ | ✅ | ❌ | String-only operation |
+| **Filter** | ✅ | ✅ | ✅ | ✅ | Type-preserving operation |
+| **FilterNot** | ✅ | ✅ | ✅ | ✅ | Type-preserving operation |
+| **Reverse** | ✅ | ✅ | ✅ | ✅ | Type-preserving operation |
+| **Slice** | ❌ | ✅ | ❌ | ✅ | List-only operation |
+| **Sort** | ❌ | ✅ | ❌ | ✅ | List-only operation |
+| **Unique** | ❌ | ✅ | ❌ | ✅ | List-only operation |
+| **Map** | ❌ | ✅ | ❌ | ✅ | List-only operation |
+
+#### 🏗️ Type Categories
+
+**🔤 String-to-String Operations** (10 operations)
+Work exclusively with strings, provide clear error messages when applied to lists:
+
+- `replace`, `upper`, `lower`, `trim`, `substring`
+- `append`, `prepend`, `strip_ansi`, `pad`, `regex_extract`
+
+```text
+# ✅ Correct usage
+{upper}                    # "hello" → "HELLO"
+{split:,:..|map:{upper}}   # "a,b,c" → "A,B,C"
+
+# ❌ Will error with helpful message
+{upper}  # Applied to list → "upper operation can only be applied to strings. Use map:{upper} for lists."
+```
+
+**📋 List-to-List Operations** (4 operations)
+Work exclusively with lists, provide clear guidance for string inputs:
+
+- `slice`, `sort`, `unique`, `map`
+
+```text
+# ✅ Correct usage
+{split:,:..|sort}          # "c,a,b" → "a,b,c"
+{split:,:..|map:{upper}}   # "a,b,c" → "A,B,C"
+
+# ❌ Will error with helpful message
+{sort}  # Applied to string → "sort operation can only be applied to lists. Use split first."
+```
+
+**🔄 Type-Preserving Operations** (3 operations)
+Accept both types and maintain the input type:
+
+- `filter`, `filter_not`, `reverse`
+
+```text
+# ✅ String input → String output
+{filter:hello}             # "hello world" → "hello world" (matches)
+{reverse}                  # "hello" → "olleh"
+
+# ✅ List input → List output
+{split:,:..|filter:^a}     # "apple,banana,cherry" → "apple"
+{split:,:..|reverse}       # "a,b,c" → "c,b,a"
+```
+
+**🔀 Type-Converting Operations** (2 operations)
+Can change types based on parameters:
+
+- `split` - String/List → String (single index) or List (range)
+- `join` - List → String (String passes through unchanged)
+
+```text
+# Split examples
+{split:,:0}                # "a,b,c" → "a" (String)
+{split:,:..}               # "a,b,c" → ["a","b","c"] (List)
+{split:,:1..3}             # "a,b,c,d" → ["b","c"] (List)
+
+# Join examples
+{split:,:..|join:-}        # "a,b,c" → "a-b-c" (List → String)
+{join:-}                   # "hello" → "hello" (String passthrough)
+```
+
+#### ✅ Design Principles
+
+**🎯 Predictable Behavior**
+Every operation has consistent, well-defined input/output behavior:
+
+- **Clear Error Messages**: When operations receive wrong types, they provide helpful suggestions
+- **Type Safety**: No unexpected type conversions or silent failures
+- **Explicit Control**: Use `map` to apply string operations to lists explicitly
+
+**🔗 Composability**
+Operations chain naturally with predictable data flow:
+
+```text
+{split:,:..|map:{trim|upper}|filter:^[A-Z]{3,}|sort|join: | }
+```
+
+1. `split` - String → List
+2. `map` - List → List (applies string operations per item)
+3. `filter` - List → List (preserves type)
+4. `sort` - List → List
+5. `join` - List → String
+
+**🛡️ Error Prevention**
+The type system helps prevent common mistakes:
+
+```text
+# ❌ This would error clearly
+{split:,:..|upper}         # "Cannot apply upper to list"
+
+# ✅ Correct approach is obvious
+{split:,:..|map:{upper}}   # Apply upper to each item
+```
+
+#### 💡 Practical Guidelines
+
+**🚀 When Building Templates:**
+
+1. **Start with your data type** - String or List?
+2. **Plan your transformations** - What type does each operation expect?
+3. **Use Map for string operations on lists** - Explicit and clear
+4. **Let the system guide you** - Error messages suggest corrections
+
+**🔍 Type Flow Examples:**
+
+```text
+# 📊 Data processing pipeline
+"john,jane,bob"           # String input
+{split:,:..}              # → List ["john","jane","bob"]
+{map:{upper}}             # → List ["JOHN","JANE","BOB"]
+{filter:^J}               # → List ["JOHN","JANE"]
+{sort}                    # → List ["JANE","JOHN"]
+{join: and }              # → String "JANE and JOHN"
+
+# 🧹 Text cleaning pipeline
+"  hello world  "         # String input
+{trim}                    # → String "hello world"
+{split: :..}              # → List ["hello","world"]
+{map:{upper}}             # → List ["HELLO","WORLD"]
+{join:_}                  # → String "HELLO_WORLD"
+```
+
+> 💡 **Pro Tip:** Use [Debug Mode](#-debug-mode) (`{!...}`) to see exactly how types flow through your template. This is invaluable for understanding and troubleshooting complex transformations! For comprehensive debugging techniques, see the [🐛 Debug System Guide](debug-system.md).
+
 ### 🔪 Split
 
 Splits input into a list using a separator.
@@ -146,7 +301,9 @@ Splits input into a list using a separator.
 **Behavior on Different Input Types:**
 
 - **String:** Splits the string by the separator into a list of parts
-- **List:** Splits each item in the list by the separator, then flattens all results into a single list
+- **List:** Splits each item in the list by the separator, then **flattens all results into a single list**
+
+> 💡 **List Processing Detail:** When applied to a list, Split processes each item individually and combines all split results. For example: `["a,b", "c,d"]` with `split:,` becomes `["a", "b", "c", "d"]`.
 
 **Example of List Behavior:**
 
@@ -225,6 +382,8 @@ Extracts characters from a string using range notation.
 
 > 💡 **Note:** For detailed range syntax and examples, see [🎯 Range Specifications](#-range-specifications).
 
+**Unicode Handling:** Substring correctly handles both ASCII and Unicode strings. For ASCII strings, it uses byte-level operations for performance. For Unicode strings, it operates on character boundaries to preserve multi-byte characters.
+
 **Examples:**
 
 ```text
@@ -232,6 +391,7 @@ Extracts characters from a string using range notation.
 {substring:-3..}     # Last 3 characters
 {substring:..5}      # First 5 characters
 {substring:2}        # Single character at index 2
+{substring:0..1}     # "🔥hello" → "🔥" (Unicode safe)
 ```
 
 ### ✨ Trim
@@ -359,7 +519,7 @@ Performs regex-based find and replace using sed-like syntax.
 | REPLACEMENT | string | ✅ | Text to replace matches with |
 | FLAGS     | string | ❌ | Modifiers: `g` (global), `i` (case-insensitive), `m` (multiline), `s` (dot-all) |
 
-**Performance Optimization:** For simple string patterns without regex metacharacters and without global flag, a fast string replacement is used instead of regex compilation.
+**Performance Optimization:** For simple string patterns without regex metacharacters and without global flag, a fast string replacement is used instead of regex compilation. Additionally, if the pattern doesn't exist in the input string, the operation returns immediately without processing.
 
 **Examples:**
 
@@ -624,55 +784,152 @@ Split separators can contain most characters. Only escape:
 
 ## 🗺️ Map Operations
 
-Map operations apply a sequence of operations to each item in a list individually.
+Map operations apply a sequence of operations to each item in a list individually, enabling powerful per-item transformations.
 
-### Syntax
+### 📖 Concept
+
+The `map` operation takes a list and applies a sequence of operations to each item separately, then combines the results back into a list.
+
+```text
+# Basic concept
+["item1", "item2", "item3"] → map:{operation} → [result1, result2, result3]
+```
+
+### 🔧 Syntax
 
 ```text
 map:{operation1|operation2|...}
 ```
 
-### Supported Operations in Map
+**Key Rules:**
 
-✅ **Allowed:**
+- Can only be applied to lists (use `split` first for strings)
+- Operations inside map are applied to each item individually
+- Nested `map` operations are not allowed
 
-- `upper`, `lower`
-- `trim`
-- `append`, `prepend`
-- `substring`
-- `replace`
-- `regex_extract`
-- `pad`
-- `reverse`
-- `strip_ansi`
+### 🎯 Operation Categories
 
-❌ **Not Allowed:**
+#### ✅ **String Operations**
 
-- `split`, `join`
-- `sort`, `unique`
-- `filter`, `filter_not`
-- `slice`
-- Nested `map`
+Apply to each item individually (item treated as string):
 
-### Examples
+- **🔤 Case:** `upper`, `lower`
+- **✂️ Modify:** `trim`, `append`, `prepend`, `substring`, `pad`
+- **🔍 Extract/Replace:** `replace`, `regex_extract`
+- **🎨 Format:** `reverse`, `strip_ansi`
+
+#### ✅ **List Operations**
+
+Process each item's content as a sub-list:
+
+- **🔪 Parse:** `split` - Split each item and flatten results
+- **🔗 Combine:** `join` - Join sub-lists within each item
+- **📏 Select:** `slice` - Extract ranges from each item's content
+- **📊 Transform:** `sort`, `unique` - Process each item's sub-elements
+- **🧪 Filter:** `filter`, `filter_not` - Filter each item's content
+
+#### ❌ **Not Allowed**
+
+- Nested `map` operations
+- Operations that change the fundamental list structure in unexpected ways
+
+### 💡 Basic Examples
+
+#### 🔤 String Operations
 
 ```text
 # Convert each item to uppercase
 {split:,:..|map:{upper}}
+# "hello,world" → "HELLO,WORLD"
 
 # Trim and add prefix to each item
-{split:,:..|map:{trim|prepend:item_}}
+{split:,:..|map:{trim|prepend:• }}
+# "  apple  , banana " → "• apple,• banana"
 
 # Extract numbers from each item
 {split:,:..|map:{regex_extract:\d+}}
+# "item1,thing22,stuff333" → "1,22,333"
 
-# Complex processing per item
-{split:,:..|map:{trim|upper|append:!|pad:10: :both}}
+# Chain multiple string operations
+{split:,:..|map:{trim|upper|append:!|pad:10: :left}}
+# " hello , world " → "    HELLO!,    WORLD!"
 ```
+
+#### 📋 List Operations
+
+```text
+# Split each item further and sort words
+{split:,:..|map:{split: :..|sort|join:_}}
+# "c a,b d" → "a_c,b_d"
+
+# Filter words within each item
+{split:,:..|map:{split: :..|filter:^[A-Z]|join: }}
+# "apple Banana,cherry Date" → "Banana,Date"
+
+# Process CSV-like nested data
+{split:\n:..|map:{split:,:..|slice:1..3|join:-}}
+# "name,age,city\njohn,30,nyc\njane,25,la" → "age-city,30-nyc,25-la"
+```
+
+### 🔄 Automatic String Conversion
+
+**Critical Behavior:** When map operations produce lists without explicit `join`, the system automatically converts them to strings using intelligent separator inheritance.
+
+#### 📋 How It Works
+
+1. **🎯 Item Processing:** Each map item's result is auto-joined using the separator from the last split within that map item
+2. **🔗 Final Assembly:** The final list is auto-joined using the separator from the last split in the main pipeline
+3. **📏 Flexible Lengths:** Different length sublists are handled gracefully - each joins independently
+
+#### 💡 Step-by-Step Example
+
+```text
+# Input: "hello world,foo bar,test orange"
+# Template: {split:,:..|map:{split: :..|filter:o}}
+
+# Step 1: Split by comma
+["hello world", "foo bar", "test orange"]
+
+# Step 2: Map processes each item
+#   "hello world" → split: ["hello", "world"] → filter:o → ["hello", "world"] → auto-join: "hello world"
+#   "foo bar"     → split: ["foo", "bar"]     → filter:o → ["foo"]           → auto-join: "foo"
+#   "test orange" → split: ["test", "orange"] → filter:o → ["orange"]        → auto-join: "orange"
+
+# Step 3: Final result
+["hello world", "foo", "orange"] → auto-join with comma → "hello world,foo,orange"
+```
+
+#### 🎛️ Controlling Output Format
+
+```text
+# 🔄 Automatic behavior (inherits separators)
+{split:,:..|map:{split: :..}}                    # → "hello world,foo bar"
+
+# 🎯 Explicit inner join (custom word separator)
+{split:,:..|map:{split: :..|join:-}}             # → "hello-world,foo-bar"
+{split:,:..|map:{split: :..|join:}}              # → "helloworld,foobar"
+{split:,:..|map:{split: :..|join: | }}           # → "hello | world,foo | bar"
+
+# 🔗 Explicit outer join (custom item separator)
+{split:,:..|map:{split: :..}|join: ; }           # → "hello world ; foo bar"
+
+# 🎨 Both explicit (full control)
+{split:,:..|map:{split: :..|join:-}|join: | }    # → "hello-world | foo-bar"
+```
+
+#### ✅ Design Benefits
+
+- **🔄 No Data Loss:** Sublists of different lengths are preserved correctly
+- **🎯 Intuitive:** Output format matches input format by default
+- **🎛️ Explicit Control:** Override with explicit `join` when needed
+- **📏 Separator Inheritance:** Maintains consistent formatting automatically
+- **🔍 Predictable:** Debug mode shows exactly what's happening at each step
 
 ## 🐛 Debug Mode
 
 Enable detailed logging by adding `!` at the start of the template.
+
+> 🔍 **For comprehensive debugging documentation**, see the [🐛 Debug System Guide](debug-system.md) which covers advanced debugging techniques, performance analysis, error diagnosis, and real-world troubleshooting scenarios.
 
 ### Syntax
 
@@ -684,51 +941,56 @@ Enable detailed logging by adding `!` at the start of the template.
 
 Shows:
 
-- Initial input value
-- Each operation being applied
-- Intermediate results
-- Final output
-- For map operations: per-item processing details
+- **🎯 Initial input value** - Starting data and type
+- **🔄 Each operation** - Step-by-step execution
+- **📊 Intermediate results** - Data transformation at each step
+- **⚡ Performance metrics** - Timing and memory usage
+- **🗺️ Map operation details** - Per-item processing visualization
+- **✅ Final output** - Complete result with type information
 
-Regular output goes to `stdout` debug information goes to `stderr`
+Regular output goes to `stdout`, debug information goes to `stderr`.
 
-### Example
+### Quick Example
 
 ```bash
 Input: "hello,world"
 Template: "{!split:,:..|map:{upper}|join:-}"
 
 Debug Output:
-DEBUG: Initial value: Str("hello,world")
-DEBUG: Applying operation 1: Split { sep: ",", range: Range(None, None, false) }
-DEBUG: Result: List with 2 items:
-DEBUG:   [0]: "hello"
-DEBUG:   [1]: "world"
-DEBUG: ---
-DEBUG: Applying operation 2: Map { operations: [Upper] }
-DEBUG: Map operation starting with 2 items
-DEBUG: Map operations to apply: 1 steps
-DEBUG:   Step 1: Upper
-DEBUG: Processing item 1 of 2: "hello"
-DEBUG:   Item 1/2 initial value: Str("hello")
-DEBUG:   Item 1/2 applying step 1: Upper
-DEBUG:   Item 1/2 step 1 result: String("HELLO")
-DEBUG: Processing item 2 of 2: "world"
-DEBUG:   Item 2/2 initial value: Str("world")
-DEBUG:   Item 2/2 applying step 1: Upper
-DEBUG:   Item 2/2 step 1 result: String("WORLD")
-DEBUG: Map operation completed. Results:
-DEBUG:   Item 1: "HELLO"
-DEBUG:   Item 2: "WORLD"
-DEBUG: Result: List with 2 items:
-DEBUG:   [0]: "HELLO"
-DEBUG:   [1]: "WORLD"
-DEBUG: ---
-DEBUG: Applying operation 3: Join { sep: "-" }
+DEBUG: ═══════════════════════════════════════════════
+DEBUG: PIPELINE START: 3 operations to apply
+DEBUG: Initial input: Str("hello,world")
+DEBUG: ───────────────────────────────────────────────
+DEBUG: STEP 1/3: Applying Split { sep: ",", range: Range(None, None, false) }
+DEBUG: Input: Str("hello,world")
+DEBUG: Result: List(2 items: ["hello", "world"])
+DEBUG: Step completed in 548.4µs
+DEBUG: ───────────────────────────────────────────────
+DEBUG: STEP 2/3: Applying Map { operations: [Upper] }
+DEBUG: MAP OPERATION: Processing 2 items
+DEBUG: ┌─ Processing item 1 of 2 ─────────────
+DEBUG: │  Input: "hello" → Output: "HELLO"
+DEBUG: └────────────────────────────────────────────
+DEBUG: ┌─ Processing item 2 of 2 ─────────────
+DEBUG: │  Input: "world" → Output: "WORLD"
+DEBUG: └────────────────────────────────────────────
+DEBUG: Result: List(2 items: ["HELLO", "WORLD"])
+DEBUG: Step completed in 20.0277ms
+DEBUG: ───────────────────────────────────────────────
+DEBUG: STEP 3/3: Applying Join { sep: "-" }
 DEBUG: Result: String("HELLO-WORLD")
-DEBUG: ---
+DEBUG: Total execution time: 23.0989ms
+DEBUG: ═══════════════════════════════════════════════
 HELLO-WORLD
 ```
+
+> 💡 **Need more?** The [🐛 Debug System Guide](debug-system.md) provides detailed coverage of:
+>
+> - **Complex pipeline debugging** with map operations
+> - **Performance analysis** and bottleneck identification
+> - **Error debugging** with type mismatch diagnosis
+> - **Advanced techniques** for production debugging
+> - **Real-world examples** and optimization case studies
 
 ## 💡 Examples
 
@@ -830,6 +1092,8 @@ string-pipeline '{split:,:..|map:{prepend:• |append: ✓}}' 'First item,Second
 
 ## ⚠️ Troubleshooting
 
+> 🐛 **For comprehensive debugging and troubleshooting**, see the [🔍 Debug System Guide](debug-system.md) which covers advanced error diagnosis, performance debugging, and real-world troubleshooting scenarios with detailed examples.
+
 ### Common Errors
 
 ### Parse Errors
@@ -867,6 +1131,19 @@ Template: "{join:-}"
 Template: "{split: :..|join:-}"
 ```
 
+**Problem:** `Operation can only be applied to strings`
+
+```bash
+# Wrong: Trying to apply string operation to list
+Input: "a,b,c"
+Template: "{split:,:..|upper}"
+
+# Correct: Use map for string operations on lists
+Template: "{split:,:..|map:{upper}}"
+```
+
+> 💡 **Type System Reference:** See the [🎯 Operation Type System](#-operation-type-system) section for complete details on which operations accept which input types and their expected outputs.
+
 **Problem:** `Invalid regex`
 
 ```bash
@@ -893,13 +1170,20 @@ Template: "{split: :..|join:-}"
 
 ### ✅ Do's
 
-1. **Use debug mode** when developing complex templates:
+1. **Understand the type system** before building complex templates:
+
+   ```bash
+   # Know what each operation accepts and returns
+   # See the Operation Type System section for complete details
+   ```
+
+2. **Use debug mode** when developing complex templates:
 
    ```bash
    {!split:,:..|map:{upper}|join:-}
    ```
 
-2. **Start simple** and build complexity gradually:
+3. **Start simple** and build complexity gradually:
 
    ```bash
    # Start with:
@@ -912,14 +1196,14 @@ Template: "{split: :..|join:-}"
    {split:,:..|map:{trim|upper}|join:-}
    ```
 
-3. **Test ranges** with simple data first:
+4. **Test ranges** with simple data first:
 
    ```bash
    # Test with: "a,b,c,d,e"
    {split:,:1..3}  # Should output: "b,c"
    ```
 
-4. **Escape when in doubt**:
+5. **Escape when in doubt**:
 
    ```bash
    {append:\:value}  # Safe
@@ -992,6 +1276,20 @@ Template: "{split: :..|join:-}"
    {split: :..|map:{trim}|map:{upper}}
    ```
 
+4. **Use replace optimization**:
+
+   ```bash
+   # Faster for simple patterns:
+   {replace:s/hello/hi/}  # No regex compilation
+
+   # Slower for simple patterns:
+   {replace:s/h.*o/hi/}   # Requires regex engine
+   ```
+
 ---
 
-💡 **Need more help?** Try using debug mode (`{!...}`) to see exactly how your template is being processed!
+💡 **Need more help?**
+
+🔍 **Try debug mode** (`{!...}`) to see exactly how your template is being processed!
+
+🐛 **For advanced debugging**, check out the [Debug System Guide](debug-system.md) for comprehensive troubleshooting techniques, performance analysis, and real-world debugging examples!

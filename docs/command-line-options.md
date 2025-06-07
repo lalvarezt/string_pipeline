@@ -221,9 +221,33 @@ Suppress debug output and validation messages with `--quiet` or `-q`.
 ```bash
 # 🔊 Normal debug mode (verbose)
 string-pipeline -d '{split:,:..|map:{upper}}' 'a,b,c'
-# DEBUG: Initial value: Str("a,b,c")
-# DEBUG: Applying operation 1: Split...
-# ... (lots of debug output)
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: PIPELINE START: 2 operations to apply
+# DEBUG: Initial input: Str("a,b,c")
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 1/2: Applying Split { sep: ",", range: Range(None, None, false) }
+# DEBUG: Input: Str("a,b,c")
+# DEBUG: Result: List(3 items: ["a", "b", "c"])
+# DEBUG: Step completed in 342.7µs
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 2/2: Applying Map { operations: [Upper] }
+# DEBUG: MAP OPERATION: Processing 3 items
+# DEBUG: ┌─ Processing item 1 of 3 ─────────────
+# DEBUG: │  Input: "a" → Output: "A"
+# DEBUG: └────────────────────────────────────────────
+# DEBUG: ┌─ Processing item 2 of 3 ─────────────
+# DEBUG: │  Input: "b" → Output: "B"
+# DEBUG: └────────────────────────────────────────────
+# DEBUG: ┌─ Processing item 3 of 3 ─────────────
+# DEBUG: │  Input: "c" → Output: "C"
+# DEBUG: └────────────────────────────────────────────
+# DEBUG: MAP COMPLETED: 3 → 3 items
+# DEBUG: Result: List(3 items: ["A", "B", "C"])
+# DEBUG: Step completed in 15.2841ms
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: PIPELINE COMPLETE
+# DEBUG: Total execution time: 18.7456ms
+# DEBUG: ═══════════════════════════════════════════════
 # A,B,C
 
 # 🤫 Quiet debug mode (result only)
@@ -236,6 +260,8 @@ string-pipeline -q --validate '{split:,:..|upper}'
 ```
 
 ## 🐛 Debug & Validation
+
+> 🔍 **For comprehensive debugging coverage**, see the [🐛 Debug System Guide](debug-system.md) which provides in-depth documentation on advanced debugging techniques, performance analysis, error diagnosis, and real-world troubleshooting scenarios.
 
 ### 🔍 Debug Mode
 
@@ -258,31 +284,29 @@ Enable step-by-step processing visualization.
 string-pipeline -d '{split:,:..|map:{upper}}' 'hello,world'
 
 # Output:
-# DEBUG: Initial value: Str("hello,world")
-# DEBUG: Applying operation 1: Split { sep: ",", range: Range(None, None, false) }
-# DEBUG: Result: List with 2 items:
-# DEBUG:   [0]: "hello"
-# DEBUG:   [1]: "world"
-# DEBUG: ---
-# DEBUG: Applying operation 2: Map { operations: [Upper] }
-# DEBUG: Map operation starting with 2 items
-# DEBUG: Map operations to apply: 1 steps
-# DEBUG:   Step 1: Upper
-# DEBUG: Processing item 1 of 2: "hello"
-# DEBUG:   Item 1/2 initial value: Str("hello")
-# DEBUG:   Item 1/2 applying step 1: Upper
-# DEBUG:   Item 1/2 step 1 result: String("HELLO")
-# DEBUG: Processing item 2 of 2: "world"
-# DEBUG:   Item 2/2 initial value: Str("world")
-# DEBUG:   Item 2/2 applying step 1: Upper
-# DEBUG:   Item 2/2 step 1 result: String("WORLD")
-# DEBUG: Map operation completed. Results:
-# DEBUG:   Item 1: "HELLO"
-# DEBUG:   Item 2: "WORLD"
-# DEBUG: Result: List with 2 items:
-# DEBUG:   [0]: "HELLO"
-# DEBUG:   [1]: "WORLD"
-# DEBUG: ---
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: PIPELINE START: 2 operations to apply
+# DEBUG: Initial input: Str("hello,world")
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 1/2: Applying Split { sep: ",", range: Range(None, None, false) }
+# DEBUG: Input: Str("hello,world")
+# DEBUG: Result: List(2 items: ["hello", "world"])
+# DEBUG: Step completed in 548.4µs
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 2/2: Applying Map { operations: [Upper] }
+# DEBUG: MAP OPERATION: Processing 2 items
+# DEBUG: ┌─ Processing item 1 of 2 ─────────────
+# DEBUG: │  Input: "hello" → Output: "HELLO"
+# DEBUG: └────────────────────────────────────────────
+# DEBUG: ┌─ Processing item 2 of 2 ─────────────
+# DEBUG: │  Input: "world" → Output: "WORLD"
+# DEBUG: └────────────────────────────────────────────
+# DEBUG: Result: List(2 items: ["HELLO", "WORLD"])
+# DEBUG: Step completed in 20.0277ms
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: PIPELINE COMPLETE
+# DEBUG: Total execution time: 23.0989ms
+# DEBUG: ═══════════════════════════════════════════════
 # HELLO,WORLD
 
 # 🤫 Quiet debugging (result only)
@@ -803,6 +827,8 @@ string-pipeline '{split:,:..|map:{trim|upper}}' 'input'   # Step 3
 
 🎉 **You're now equipped to master the String Pipeline CLI!**
 
-💡 **Pro Tip:** Combine the power of templates from the [📖 Template System Documentation](docs/template-system.md) with these CLI features for maximum productivity!
+💡 **Pro Tip:** Combine the power of templates from the [📖 Template System Documentation](template-system.md) with these CLI features for maximum productivity!
+
+🐛 **Debug Like a Pro:** Master the [🔍 Debug System Guide](debug-system.md) to troubleshoot complex pipelines and optimize performance!
 
 🚀 **Ready to transform your data processing workflows? Start with simple examples and build up to complex transformations!**

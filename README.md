@@ -15,7 +15,7 @@ A powerful string transformation CLI tool and Rust library that makes complex te
 - [⚡ Quick Examples](#-quick-examples)
 - [🚀 Installation](#-installation)
 - [🏃 Quick Start](#-quick-start)
-- [📚 Complete Documentation](#-complete-documentation)
+- [📚 Documentation](#-documentation)
 - [🧪 Testing](#-testing)
 - [🤝 Contributing](#-contributing)
 - [📄 License](#-license)
@@ -79,28 +79,32 @@ string-pipeline '{split:,:..|map:{regex_extract://([^/]+):1|upper}}' "https://gi
 # Debug complex processing
 string-pipeline "{!split: :..|filter:^[A-Z]|sort:desc}" "apple Banana cherry Date"
 # Shows step-by-step processing + final output: "Date,Banana"
-# DEBUG: Initial value: Str("apple Banana cherry Date")
-# DEBUG: Applying operation 1: Split { sep: " ", range: Range(None, None, false) }
-# DEBUG: Result: List with 4 items:
-# DEBUG:   [0]: "apple"
-# DEBUG:   [1]: "Banana"
-# DEBUG:   [2]: "cherry"
-# DEBUG:   [3]: "Date"
-# DEBUG: ---
-# DEBUG: Applying operation 2: Filter { pattern: "^[A-Z]" }
-# DEBUG: Result: List with 2 items:
-# DEBUG:   [0]: "Banana"
-# DEBUG:   [1]: "Date"
-# DEBUG: ---
-# DEBUG: Applying operation 3: Sort { direction: Desc }
-# DEBUG: Result: List with 2 items:
-# DEBUG:   [0]: "Date"
-# DEBUG:   [1]: "Banana"
-# DEBUG: ---
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: PIPELINE START: 3 operations to apply
+# DEBUG: Initial input: Str("apple Banana cherry Date")
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 1/3: Applying Split { sep: " ", range: Range(None, None, false) }
+# DEBUG: Input: Str("apple Banana cherry Date")
+# DEBUG: Result: List(4 items: ["apple", "Banana", "cherry", "Date"])
+# DEBUG: Step completed in 425.1µs
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 2/3: Applying Filter { pattern: "^[A-Z]" }
+# DEBUG: Input: List(["apple", "Banana", "cherry", "Date"])
+# DEBUG: Result: List(2 items: ["Banana", "Date"])
+# DEBUG: Step completed in 287.6µs
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 3/3: Applying Sort { direction: Desc }
+# DEBUG: Input: List(["Banana", "Date"])
+# DEBUG: Result: List(2 items: ["Date", "Banana"])
+# DEBUG: Step completed in 156.3µs
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: PIPELINE COMPLETE
+# DEBUG: Total execution time: 1.2431ms
+# DEBUG: ═══════════════════════════════════════════════
 # Date Banana
 ```
 
-> 💡 **Want to see more?** Check out the [📚 Complete Documentation](#-complete-documentation) with 20+ operations and real-world examples!
+> 💡 **Want to see more?** Check out the [📚 Documentation](#-documentation) with 20+ operations and real-world examples!
 
 ## 🚀 Installation
 
@@ -138,38 +142,34 @@ echo "input" | string-pipeline '{template}'
 
 # Debug mode (shows each step)
 string-pipeline '{!split:,:..|map:{upper}}' "a,b,c"
-# DEBUG: Initial value: Str("a,b,c")
-# DEBUG: Applying operation 1: Split { sep: ",", range: Range(None, None, false) }
-# DEBUG: Result: List with 3 items:
-# DEBUG:   [0]: "a"
-# DEBUG:   [1]: "b"
-# DEBUG:   [2]: "c"
-# DEBUG: ---
-# DEBUG: Applying operation 2: Map { operations: [Upper] }
-# DEBUG: Map operation starting with 3 items
-# DEBUG: Map operations to apply: 1 steps
-# DEBUG:   Step 1: Upper
-# DEBUG: Processing item 1 of 3: "a"
-# DEBUG:   Item 1/3 initial value: Str("a")
-# DEBUG:   Item 1/3 applying step 1: Upper
-# DEBUG:   Item 1/3 step 1 result: String("A")
-# DEBUG: Processing item 2 of 3: "b"
-# DEBUG:   Item 2/3 initial value: Str("b")
-# DEBUG:   Item 2/3 applying step 1: Upper
-# DEBUG:   Item 2/3 step 1 result: String("B")
-# DEBUG: Processing item 3 of 3: "c"
-# DEBUG:   Item 3/3 initial value: Str("c")
-# DEBUG:   Item 3/3 applying step 1: Upper
-# DEBUG:   Item 3/3 step 1 result: String("C")
-# DEBUG: Map operation completed. Results:
-# DEBUG:   Item 1: "A"
-# DEBUG:   Item 2: "B"
-# DEBUG:   Item 3: "C"
-# DEBUG: Result: List with 3 items:
-# DEBUG:   [0]: "A"
-# DEBUG:   [1]: "B"
-# DEBUG:   [2]: "C"
-# DEBUG: ---
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: PIPELINE START: 2 operations to apply
+# DEBUG: Initial input: Str("a,b,c")
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 1/2: Applying Split { sep: ",", range: Range(None, None, false) }
+# DEBUG: Input: Str("a,b,c")
+# DEBUG: Result: List(3 items: ["a", "b", "c"])
+# DEBUG: Step completed in 342.7µs
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 2/2: Applying Map { operations: [Upper] }
+# DEBUG: Input: List(["a", "b", "c"])
+# DEBUG: MAP OPERATION: Processing 3 items
+# DEBUG: ┌─ Processing item 1 of 3 ─────────────
+# DEBUG: │  Input: "a" → Output: "A"
+# DEBUG: └────────────────────────────────────────────
+# DEBUG: ┌─ Processing item 2 of 3 ─────────────
+# DEBUG: │  Input: "b" → Output: "B"
+# DEBUG: └────────────────────────────────────────────
+# DEBUG: ┌─ Processing item 3 of 3 ─────────────
+# DEBUG: │  Input: "c" → Output: "C"
+# DEBUG: └────────────────────────────────────────────
+# DEBUG: MAP COMPLETED: 3 → 3 items
+# DEBUG: Result: List(3 items: ["A", "B", "C"])
+# DEBUG: Step completed in 15.2841ms
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: PIPELINE COMPLETE
+# DEBUG: Total execution time: 18.7456ms
+# DEBUG: ═══════════════════════════════════════════════
 # A,B,C
 ```
 
@@ -186,11 +186,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-## 📚 Complete Documentation
+## 📚 Documentation
 
-🎯 **[📖 Read the Full Template System Documentation](docs/template-system.md)**
+🎯 **[📖 Template System](docs/template-system.md)**
 
-🔗 **[⚙️ Complete CLI Options & Usage Guide](/docs/command-line-options.md)**
+🔗 **[⚙️  CLI Options & Usage](docs/command-line-options.md)**
+
+🐛 **[🔍 Comprehensive Debug System Guide](docs/debug-system.md)**
 
 **Everything you need to master String Pipeline:**
 
