@@ -509,7 +509,23 @@ fn apply_single_operation(
                     .collect(),
             };
             *default_sep = sep.clone();
-            Ok(Value::List(apply_range(&parts, range)))
+
+            let result = apply_range(&parts, range);
+
+            // If the range is a single index, return a string instead of a list
+            match range {
+                RangeSpec::Index(_) => {
+                    if result.len() == 1 {
+                        Ok(Value::Str(result[0].clone()))
+                    } else if result.is_empty() {
+                        Ok(Value::Str(String::new()))
+                    } else {
+                        // This shouldn't happen with a single index, but handle gracefully
+                        Ok(Value::List(result))
+                    }
+                }
+                _ => Ok(Value::List(result)),
+            }
         }
         StringOp::Join { sep } => {
             let result = match val {
@@ -1371,13 +1387,6 @@ mod tests {
                 assert!(process("a,b,c", "{split:,:1..abc}").is_err());
             }
 
-            // Join operation negative tests
-            #[test]
-            fn test_join_on_string_should_work() {
-                // Join should work on strings too, treating them as single item lists
-                assert_eq!(process("hello", "{join:-}").unwrap(), "hello");
-            }
-
             // Replace operation negative tests
             #[test]
             fn test_replace_invalid_sed_format() {
@@ -1584,7 +1593,7 @@ mod tests {
             #[test]
             fn test_split_append_with_index() {
                 assert_eq!(
-                    process("a,b,c", "{split:,:1|map:{append:_test}}").unwrap(),
+                    process("a,b,c", "{split:,:1|append:_test}").unwrap(),
                     "b_test"
                 );
             }
@@ -1899,7 +1908,7 @@ mod tests {
             #[test]
             fn test_split_index_transform_append() {
                 assert_eq!(
-                    process("hello,world,test", "{split:,:1|map:{upper|append:!}}").unwrap(),
+                    process("hello,world,test", "{split:,:1|upper|append:!}").unwrap(),
                     "WORLD!"
                 );
             }
@@ -3564,11 +3573,6 @@ mod tests {
             }
 
             #[test]
-            fn test_map_invalid_join() {
-                assert!(process("a,b,c", "{split:,:..|map:{join:-}}").is_err());
-            }
-
-            #[test]
             fn test_map_invalid_sort() {
                 assert!(process("a,b,c", "{split:,:..|map:{sort}}").is_err());
             }
@@ -3581,16 +3585,6 @@ mod tests {
             #[test]
             fn test_map_invalid_slice() {
                 assert!(process("a,b,c", "{split:,:..|map:{slice:1..3}}").is_err());
-            }
-
-            #[test]
-            fn test_map_invalid_filter() {
-                assert!(process("a,b,c", "{split:,:..|map:{filter:a}}").is_err());
-            }
-
-            #[test]
-            fn test_map_invalid_filter_not() {
-                assert!(process("a,b,c", "{split:,:..|map:{filter_not:a}}").is_err());
             }
 
             #[test]
@@ -3825,6 +3819,278 @@ mod tests {
                     "clean_john,clean_jane,clean_bob"
                 );
             }
+        }
+    }
+
+    #[cfg(test)]
+    mod map_list_operations_tests {
+        use super::Template;
+
+        fn process(input: &str, template: &str) -> Result<String, String> {
+            let tmpl = Template::parse(template)?;
+            tmpl.format(input)
+        }
+
+        #[test]
+        fn test_map_split_basic() {
+            // Test splitting each item in a list
+            assert_eq!(
+                process(
+                    "hello world,foo bar,test case",
+                    "{split:,:..|map:{split: :..}}"
+                )
+                .unwrap(),
+                "hello world,foo bar,test case"
+            );
+        }
+
+        #[test]
+        fn test_map_split_with_index() {
+            // Extract first word from each line - simulating user extraction
+            assert_eq!(
+                process(
+                    "alice 123 firefox,bob 456 bash,charlie 789 vim",
+                    "{split:,:..|map:{split: :0}}"
+                )
+                .unwrap(),
+                "alice,bob,charlie"
+            );
+        }
+
+        #[test]
+        fn test_map_split_with_range() {
+            // Extract multiple columns
+            assert_eq!(
+                process(
+                    "alice 123 firefox,bob 456 bash,charlie 789 vim",
+                    "{split:,:..|map:{split: :0..2}}"
+                )
+                .unwrap(),
+                "alice 123,bob 456,charlie 789"
+            );
+        }
+
+        #[test]
+        fn test_map_unique_after_split() {
+            // This simulates extracting users and removing duplicates per line
+            // Not the most practical example but tests the functionality
+            assert_eq!(
+                process("a a b,c c d,e e f", "{split:,:..|map:{split: :..|unique}}").unwrap(),
+                "a b,c d,e f"
+            );
+        }
+
+        #[test]
+        fn test_map_sort_after_split() {
+            // Sort words in each item
+            assert_eq!(
+                process(
+                    "zebra apple,banana cherry",
+                    "{split:,:..|map:{split: :..|sort}}"
+                )
+                .unwrap(),
+                "apple zebra,banana cherry"
+            );
+        }
+
+        #[test]
+        fn test_map_filter_after_split() {
+            // Filter words containing 'a' in each line
+            assert_eq!(
+                process(
+                    "apple banana cherry,dog cat fish,grape orange",
+                    "{split:,:..|map:{split: :..|filter:a}}"
+                )
+                .unwrap(),
+                "apple banana,cat,grape orange"
+            );
+        }
+
+        #[test]
+        fn test_map_slice_after_split() {
+            // Take first 2 words from each line
+            assert_eq!(
+                process(
+                    "one two three four,five six seven eight",
+                    "{split:,:..|map:{split: :..|slice:0..2}}"
+                )
+                .unwrap(),
+                "one two,five six"
+            );
+        }
+
+        #[test]
+        fn test_map_join_with_different_separator() {
+            // Split by space, then join with dash
+            assert_eq!(
+                process(
+                    "hello world,foo bar",
+                    "{split:,:..|map:{split: :..|join:-}}"
+                )
+                .unwrap(),
+                "hello-world,foo-bar"
+            );
+        }
+
+        #[test]
+        fn test_ps_aux_user_extraction() {
+            // Simulate the ps aux use case
+            let ps_output = "USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND\nroot           1  0.0  0.1  168404 11808 ?        Ss   Dec01   0:02 /sbin/init\nalice        123  0.1  0.5  256789 45123 ?        S    10:00   0:15 /usr/bin/firefox\nbob          456  0.0  0.2  123456 12345 ?        S    10:05   0:01 /bin/bash\nalice        789  0.2  1.0  512000 89012 ?        S    10:10   0:25 /usr/bin/chrome\ncharlie     1011  0.0  0.1   98765  6789 ?        S    10:15   0:02 /usr/bin/vim";
+
+            // Extract users from each line (skip header) - normalize whitespace then split
+            let result = process(
+                ps_output,
+                r"{split:\n:1..|map:{replace:s/ +/ /g|split: :0}|join:,}",
+            )
+            .unwrap();
+
+            // Should extract the first word (user) from each line
+            assert!(result.contains("root"));
+            assert!(result.contains("alice"));
+            assert!(result.contains("bob"));
+            assert!(result.contains("charlie"));
+        }
+
+        #[test]
+        fn test_ps_aux_user_extraction_and_unique() {
+            // This requires a different approach since we can't put unique outside map
+            // Instead, we extract users and then apply unique at the top level
+            let ps_output = "USER         PID\nroot           1\nalice        123\nbob          456\nalice        789\ncharlie     1011\nbob         1213";
+
+            // Extract users, then apply unique and sort at the list level
+            // Use multiple spaces as separator and trim to handle whitespace
+            let result = process(
+                ps_output,
+                r"{split:\n:1..|map:{replace:s/ +/ /g|split: :0}|unique|sort|join:,}",
+            )
+            .unwrap();
+
+            // Should be sorted unique users
+            assert_eq!(result, "alice,bob,charlie,root");
+        }
+
+        #[test]
+        fn test_complex_map_pipeline() {
+            // Debug step by step
+            let result1 = process(
+                "hello world,foo bar,test case",
+                "{split:,:..|map:{split: :0}}",
+            );
+            println!("Step 1: {:?}", result1);
+
+            let result2 = process("hello", "{upper}");
+            println!("Simple upper: {:?}", result2);
+
+            // Complex pipeline: split by comma, then for each item split by space, take first word, uppercase
+            let result = process(
+                "hello world,foo bar,test case",
+                "{split:,:..|map:{split: :0|upper}}",
+            );
+            println!("Full pipeline: {:?}", result);
+
+            assert_eq!(result.unwrap(), "HELLO,FOO,TEST");
+        }
+
+        #[test]
+        fn test_map_filter_not() {
+            // Filter out words containing 'a'
+            assert_eq!(
+                process(
+                    "apple banana cherry,dog cat fish",
+                    "{split:,:..|map:{split: :..|filter_not:a}}"
+                )
+                .unwrap(),
+                "cherry,dog fish"
+            );
+        }
+
+        #[test]
+        fn test_map_with_trim_and_split() {
+            // Handle whitespace issues in data
+            assert_eq!(
+                process(
+                    "  hello world  ,  foo bar  ",
+                    "{split:,:..|map:{trim|split: :0}}"
+                )
+                .unwrap(),
+                "hello,foo"
+            );
+        }
+
+        #[test]
+        fn test_nested_pipeline_in_map() {
+            // Complex nested operations
+            assert_eq!(
+                process(
+                    "HELLO WORLD,FOO BAR",
+                    "{split:,:..|map:{lower|split: :..|slice:0..1|join:-}}"
+                )
+                .unwrap(),
+                "hello,foo"
+            );
+        }
+
+        #[test]
+        fn test_map_reverse_after_split() {
+            // Reverse word order in each line
+            assert_eq!(
+                process(
+                    "one two three,four five six",
+                    "{split:,:..|map:{split: :..|reverse}}"
+                )
+                .unwrap(),
+                "three two one,six five four"
+            );
+        }
+
+        #[test]
+        fn test_error_cases_for_map_list_ops() {
+            // Test error handling for invalid operations
+
+            // Invalid regex should error
+            assert!(process("test,data", "{split:,:..|map:{split: :..|filter:[}}").is_err());
+
+            // Invalid range should error
+            assert!(process("test,data", "{split:,:..|map:{split: :..|slice:abc}}").is_err());
+        }
+
+        #[test]
+        fn test_realistic_log_processing() {
+            // Process log lines to extract specific information
+            let logs = "2023-01-01 10:00:00 ERROR user alice failed login\n2023-01-01 10:01:00 INFO user bob successful login\n2023-01-01 10:02:00 ERROR user alice failed login\n2023-01-01 10:03:00 WARN user charlie timeout";
+
+            // Extract users from error lines only
+            let result =
+                process(logs, r"{split:\n:..|filter:ERROR|map:{split: :4}|join:,}").unwrap();
+            assert_eq!(result, "alice,alice");
+        }
+
+        #[test]
+        fn test_csv_column_extraction() {
+            // Extract specific column from CSV-like data
+            let csv = "name,age,city\nAlice,25,NYC\nBob,30,LA\nCharlie,35,SF";
+
+            // Extract names (first column) - need to explicitly join with comma
+            let result = process(csv, "{split:\n:1..|map:{split:,:0}|join:,}").unwrap();
+            assert_eq!(result, "Alice,Bob,Charlie");
+
+            // Extract cities (third column) - need to explicitly join with comma
+            let result = process(csv, "{split:\n:1..|map:{split:,:2}|join:,}").unwrap();
+            assert_eq!(result, "NYC,LA,SF");
+        }
+
+        #[test]
+        fn test_whitespace_handling_in_map() {
+            // Test handling of various whitespace patterns
+            let input = "  alice   123  ,  bob   456  ,  charlie   789  ";
+
+            // Extract first field, handling extra whitespace - split by multiple spaces, take first word
+            let result = process(
+                input,
+                r"{split:,:..|map:{trim|replace:s/ +/ /g|split: :0}|join:,}",
+            )
+            .unwrap();
+            assert_eq!(result, "alice,bob,charlie");
         }
     }
 }

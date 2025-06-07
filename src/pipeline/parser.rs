@@ -233,10 +233,75 @@ fn parse_map_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, St
     let mut operations = Vec::with_capacity(16);
     for op_pair in operation_list_pair.into_inner() {
         let inner_op_pair = op_pair.into_inner().next().unwrap();
-        operations.push(parse_operation(inner_op_pair)?);
+        operations.push(parse_map_inner_operation(inner_op_pair)?);
     }
 
     Ok(StringOp::Map { operations })
+}
+
+fn parse_map_inner_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String> {
+    match pair.as_rule() {
+        // String operations (existing)
+        Rule::substring => Ok(StringOp::Substring {
+            range: extract_range_arg(pair)?,
+        }),
+        Rule::replace => {
+            let sed_parts = parse_sed_string(pair.into_inner().next().unwrap())?;
+            Ok(StringOp::Replace {
+                pattern: sed_parts.0,
+                replacement: sed_parts.1,
+                flags: sed_parts.2,
+            })
+        }
+        Rule::append => Ok(StringOp::Append {
+            suffix: extract_single_arg(pair)?,
+        }),
+        Rule::prepend => Ok(StringOp::Prepend {
+            prefix: extract_single_arg(pair)?,
+        }),
+        Rule::upper => Ok(StringOp::Upper),
+        Rule::lower => Ok(StringOp::Lower),
+        Rule::trim => {
+            let chars = parse_trim_chars(pair.clone());
+            let direction = parse_trim_direction(pair);
+            Ok(StringOp::Trim { chars, direction })
+        }
+        Rule::pad => parse_pad_operation(pair),
+        Rule::reverse => Ok(StringOp::Reverse),
+        Rule::strip_ansi => Ok(StringOp::StripAnsi),
+        Rule::map_regex_extract => parse_regex_extract_operation(pair),
+
+        // List operations (new)
+        Rule::map_split => {
+            let mut parts = pair.into_inner();
+            let sep_part = parts.next().unwrap();
+            let sep = process_arg(sep_part.as_str());
+            let range = if let Some(range_part) = parts.next() {
+                parse_range_spec(range_part)?
+            } else {
+                RangeSpec::Range(None, None, false)
+            };
+            Ok(StringOp::Split { sep, range })
+        }
+        Rule::map_join => Ok(StringOp::Join {
+            sep: extract_single_arg(pair)?,
+        }),
+        Rule::map_slice => Ok(StringOp::Slice {
+            range: extract_range_arg(pair)?,
+        }),
+        Rule::map_sort => Ok(StringOp::Sort {
+            direction: parse_sort_direction(pair),
+        }),
+        Rule::map_unique => Ok(StringOp::Unique),
+        Rule::map_filter => Ok(StringOp::Filter {
+            pattern: extract_single_arg_raw(pair)?,
+        }),
+        Rule::map_filter_not => Ok(StringOp::FilterNot {
+            pattern: extract_single_arg_raw(pair)?,
+        }),
+
+        _ => Err(format!("Unsupported map operation: {:?}", pair.as_rule())),
+    }
 }
 
 fn process_arg(s: &str) -> String {

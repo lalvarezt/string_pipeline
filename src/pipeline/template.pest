@@ -78,8 +78,24 @@ map_inner_operation = {
   | trim
   | pad
   | reverse
+  | map_split
+  | map_join
+  | map_slice
+  | map_sort
+  | map_unique
+  | map_filter
+  | map_filter_not
   | map_regex_extract
 }
+
+// Map-specific operations that need special handling
+map_split      = { "split" ~ ":" ~ split_arg ~ (":" ~ range_spec)? }
+map_join       = { "join" ~ ":" ~ simple_arg }
+map_slice      = { "slice" ~ ":" ~ range_spec }
+map_sort       = { "sort" ~ (":" ~ sort_direction)? }
+map_unique     = { "unique" }
+map_filter     = { "filter" ~ ":" ~ map_regex_arg }
+map_filter_not = { "filter_not" ~ ":" ~ map_regex_arg }
 
 // Map-specific regex extract
 map_regex_extract = { "regex_extract" ~ ":" ~ map_regex_arg ~ (":" ~ number)? }
