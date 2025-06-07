@@ -1,5 +1,6 @@
 use regex::Regex;
 mod parser;
+use std::time::Instant;
 use strip_ansi_escapes::strip;
 
 pub use crate::pipeline::template::Template;
@@ -142,6 +143,92 @@ pub fn apply_ops(input: &str, ops: &[StringOp], debug: bool) -> Result<String, S
     apply_ops_internal(input, ops, debug, None)
 }
 
+#[derive(Debug, Clone)]
+struct DebugContext {
+    item_num: usize,
+    total_items: usize,
+    pipeline_depth: usize,
+    operation_path: Vec<String>,
+}
+
+impl DebugContext {
+    fn new(item_num: usize, total_items: usize) -> Self {
+        Self {
+            item_num,
+            total_items,
+            pipeline_depth: 0,
+            operation_path: Vec::new(),
+        }
+    }
+
+    fn with_depth(&self, depth: usize) -> Self {
+        Self {
+            pipeline_depth: depth,
+            ..self.clone()
+        }
+    }
+
+    fn with_operation(&self, op_name: &str) -> Self {
+        let mut path = self.operation_path.clone();
+        path.push(op_name.to_string());
+        Self {
+            operation_path: path,
+            ..self.clone()
+        }
+    }
+
+    fn indent(&self) -> String {
+        "  ".repeat(self.pipeline_depth + 1)
+    }
+
+    fn format_value(&self, val: &Value) -> String {
+        match val {
+            Value::Str(s) => {
+                if s.len() > 100 {
+                    format!("String(len={}, preview={:?}...)", s.len(), &s[..50])
+                } else {
+                    format!("String({:?})", s)
+                }
+            }
+            Value::List(list) => {
+                if list.is_empty() {
+                    "List(empty)".to_string()
+                } else if list.len() == 1 {
+                    format!("List(1 item: {:?})", list[0])
+                } else if list.len() <= 5 {
+                    format!("List({} items: {:?})", list.len(), list)
+                } else {
+                    format!(
+                        "List({} items: {:?}...{:?})",
+                        list.len(),
+                        &list[..3],
+                        &list[list.len() - 2..]
+                    )
+                }
+            }
+        }
+    }
+}
+
+fn debug_print(ctx: Option<&DebugContext>, message: &str) {
+    match ctx {
+        Some(ctx) => {
+            let prefix = if ctx.item_num > 0 {
+                format!("DEBUG: [Item {}/{}]", ctx.item_num, ctx.total_items)
+            } else {
+                "DEBUG:".to_string()
+            };
+            let path = if !ctx.operation_path.is_empty() {
+                format!(" [{}]", ctx.operation_path.join(" → "))
+            } else {
+                String::new()
+            };
+            eprintln!("{}{}{} {}", prefix, path, ctx.indent(), message);
+        }
+        None => eprintln!("DEBUG: {}", message),
+    }
+}
+
 fn apply_ops_internal(
     input: &str,
     ops: &[StringOp],
@@ -150,29 +237,56 @@ fn apply_ops_internal(
 ) -> Result<String, String> {
     let mut val = Value::Str(input.to_string());
     let mut default_sep = " ".to_string();
+    let start_time = if debug { Some(Instant::now()) } else { None };
 
     if debug {
-        match &debug_context {
-            Some(ctx) => eprintln!(
-                "DEBUG:   Item {}/{} initial value: {:?}",
-                ctx.item_num, ctx.total_items, val
+        let ctx = debug_context.as_ref();
+        debug_print(ctx, "═══════════════════════════════════════════════");
+        debug_print(
+            ctx,
+            &format!("PIPELINE START: {} operations to apply", ops.len()),
+        );
+        debug_print(
+            ctx,
+            &format!(
+                "Initial input: {}",
+                if let Some(ref ctx) = debug_context {
+                    ctx.format_value(&val)
+                } else {
+                    format!("{:?}", val)
+                }
             ),
-            None => eprintln!("DEBUG: Initial value: {:?}", val),
+        );
+
+        if ops.len() > 1 {
+            debug_print(ctx, "Operations to apply:");
+            for (i, op) in ops.iter().enumerate() {
+                debug_print(ctx, &format!("  {}. {:?}", i + 1, op));
+            }
         }
+        debug_print(ctx, "───────────────────────────────────────────────");
     }
 
     for (i, op) in ops.iter().enumerate() {
+        let step_start = if debug { Some(Instant::now()) } else { None };
+
         if debug {
-            match &debug_context {
-                Some(ctx) => eprintln!(
-                    "DEBUG:   Item {}/{} applying step {}: {:?}",
-                    ctx.item_num,
-                    ctx.total_items,
-                    i + 1,
-                    op
+            let ctx = debug_context.as_ref();
+            debug_print(
+                ctx,
+                &format!("STEP {}/{}: Applying {:?}", i + 1, ops.len(), op),
+            );
+            debug_print(
+                ctx,
+                &format!(
+                    "Input: {}",
+                    if let Some(ref ctx) = debug_context {
+                        ctx.format_value(&val)
+                    } else {
+                        format!("{:?}", val)
+                    }
                 ),
-                None => eprintln!("DEBUG: Applying operation {}: {:?}", i + 1, op),
-            }
+            );
         }
 
         match op {
@@ -183,11 +297,18 @@ fn apply_ops_internal(
 
                 if let Value::List(list) = val {
                     if debug {
-                        eprintln!("DEBUG: Map operation starting with {} items", list.len());
-                        eprintln!("DEBUG: Map operations to apply: {} steps", operations.len());
+                        debug_print(
+                            None,
+                            &format!("MAP OPERATION: Processing {} items", list.len()),
+                        );
+                        debug_print(
+                            None,
+                            &format!("Map pipeline: {} operations", operations.len()),
+                        );
                         for (op_idx, map_op) in operations.iter().enumerate() {
-                            eprintln!("DEBUG:   Step {}: {:?}", op_idx + 1, map_op);
+                            debug_print(None, &format!("  Map step {}: {:?}", op_idx + 1, map_op));
                         }
+                        debug_print(None, "───────────────────────────────────────────────");
                     }
 
                     let mapped = list
@@ -195,27 +316,55 @@ fn apply_ops_internal(
                         .enumerate()
                         .map(|(item_idx, item)| {
                             if debug {
-                                eprintln!(
-                                    "DEBUG: Processing item {} of {}: {:?}",
-                                    item_idx + 1,
-                                    list.len(),
-                                    item
+                                debug_print(
+                                    None,
+                                    &format!(
+                                        "┌─ Processing item {} of {} ─────────────",
+                                        item_idx + 1,
+                                        list.len()
+                                    ),
                                 );
+                                debug_print(None, &format!("│  Input: {:?}", item));
                             }
 
-                            let ctx = DebugContext {
-                                item_num: item_idx + 1,
-                                total_items: list.len(),
-                            };
+                            let ctx = DebugContext::new(item_idx + 1, list.len())
+                                .with_depth(1)
+                                .with_operation("map");
 
-                            apply_ops_internal(item, operations, debug, Some(ctx))
+                            let result = apply_ops_internal(item, operations, debug, Some(ctx));
+
+                            if debug {
+                                match &result {
+                                    Ok(output) => {
+                                        debug_print(None, &format!("│  Output: {:?}", output))
+                                    }
+                                    Err(e) => debug_print(None, &format!("│  ERROR: {}", e)),
+                                }
+                                debug_print(None, "└────────────────────────────────────────────");
+                            }
+
+                            result
                         })
                         .collect::<Result<Vec<_>, _>>()?;
 
                     if debug {
-                        eprintln!("DEBUG: Map operation completed. Results:");
-                        for (idx, result) in mapped.iter().enumerate() {
-                            eprintln!("DEBUG:   Item {}: {:?}", idx + 1, result);
+                        debug_print(
+                            None,
+                            &format!("MAP COMPLETED: {} → {} items", list.len(), mapped.len()),
+                        );
+                        if mapped.len() <= 10 {
+                            for (idx, result) in mapped.iter().enumerate() {
+                                debug_print(None, &format!("  Result[{}]: {:?}", idx, result));
+                            }
+                        } else {
+                            debug_print(
+                                None,
+                                &format!(
+                                    "  Results: {:?}...{:?} (showing first/last)",
+                                    &mapped[..3],
+                                    &mapped[mapped.len() - 2..]
+                                ),
+                            );
                         }
                     }
 
@@ -232,42 +381,71 @@ fn apply_ops_internal(
         }
 
         if debug {
-            match &debug_context {
-                Some(ctx) => match &val {
-                    Value::Str(s) => eprintln!(
-                        "DEBUG:   Item {}/{} step {} result: String({:?})",
-                        ctx.item_num,
-                        ctx.total_items,
-                        i + 1,
-                        s
-                    ),
-                    Value::List(list) => {
-                        eprintln!(
-                            "DEBUG:   Item {}/{} step {} result: List with {} items:",
-                            ctx.item_num,
-                            ctx.total_items,
-                            i + 1,
-                            list.len()
-                        );
-                        for (idx, item) in list.iter().enumerate() {
-                            eprintln!("DEBUG:     [{}]: {:?}", idx, item);
-                        }
-                    }
-                },
-                None => {
-                    match &val {
-                        Value::Str(s) => eprintln!("DEBUG: Result: String({:?})", s),
-                        Value::List(list) => {
-                            eprintln!("DEBUG: Result: List with {} items:", list.len());
-                            for (idx, item) in list.iter().enumerate() {
-                                eprintln!("DEBUG:   [{}]: {:?}", idx, item);
+            let ctx = debug_context.as_ref();
+            let elapsed = step_start.unwrap().elapsed();
+
+            debug_print(
+                ctx,
+                &format!(
+                    "Result: {}",
+                    if let Some(ref ctx) = debug_context {
+                        ctx.format_value(&val)
+                    } else {
+                        match &val {
+                            Value::Str(s) => format!("String({:?})", s),
+                            Value::List(list) => {
+                                if list.len() <= 5 {
+                                    format!("List({} items: {:?})", list.len(), list)
+                                } else {
+                                    format!(
+                                        "List({} items: showing first 3: {:?}...)",
+                                        list.len(),
+                                        &list[..3]
+                                    )
+                                }
                             }
                         }
                     }
-                    eprintln!("DEBUG: ---");
+                ),
+            );
+            debug_print(ctx, &format!("Step completed in {:?}", elapsed));
+
+            // Add memory usage info for large datasets
+            match &val {
+                Value::List(list) if list.len() > 1000 => {
+                    let total_chars: usize = list.iter().map(|s| s.len()).sum();
+                    debug_print(
+                        ctx,
+                        &format!("Memory: ~{} chars across {} items", total_chars, list.len()),
+                    );
                 }
+                Value::Str(s) if s.len() > 10000 => {
+                    debug_print(ctx, &format!("Memory: ~{} chars in string", s.len()));
+                }
+                _ => {}
             }
+
+            debug_print(ctx, "───────────────────────────────────────────────");
         }
+    }
+
+    if debug {
+        let ctx = debug_context.as_ref();
+        let total_elapsed = start_time.unwrap().elapsed();
+        debug_print(ctx, "PIPELINE COMPLETE");
+        debug_print(ctx, &format!("Total execution time: {:?}", total_elapsed));
+        debug_print(
+            ctx,
+            &format!(
+                "Final result: {}",
+                if let Some(ref ctx) = debug_context {
+                    ctx.format_value(&val)
+                } else {
+                    format!("{:?}", val)
+                }
+            ),
+        );
+        debug_print(ctx, "═══════════════════════════════════════════════");
     }
 
     Ok(match val {
@@ -280,12 +458,6 @@ fn apply_ops_internal(
             }
         }
     })
-}
-
-#[derive(Debug, Clone)]
-struct DebugContext {
-    item_num: usize,
-    total_items: usize,
 }
 
 fn apply_string_operation<F>(val: Value, transform: F, op_name: &str) -> Result<Value, String>
