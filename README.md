@@ -45,6 +45,7 @@ string-pipeline "{split:,:..|map:{regex_extract:@(.+):1}|sort}" "john.doe@email.
 - **🗺️ Powerful Mapping**: Apply sub-pipelines to each list item
 - **🔍 Regex Support**: sed-like patterns for complex transformations
 - **🐛 Debug Mode**: Step-by-step operation visualization
+- **⚡ Performance Tools**: Comprehensive benchmarking and optimization
 - **📥 Flexible I/O**: CLI tool + embeddable Rust library
 
 ## ⚡ Quick Examples
@@ -194,6 +195,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 🐛 **[🔍 Comprehensive Debug System Guide](docs/debug-system.md)**
 
+⚡ **[📊 Performance Benchmarking Guide](docs/benchmarking.md)**
+
 **Everything you need to master String Pipeline:**
 
 - **🏗️ Template Syntax** - Structure, chaining, escaping rules
@@ -222,6 +225,33 @@ cargo test -- --nocapture
 # Run benchmarks
 cargo bench
 ```
+
+## ⚡ Performance & Benchmarking
+
+String Pipeline includes simple benchmarking tools for measuring performance:
+
+```bash
+# Build the benchmark tool
+cargo build --release --bin bench
+
+# Run benchmarks (1000 iterations)
+./target/release/bench
+
+# Quick performance check (100 iterations)
+./target/release/bench --iterations 100
+
+# Generate JSON for scripts
+./target/release/bench --format json > benchmark_results.json
+```
+
+**Performance Examples:**
+
+- **Fast basic operations**: 100-150ns (upper, lower, trim)
+- **List processing**: 3-6μs (split, join, sort)
+- **Complex transformations**: 10-60μs (map operations, regex)
+- **Release builds**: 3-10x faster than debug builds
+
+See the [📊 Performance Benchmarking Guide](docs/benchmarking.md) for timing details and measurement tips.
 
 ## 🤝 Contributing
 

@@ -14,6 +14,7 @@ A comprehensive CLI tool for powerful string transformations with flexible input
 - [🔄 Advanced Workflows](#-advanced-workflows)
 - [⚠️ Error Handling](#️-error-handling)
 - [💡 Best Practices](#-best-practices)
+- [⚡ Performance & Benchmarking](#-performance--benchmarking)
 - [🔧 Troubleshooting](#-troubleshooting)
 
 ## 🏗️ Basic Usage
@@ -723,6 +724,200 @@ fi
     echo "Processing completed at $(date)"
 } 2>&1 | tee process.log
 ```
+
+## ⚡ Performance & Benchmarking
+
+String Pipeline includes simple benchmarking tools for measuring performance and basic optimization.
+
+### 🔬 Built-in Benchmarking Tool
+
+The benchmarking binary provides timing analysis:
+
+```bash
+# Build the benchmark tool
+cargo build --release --bin bench
+
+# Run benchmarks (1000 iterations)
+./target/release/bench
+
+# Quick performance check
+./target/release/bench --iterations 100
+
+# JSON output for scripts
+./target/release/bench --format json > benchmark_results.json
+```
+
+### 📊 Performance Metrics
+
+**Understanding the Output:**
+
+```bash
+./target/release/bench --iterations 100
+```
+
+```text
+📊 Summary:
+• Total tests run: 33
+• Total execution time: 49.78ms
+• Iterations per test: 100
+
+📈 Detailed Results:
+Operation                                               Average          Min          Max
+----------------------------------------------------------------------------------------
+Single: upper                                             125ns        100ns        150ns
+Single: split                                            3.46μs       2.90μs       3.90μs
+Map: split + map(upper) + join                           7.79μs       6.80μs       8.80μs
+Complex: split + map(upper+replace) + join              50.77μs      45.10μs      58.40μs
+```
+
+### 🎯 Using Performance Data
+
+**Identify Bottlenecks:**
+
+1. **🕐 Timing Analysis**
+   - Operations > 50μs may need optimization
+   - Look for outliers indicating inconsistent performance
+   - Compare similar operations to understand overhead
+
+2. **📈 Scaling Patterns**
+   - Basic operations: O(n) with input size
+   - Map operations: O(n × complexity) where complexity is sub-template cost
+   - Regex operations: Compilation overhead + O(n) matching
+
+### 🚀 Real-Time Performance Monitoring
+
+**CLI Debug Timing:**
+
+```bash
+# Get per-operation timing with debug mode
+string-pipeline -d '{split:,:..|map:{upper}|sort}' 'large,data,set'
+```
+
+Look for timing information in debug output:
+
+```text
+DEBUG: Step completed in 342.7µs
+DEBUG: MAP COMPLETED: 3 → 3 items
+DEBUG: Step completed in 15.2841ms
+DEBUG: Total execution time: 18.7456ms
+```
+
+### 🏭 Production Performance Optimization
+
+**Template Optimization Strategies:**
+
+1. **⚡ Operation Ordering**
+
+   ```bash
+   # ✅ Filter early to reduce data
+   '{split:,:..|filter:important|map:{expensive_operation}}'
+
+   # ❌ Process all data then filter
+   '{split:,:..|map:{expensive_operation}|filter:IMPORTANT}'
+   ```
+
+2. **🎯 Range Optimization**
+
+   ```bash
+   # ✅ Direct range specification
+   '{split:,:0..10}'
+
+   # ❌ Split all then slice
+   '{split:,:..|slice:0..10}'
+   ```
+
+3. **🔄 Map Consolidation**
+
+   ```bash
+   # ✅ Single map operation
+   '{split:,:..|map:{trim|upper|append:!}}'
+
+   # ❌ Multiple map operations
+   '{split:,:..|map:{trim}|map:{upper}|map:{append:!}}'
+   ```
+
+### 📈 CI/CD Performance Integration
+
+**Automated Performance Testing:**
+
+```bash
+#!/bin/bash
+# performance_check.sh
+
+# Run benchmarks and save results
+./target/release/bench --format json > current_benchmark.json
+
+# Compare with baseline (implement your comparison logic)
+if [ -f baseline_benchmark.json ]; then
+    # Your performance comparison logic here
+    echo "Comparing against baseline..."
+fi
+
+# Performance threshold check
+TOTAL_TIME=$(jq '.summary.total_execution_time_ns' current_benchmark.json)
+THRESHOLD=100000000  # 100ms threshold
+
+if [ "$TOTAL_TIME" -gt "$THRESHOLD" ]; then
+    echo "Performance threshold exceeded!"
+    exit 1
+fi
+```
+
+**GitHub Actions Integration:**
+
+```yaml
+# .github/workflows/performance.yml
+- name: Run Performance Tests
+  run: |
+    cargo build --release --bin bench
+    ./target/release/bench --format json > benchmark_results.json
+
+- name: Upload Performance Results
+  uses: actions/upload-artifact@v3
+  with:
+    name: benchmark-results
+    path: benchmark_results.json
+```
+
+### 🔍 Profiling Complex Templates
+
+**Step-by-Step Performance Analysis:**
+
+```bash
+# Profile a complex template piece by piece
+echo "Complex template performance analysis:"
+
+# Step 1: Measure split operation
+time string-pipeline '{split:,:..|!}' "$LARGE_DATA"
+
+# Step 2: Measure split + map
+time string-pipeline '{split:,:..|map:{upper}}' "$LARGE_DATA"
+
+# Step 3: Measure full pipeline
+time string-pipeline '{split:,:..|map:{upper|replace:s/A/X/}|sort}' "$LARGE_DATA"
+```
+
+### 💡 Performance Best Practices
+
+**For High-Throughput Applications:**
+
+1. **🏗️ Architecture Choices**
+   - Use the Rust library directly for maximum performance
+   - Batch processing instead of per-item CLI calls
+   - Pre-compile templates once, reuse many times
+
+2. **📊 Data Considerations**
+   - Larger input strings amortize operation overhead
+   - Consider memory vs. speed trade-offs for very large datasets
+   - Profile with realistic data sizes and patterns
+
+3. **🔧 Optimization Workflow**
+   - Start with benchmark tool baseline
+   - Use debug mode to identify bottlenecks
+   - Apply optimization strategies systematically
+   - Re-benchmark to check improvements
+
+> 📊 **More Details:** For performance measurement tips and optimization ideas, see the [Performance Benchmarking Guide](benchmarking.md).
 
 ## 🔧 Troubleshooting
 

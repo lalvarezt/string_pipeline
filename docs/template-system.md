@@ -47,6 +47,7 @@ A powerful string processing template system with support for splitting, transfo
     - [✅ Do's](#-dos)
     - [❌ Don'ts](#-donts)
     - [Performance Tips](#performance-tips)
+- [⚡ Performance Characteristics](#-performance-characteristics)
 
 ## 🚀 Quick Start
 
@@ -1293,3 +1294,118 @@ Template: "{split:,:..|map:{upper}}"
 🔍 **Try debug mode** (`{!...}`) to see exactly how your template is being processed!
 
 🐛 **For advanced debugging**, check out the [Debug System Guide](debug-system.md) for comprehensive troubleshooting techniques, performance analysis, and real-world debugging examples!
+
+## ⚡ Performance Characteristics
+
+Understanding operation performance helps optimize templates for production use and identifies potential bottlenecks in complex pipelines.
+
+### 🏆 Performance Categories
+
+**🚀 Ultra-Fast Operations (100-200ns)**
+
+- `upper`, `lower`, `trim` - Basic string transformations with minimal overhead
+- Perfect for high-frequency processing
+
+**⚡ Fast Operations (500ns-5μs)**
+
+- `reverse`, `append`, `prepend` - Simple transformations and concatenations
+- `split`, `join`, `sort` - Core list operations with optimized algorithms
+
+**🔄 Moderate Operations (5-20μs)**
+
+- `unique`, `filter`, `slice` - Operations requiring data examination
+- Good for medium-complexity workflows
+
+**🔍 Complex Operations (20-100μs)**
+
+- `replace`, `regex_extract` - Pattern matching with regex compilation
+- `map` operations - Per-item processing overhead
+- Consider caching compiled patterns for repeated use
+
+### 📊 Real-World Performance Data
+
+Based on simple benchmarks with 1000 iterations on test data:
+
+| Operation Category | Average Time | Best Use Case |
+|-------------------|--------------|---------------|
+| **String Basics** | 130-150ns | Real-time processing, hot paths |
+| **List Processing** | 3-6μs | Data pipelines, batch processing |
+| **Map Operations** | 8-15μs | Item-by-item transformations |
+| **Complex Patterns** | 50-100μs | Advanced text processing |
+
+### 🎯 Optimization Strategies
+
+**For High-Performance Applications:**
+
+1. **Minimize Map Operations**
+
+   ```bash
+   # Faster: Single map with multiple operations
+   {split:,:..|map:{trim|upper|append:!}}
+
+   # Slower: Multiple separate map operations
+   {split:,:..|map:{trim}|map:{upper}|map:{append:!}}
+   ```
+
+2. **Filter Early in Pipeline**
+
+   ```bash
+   # Efficient: Reduce data size early
+   {split:,:..|filter:important|map:{complex_processing}}
+
+   # Inefficient: Process all data then filter
+   {split:,:..|map:{complex_processing}|filter:IMPORTANT}
+   ```
+
+3. **Use Specific Ranges**
+
+   ```bash
+   # Direct: Split with range (faster)
+   {split:,:1..10}
+
+   # Indirect: Split all then slice (slower for large inputs)
+   {split:,:..|slice:1..10}
+   ```
+
+### 🔬 Testing Your Templates
+
+Use the built-in benchmarking tool to measure your specific templates:
+
+```bash
+# Build the benchmark tool
+cargo build --release --bin bench
+
+# Run performance tests
+./target/release/bench --iterations 1000
+
+# Get machine-readable results
+./target/release/bench --format json > performance.json
+```
+
+**Custom Template Testing:**
+
+For performance-sensitive applications, consider creating custom tests for your specific templates and data patterns. The debug system also provides per-operation timing:
+
+```bash
+# Debug with timing information
+string-pipeline '{!your_complex_template}' "your_data"
+# Look for "Step completed in XXXμs" in debug output
+```
+
+### 🏭 Production Considerations
+
+**Release Builds:** Always use `--release` builds in production - they're 3-10x faster than debug builds.
+
+**Memory Usage:** Most operations have minimal memory overhead, but be aware that:
+
+- `unique` maintains a hash set of seen values
+- `sort` creates temporary collections
+- Large `split` operations create many string allocations
+
+**Scaling Patterns:**
+
+- Operations scale linearly with input size
+- Map operations scale with both input size and sub-template complexity
+- Regex operations have compilation overhead but efficient matching
+
+> 📊 **Performance Details:** See the [Performance Benchmarking Guide](benchmarking.md) for timing data, automation tips, and optimization ideas.

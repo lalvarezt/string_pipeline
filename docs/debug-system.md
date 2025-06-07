@@ -15,7 +15,7 @@ A comprehensive debugging system for visualizing, analyzing, and troubleshooting
   - [Step-by-Step Execution](#step-by-step-execution)
   - [Map Operation Visualization](#map-operation-visualization)
   - [Performance Metrics](#performance-metrics)
-- [🗺️ Complex Pipeline Debugging](#️-complex-pipeline-debugging)
+  - [🗺️ Complex Pipeline Debugging](#️-complex-pipeline-debugging)
   - [Simple Map Operations](#simple-map-operations)
   - [Multi-Step Map Pipelines](#multi-step-map-pipelines)
   - [List Operations in Maps](#list-operations-in-maps)
@@ -38,6 +38,7 @@ A comprehensive debugging system for visualizing, analyzing, and troubleshooting
 - [💡 Best Practices](#-best-practices)
   - [Development Workflow](#development-workflow)
   - [Performance Testing](#performance-testing)
+  - [Benchmarking Integration](#benchmarking-integration)
   - [Production Debugging](#production-debugging)
   - [Template Optimization](#template-optimization)
 - [🎯 Real-World Examples](#-real-world-examples)
@@ -725,6 +726,101 @@ string-pipeline '{!optimized_template}' 'large_dataset'
 # Focus optimization efforts on bottlenecks
 # Re-measure to verify improvements
 ```
+
+### Benchmarking Integration
+
+The debug system works well with the built-in benchmarking tools for performance analysis.
+
+**🔬 Basic Performance Analysis:**
+
+```bash
+# 1. Run benchmarks
+cargo build --release --bin bench
+./target/release/bench --iterations 1000 > performance_baseline.txt
+
+# 2. Look at performance patterns from benchmark data
+grep "Complex:" performance_baseline.txt | sort -k3 -n
+
+# 3. Debug specific slow operations
+string-pipeline -d '{split:,:..|map:{upper|replace:s/A/X/}}' 'test,data,with,A'
+```
+
+**📊 Performance-Driven Debugging Workflow:**
+
+1. **Baseline Measurement:**
+
+   ```bash
+   # Get performance data
+   ./target/release/bench --format json > current_performance.json
+
+   # Extract slow operations (>50μs)
+   jq '.categories[] | .[] | select(.average_time_ns > 50000)' current_performance.json
+   ```
+
+2. **Targeted Debug Analysis:**
+
+   ```bash
+   # Debug the slowest operations specifically
+   string-pipeline -d '{split:,:..|map:{replace:s/old/new/}}' 'sample,data'
+
+   # Focus on timing information in debug output
+   # Look for: "Step completed in XXXμs"
+   ```
+
+3. **Optimization Verification:**
+
+   ```bash
+   # Before optimization - debug timing
+   string-pipeline -d '{split:,:..|map:{trim}|map:{upper}}' 'data'
+
+   # After optimization - debug timing
+   string-pipeline -d '{split:,:..|map:{trim|upper}}' 'data'
+
+   # Re-run benchmarks to check improvement
+   ./target/release/bench --iterations 100
+   ```
+
+**🎯 Connecting Debug Insights to Benchmark Data:**
+
+| Debug Observation | Benchmark Category | Action |
+|-------------------|-------------------|---------|
+| High map processing time | `map_operations` | Consolidate operations |
+| Slow regex operations | `complex_operations` | Optimize patterns |
+| Multiple similar steps | All categories | Combine operations |
+| Large intermediate lists | `multiple_simple_operations` | Filter earlier |
+
+**⚡ Real-Time Performance Debugging:**
+
+```bash
+# Monitor performance during development
+watch -n 2 'echo "Current template performance:" && \
+time string-pipeline "{!your_template}" "test_data" 2>&1 | \
+grep -E "(Step completed|Total execution time)"'
+```
+
+**🔗 Integration with CI/CD:**
+
+```bash
+#!/bin/bash
+# performance_regression_debug.sh
+
+# Run benchmarks and check for changes
+./target/release/bench --format json > current.json
+
+# If changes detected, enable debug mode for analysis
+TOTAL_TIME=$(jq '.summary.total_execution_time_ns' current.json)
+if [ "$TOTAL_TIME" -gt "$THRESHOLD" ]; then
+    echo "Performance changes detected. Analyzing..."
+
+    # Debug the slowest operations
+    string-pipeline -d '{complex_template}' 'test_data' > debug_analysis.log 2>&1
+
+    # Extract timing information
+    grep "Step completed" debug_analysis.log | sort -k4 -n
+fi
+```
+
+> 📊 **Performance Analysis:** The [Performance Benchmarking Guide](benchmarking.md) provides benchmarking tips that work well with the debug system's timing information for performance optimization workflows.
 
 ### Production Debugging
 
