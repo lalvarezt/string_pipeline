@@ -9,11 +9,88 @@
 
 use regex::Regex;
 mod parser;
+use once_cell::sync::Lazy;
+use std::collections::HashMap;
+use std::sync::Mutex;
 use std::time::Instant;
 use strip_ansi_escapes::strip;
 
 pub use crate::pipeline::template::Template;
 mod template;
+
+// Global regex cache to avoid recompiling patterns
+static REGEX_CACHE: Lazy<Mutex<HashMap<String, Regex>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+
+// String interning for common separators to reduce allocations
+static COMMON_SEPARATORS: Lazy<HashMap<&'static str, String>> = Lazy::new(|| {
+    let mut map = HashMap::new();
+    map.insert(" ", " ".to_string());
+    map.insert(",", ",".to_string());
+    map.insert("\n", "\n".to_string());
+    map.insert("\t", "\t".to_string());
+    map.insert(":", ":".to_string());
+    map.insert(";", ";".to_string());
+    map.insert("|", "|".to_string());
+    map.insert("-", "-".to_string());
+    map.insert("_", "_".to_string());
+    map.insert("", "".to_string());
+    map
+});
+
+/// Get an interned string for common separators, or clone for uncommon ones.
+fn get_interned_separator(sep: &str) -> String {
+    COMMON_SEPARATORS
+        .get(sep)
+        .cloned()
+        .unwrap_or_else(|| sep.to_string())
+}
+
+/// Fast ASCII-only whitespace trimming
+fn ascii_trim(s: &str) -> Option<&str> {
+    if s.is_ascii() {
+        Some(s.trim_matches(|c: char| c.is_ascii_whitespace()))
+    } else {
+        None
+    }
+}
+
+/// Fast ASCII-only string reversal
+fn ascii_reverse(s: &str) -> Option<String> {
+    if s.is_ascii() {
+        // For ASCII, we can safely reverse bytes
+        let mut bytes: Vec<u8> = s.bytes().collect();
+        bytes.reverse();
+        // Safety: ASCII input guarantees valid UTF-8 output
+        Some(unsafe { String::from_utf8_unchecked(bytes) })
+    } else {
+        None
+    }
+}
+
+/// Get a compiled regex from cache or compile and cache it.
+fn get_cached_regex(pattern: &str) -> Result<Regex, String> {
+    // Try to get from cache first
+    {
+        let cache = REGEX_CACHE.lock().unwrap();
+        if let Some(regex) = cache.get(pattern) {
+            return Ok(regex.clone());
+        }
+    }
+
+    // Not in cache, compile it
+    let regex = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
+
+    // Add to cache
+    {
+        let mut cache = REGEX_CACHE.lock().unwrap();
+        // Double-check in case another thread added it while we were compiling
+        if !cache.contains_key(pattern) {
+            cache.insert(pattern.to_string(), regex.clone());
+        }
+    }
+
+    Ok(regex)
+}
 
 /// Internal representation of values during pipeline processing.
 ///
@@ -78,6 +155,8 @@ pub enum StringOp {
     /// This operation converts a string into a list by splitting on the specified
     /// separator, then optionally selects a subset using the range specification.
     ///
+    /// **Performance Optimization:** Common separators are cached to reduce memory allocations.
+    ///
     /// # Fields
     ///
     /// * `sep` - The separator string to split on
@@ -113,6 +192,8 @@ pub enum StringOp {
     /// - **List:** Joins items with the separator in their current order (no sorting applied)
     /// - **String:** Returns the string unchanged (treats as single-item list)
     ///
+    /// **Performance Optimization:** Common separators are cached for improved performance.
+    ///
     /// # Fields
     ///
     /// * `sep` - The separator to insert between list items (empty string for no separator)
@@ -143,10 +224,9 @@ pub enum StringOp {
     /// Supports full regex replacement with capture groups, flags for global/case-insensitive
     /// matching, and other standard regex features.
     ///
-    /// **Performance Optimization:** For simple string patterns without regex metacharacters
+    /// **Performance Optimization:** Regex patterns are compiled and cached internally for
+    /// reuse across operations. For simple string patterns without regex metacharacters
     /// and without global flag, a fast string replacement is used instead of regex compilation.
-    /// Additionally, if the pattern doesn't exist in the input string, the operation returns
-    /// immediately without processing.
     ///
     /// # Fields
     ///
@@ -222,6 +302,8 @@ pub enum StringOp {
     ///
     /// **Whitespace Characters:** When no characters are specified, removes standard
     /// whitespace: spaces, tabs (`\t`), newlines (`\n`), and carriage returns (`\r`).
+    ///
+    /// **Performance Optimization:** ASCII-only strings use optimized whitespace detection.
     ///
     /// # Fields
     ///
@@ -342,6 +424,9 @@ pub enum StringOp {
     /// **Behavior on Different Input Types:**
     /// - **List:** Keeps items that match the pattern
     /// - **String:** Returns the string if it matches, empty string otherwise
+    ///
+    /// **Performance Optimization:** Regex patterns are compiled and cached internally
+    /// for improved performance in repeated operations.
     ///
     /// # Fields
     ///
@@ -465,6 +550,8 @@ pub enum StringOp {
     ///
     /// For strings, reverses the character order. For lists, reverses the item order.
     /// Properly handles Unicode characters and grapheme clusters.
+    ///
+    /// **Performance Optimization:** ASCII-only strings use optimized byte-level reversal.
     ///
     /// # Examples
     ///
@@ -1144,7 +1231,7 @@ fn apply_single_operation(
                     .flat_map(|s| s.split(sep).map(str::to_string))
                     .collect(),
             };
-            *default_sep = sep.clone();
+            *default_sep = get_interned_separator(sep);
 
             let result = apply_range(&parts, range);
 
@@ -1168,14 +1255,14 @@ fn apply_single_operation(
                 Value::List(list) => Value::Str(list.join(sep)),
                 Value::Str(s) => Value::Str(s), // Pass through strings unchanged
             };
-            *default_sep = sep.clone();
+            *default_sep = get_interned_separator(sep);
             Ok(result)
         }
         StringOp::Slice { range } => {
             apply_list_operation(val, |list| apply_range(&list, range), "Slice")
         }
         StringOp::Filter { pattern } => {
-            let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
+            let re = get_cached_regex(pattern)?;
             match val {
                 Value::List(list) => Ok(Value::List(
                     list.into_iter().filter(|s| re.is_match(s)).collect(),
@@ -1184,7 +1271,7 @@ fn apply_single_operation(
             }
         }
         StringOp::FilterNot { pattern } => {
-            let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
+            let re = get_cached_regex(pattern)?;
             match val {
                 Value::List(list) => Ok(Value::List(
                     list.into_iter().filter(|s| !re.is_match(s)).collect(),
@@ -1207,7 +1294,9 @@ fn apply_single_operation(
             }
         }
         StringOp::Reverse => match val {
-            Value::Str(s) => Ok(Value::Str(s.chars().rev().collect())),
+            Value::Str(s) => Ok(Value::Str(
+                ascii_reverse(&s).unwrap_or_else(|| s.chars().rev().collect()),
+            )),
             Value::List(mut list) => {
                 list.reverse();
                 Ok(Value::List(list))
@@ -1226,10 +1315,11 @@ fn apply_single_operation(
         StringOp::Substring { range } => {
             if let Value::Str(s) = val {
                 if s.is_ascii() {
+                    // Optimized ASCII path - work directly with bytes
                     let bytes = s.as_bytes();
                     let result_bytes = apply_range(bytes, range);
-                    // Safe to unwrap since we know it's ASCII
-                    let result = String::from_utf8(result_bytes).unwrap();
+                    // Safety: ASCII input guarantees valid UTF-8 output
+                    let result = unsafe { String::from_utf8_unchecked(result_bytes) };
                     Ok(Value::Str(result))
                 } else {
                     // UTF-8 handling for Unicode strings
@@ -1273,8 +1363,7 @@ fn apply_single_operation(
                     }
                 };
 
-                let re = Regex::new(&pattern_to_use)
-                    .map_err(|e| format!("Invalid regex pattern: {}", e))?;
+                let re = get_cached_regex(&pattern_to_use)?;
                 let result = if flags.contains('g') {
                     re.replace_all(&s, replacement.as_str()).to_string()
                 } else {
@@ -1295,7 +1384,13 @@ fn apply_single_operation(
                 // Fast path for default whitespace trimming
                 let result = if chars.is_empty() || chars.trim().is_empty() {
                     match direction {
-                        TrimDirection::Both => s.trim().to_string(),
+                        TrimDirection::Both => {
+                            if let Some(trimmed) = ascii_trim(&s) {
+                                trimmed.to_string()
+                            } else {
+                                s.trim().to_string()
+                            }
+                        }
                         TrimDirection::Left => s.trim_start().to_string(),
                         TrimDirection::Right => s.trim_end().to_string(),
                     }
@@ -1378,7 +1473,7 @@ fn apply_single_operation(
         }
         StringOp::RegexExtract { pattern, group } => {
             if let Value::Str(s) = val {
-                let re = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
+                let re = get_cached_regex(pattern)?;
                 let result = if let Some(group_idx) = group {
                     re.captures(&s)
                         .and_then(|caps| caps.get(*group_idx))

@@ -189,7 +189,6 @@
 //! - Large datasets are processed with optimized algorithms
 //! - Regex patterns are compiled and cached internally
 //! - Memory allocation is minimized for common operations
-//! - Early exit optimizations for string operations when patterns don't match
 //!
 //! For high-throughput applications, compile templates once and reuse them:
 //!

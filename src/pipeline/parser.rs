@@ -7,11 +7,15 @@
 //! The parser supports the full template syntax including operations, ranges,
 //! escape sequences, and debug flags, with intelligent handling of special
 //! characters in different contexts.
+//!
 
 use pest::Parser;
 use pest_derive::Parser;
 
 use super::{PadDirection, RangeSpec, SortDirection, StringOp, TrimDirection};
+
+// Common separator constant to avoid repeated allocations
+const SPACE_SEP: &str = " ";
 
 /// Pest parser for template syntax.
 ///
@@ -58,8 +62,16 @@ pub fn parse_template(template: &str) -> Result<(Vec<StringOp>, bool), String> {
         .next()
         .unwrap();
 
-    // Pre-allocate operations vector with estimated capacity
-    let mut ops = Vec::with_capacity(16);
+    // Estimate capacity based on template length and complexity
+    let estimated_capacity = if template.len() < 50 {
+        4 // Simple templates typically have 1-4 operations
+    } else if template.len() < 150 {
+        8 // Medium templates typically have 4-8 operations
+    } else {
+        16 // Complex templates might have 8+ operations
+    };
+
+    let mut ops = Vec::with_capacity(estimated_capacity);
     let mut debug = false;
 
     for pair in pairs.into_inner() {
@@ -106,14 +118,14 @@ fn parse_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String
         Rule::shorthand_range => {
             let range = parse_range_spec(pair)?;
             Ok(StringOp::Split {
-                sep: " ".to_string(),
+                sep: SPACE_SEP.to_string(),
                 range,
             })
         }
         Rule::shorthand_index => {
             let idx = pair.as_str().parse().unwrap();
             Ok(StringOp::Split {
-                sep: " ".to_string(),
+                sep: SPACE_SEP.to_string(),
                 range: RangeSpec::Index(idx),
             })
         }
@@ -517,30 +529,40 @@ fn parse_map_inner_operation(pair: pest::iterators::Pair<Rule>) -> Result<String
 /// - `\{` - Literal opening brace
 /// - `\}` - Literal closing brace
 fn process_arg(s: &str) -> String {
+    // Fast path: no escape sequences, return owned string directly
     if !s.contains('\\') {
         return s.to_string();
     }
 
+    // Optimized path: pre-allocate with exact capacity and use efficient iteration
     let mut result = String::with_capacity(s.len());
-    let mut chars = s.chars();
+    let bytes = s.as_bytes();
+    let mut i = 0;
 
-    while let Some(c) = chars.next() {
-        if c == '\\' {
-            match chars.next() {
-                Some('n') => result.push('\n'),
-                Some('t') => result.push('\t'),
-                Some('r') => result.push('\r'),
-                Some(':') => result.push(':'),
-                Some('|') => result.push('|'),
-                Some('\\') => result.push('\\'),
-                Some('/') => result.push('/'),
-                Some('{') => result.push('{'),
-                Some('}') => result.push('}'),
-                Some(next) => result.push(next),
-                None => result.push('\\'),
+    while i < bytes.len() {
+        if bytes[i] == b'\\' && i + 1 < bytes.len() {
+            // Handle escape sequence
+            match bytes[i + 1] {
+                b'n' => result.push('\n'),
+                b't' => result.push('\t'),
+                b'r' => result.push('\r'),
+                b':' => result.push(':'),
+                b'|' => result.push('|'),
+                b'\\' => result.push('\\'),
+                b'/' => result.push('/'),
+                b'{' => result.push('{'),
+                b'}' => result.push('}'),
+                other => result.push(other as char),
             }
+            i += 2;
+        } else if bytes[i] == b'\\' {
+            // Backslash at end of string
+            result.push('\\');
+            i += 1;
         } else {
-            result.push(c);
+            // Regular character
+            result.push(bytes[i] as char);
+            i += 1;
         }
     }
     result
@@ -567,7 +589,7 @@ fn parse_sed_string(pair: pest::iterators::Pair<Rule>) -> Result<(String, String
 
     let pattern_str = parts.next().unwrap().as_str();
     let replacement_str = parts.next().unwrap().as_str();
-    let flags_str = parts.next().map(|p| p.as_str()).unwrap_or("");
+    let flags_opt = parts.next();
 
     if pattern_str.is_empty() {
         return Err("Empty pattern in sed string".to_string());
@@ -576,7 +598,7 @@ fn parse_sed_string(pair: pest::iterators::Pair<Rule>) -> Result<(String, String
     Ok((
         pattern_str.to_string(),
         replacement_str.to_string(),
-        flags_str.to_string(),
+        flags_opt.map_or_else(String::new, |p| p.as_str().to_string()),
     ))
 }
 
