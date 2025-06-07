@@ -1,3 +1,12 @@
+//! String transformation pipeline implementation.
+//!
+//! This module contains the core implementation of the string pipeline system,
+//! including operation definitions, execution engine, and supporting types.
+//!
+//! The pipeline system processes strings through a sequence of operations,
+//! supporting both individual string transformations and list-based operations
+//! with efficient memory management and comprehensive error handling.
+
 use regex::Regex;
 mod parser;
 use std::time::Instant;
@@ -6,102 +15,694 @@ use strip_ansi_escapes::strip;
 pub use crate::pipeline::template::Template;
 mod template;
 
+/// Internal representation of values during pipeline processing.
+///
+/// Values can be either single strings or lists of strings, allowing operations
+/// to work on both individual items and collections efficiently.
 #[derive(Debug, Clone)]
 enum Value {
+    /// A single string value.
     Str(String),
+    /// A list of string values.
     List(Vec<String>),
 }
 
+/// Enumeration of all supported string transformation operations.
+///
+/// Each variant represents a specific transformation that can be applied to strings
+/// or lists of strings. Operations are designed to be composable and efficient,
+/// supporting both functional-style transformations and imperative-style mutations.
+///
+/// # Operation Categories
+///
+/// - **🔪 Text Splitting & Joining**: [`Split`], [`Join`], [`Slice`]
+/// - **✨ Text Transformation**: [`Upper`], [`Lower`], [`Trim`], [`Append`], [`Prepend`], [`Pad`], [`Substring`]
+/// - **🔍 Pattern Matching & Replacement**: [`Replace`], [`RegexExtract`], [`Filter`], [`FilterNot`]
+/// - **🗂️ List Processing**: [`Sort`], [`Reverse`], [`Unique`], [`Map`]
+/// - **🧹 Utility**: [`StripAnsi`]
+///
+/// # Type System
+///
+/// Operations are categorized by their input/output type requirements:
+///
+/// - **String→String**: [`Upper`], [`Lower`], [`Trim`], [`Replace`], [`Append`], [`Prepend`], [`Pad`], [`Substring`], [`RegexExtract`], [`StripAnsi`]
+/// - **List→List**: [`Sort`], [`Unique`], [`Slice`], [`Map`]
+/// - **Type-preserving**: [`Filter`], [`FilterNot`], [`Reverse`]
+/// - **Type-converting**: [`Split`] (String→List), [`Join`] (List→String)
+///
+/// Use `map:{operation}` to apply string operations to each item in a list.
+///
+/// [`Upper`]: StringOp::Upper
+/// [`Lower`]: StringOp::Lower
+/// [`Trim`]: StringOp::Trim
+/// [`Replace`]: StringOp::Replace
+/// [`Split`]: StringOp::Split
+/// [`Join`]: StringOp::Join
+/// [`Sort`]: StringOp::Sort
+/// [`Unique`]: StringOp::Unique
+/// [`Filter`]: StringOp::Filter
+/// [`FilterNot`]: StringOp::FilterNot
+/// [`Substring`]: StringOp::Substring
+/// [`RegexExtract`]: StringOp::RegexExtract
+/// [`Slice`]: StringOp::Slice
+/// [`Map`]: StringOp::Map
+/// [`Reverse`]: StringOp::Reverse
+/// [`Pad`]: StringOp::Pad
+/// [`Append`]: StringOp::Append
+/// [`Prepend`]: StringOp::Prepend
+/// [`StripAnsi`]: StringOp::StripAnsi
 #[derive(Debug, Clone)]
 pub enum StringOp {
-    Split {
-        sep: String,
-        range: RangeSpec,
-    },
-    Join {
-        sep: String,
-    },
+    /// Split a string by separator and optionally select a range of parts.
+    ///
+    /// This operation converts a string into a list by splitting on the specified
+    /// separator, then optionally selects a subset using the range specification.
+    ///
+    /// # Fields
+    ///
+    /// * `sep` - The separator string to split on
+    /// * `range` - Range specification for selecting parts
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// // Split and take all parts
+    /// let template = Template::parse("{split:,:..}").unwrap();
+    /// assert_eq!(template.format("a,b,c").unwrap(), "a,b,c");
+    ///
+    /// // Split and take specific index
+    /// let template = Template::parse("{split:,:1}").unwrap();
+    /// assert_eq!(template.format("a,b,c").unwrap(), "b");
+    ///
+    /// // Split and take range
+    /// let template = Template::parse("{split:,:1..3}").unwrap();
+    /// assert_eq!(template.format("a,b,c,d").unwrap(), "b,c");
+    /// ```
+    Split { sep: String, range: RangeSpec },
+
+    /// Join a list of strings with the specified separator.
+    ///
+    /// **Syntax:** `join:SEPARATOR`
+    ///
+    /// This operation takes a list of strings and combines them into a single
+    /// string using the provided separator between each item.
+    ///
+    /// **Behavior on Different Input Types:**
+    /// - **List:** Joins items with the separator in their current order (no sorting applied)
+    /// - **String:** Returns the string unchanged (treats as single-item list)
+    ///
+    /// # Fields
+    ///
+    /// * `sep` - The separator to insert between list items (empty string for no separator)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// // Join with hyphen
+    /// let template = Template::parse("{split:,:..|join: - }").unwrap();
+    /// assert_eq!(template.format("a,b,c").unwrap(), "a - b - c");
+    ///
+    /// // Join with newlines
+    /// let template = Template::parse("{split: :..|join:\\n}").unwrap();
+    /// assert_eq!(template.format("hello world").unwrap(), "hello\nworld");
+    ///
+    /// // Join with no separator
+    /// let template = Template::parse("{split:,:..|join:}").unwrap();
+    /// assert_eq!(template.format("a,b,c").unwrap(), "abc");
+    /// ```
+    Join { sep: String },
+
+    /// Replace text using regex patterns with sed-like syntax.
+    ///
+    /// **Syntax:** `replace:s/PATTERN/REPLACEMENT/FLAGS`
+    ///
+    /// Supports full regex replacement with capture groups, flags for global/case-insensitive
+    /// matching, and other standard regex features.
+    ///
+    /// **Performance Optimization:** For simple string patterns without regex metacharacters
+    /// and without global flag, a fast string replacement is used instead of regex compilation.
+    /// Additionally, if the pattern doesn't exist in the input string, the operation returns
+    /// immediately without processing.
+    ///
+    /// # Fields
+    ///
+    /// * `pattern` - The regex pattern to search for
+    /// * `replacement` - The replacement text (supports capture group references like `$1`, `$2`)
+    /// * `flags` - Regex flags: `g` (global), `i` (case-insensitive), `m` (multiline), `s` (dot-all)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// // Basic replacement (first match only)
+    /// let template = Template::parse("{replace:s/world/universe/}").unwrap();
+    /// assert_eq!(template.format("hello world").unwrap(), "hello universe");
+    ///
+    /// // Global replacement with flags
+    /// let template = Template::parse("{replace:s/l/L/g}").unwrap();
+    /// assert_eq!(template.format("hello").unwrap(), "heLLo");
+    ///
+    /// // Case-insensitive global replace
+    /// let template = Template::parse("{replace:s/WORLD/universe/gi}").unwrap();
+    /// assert_eq!(template.format("hello world").unwrap(), "hello universe");
+    ///
+    /// // Using capture groups
+    /// let template = Template::parse("{replace:s/(.+)/[$1]/}").unwrap();
+    /// assert_eq!(template.format("hello").unwrap(), "[hello]");
+    /// ```
     Replace {
         pattern: String,
         replacement: String,
         flags: String,
     },
+
+    /// Convert text to uppercase.
+    ///
+    /// Applies Unicode-aware uppercase conversion to the entire string,
+    /// properly handling international characters and special cases.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// let template = Template::parse("{upper}").unwrap();
+    /// assert_eq!(template.format("hello world").unwrap(), "HELLO WORLD");
+    /// assert_eq!(template.format("café").unwrap(), "CAFÉ");
+    /// ```
     Upper,
+
+    /// Convert text to lowercase.
+    ///
+    /// Applies Unicode-aware lowercase conversion to the entire string,
+    /// properly handling international characters and special cases.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// let template = Template::parse("{lower}").unwrap();
+    /// assert_eq!(template.format("HELLO WORLD").unwrap(), "hello world");
+    /// assert_eq!(template.format("CAFÉ").unwrap(), "café");
+    /// ```
     Lower,
+
+    /// Trim whitespace or custom characters from string ends.
+    ///
+    /// **Syntax:** `trim[:CHARACTERS][:DIRECTION]`
+    ///
+    /// Supports trimming from both ends, left only, or right only, with
+    /// customizable character sets for specialized trimming needs.
+    ///
+    /// **Whitespace Characters:** When no characters are specified, removes standard
+    /// whitespace: spaces, tabs (`\t`), newlines (`\n`), and carriage returns (`\r`).
+    ///
+    /// # Fields
+    ///
+    /// * `chars` - Characters to trim (empty string means whitespace)
+    /// * `direction` - Which end(s) to trim from: `both` (default), `left`, `right`
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// // Trim whitespace from both ends
+    /// let template = Template::parse("{trim}").unwrap();
+    /// assert_eq!(template.format("  hello  ").unwrap(), "hello");
+    ///
+    /// // Trim from left only
+    /// let template = Template::parse("{trim:left}").unwrap();
+    /// assert_eq!(template.format("  hello  ").unwrap(), "hello  ");
+    ///
+    /// // Trim custom characters
+    /// let template = Template::parse("{trim:xy}").unwrap();
+    /// assert_eq!(template.format("xyhelloxy").unwrap(), "hello");
+    ///
+    /// // Trim custom characters from right only
+    /// let template = Template::parse("{trim:*-+:right}").unwrap();
+    /// assert_eq!(template.format("hello***").unwrap(), "hello");
+    /// ```
     Trim {
         chars: String,
         direction: TrimDirection,
     },
-    Substring {
-        range: RangeSpec,
-    },
-    Append {
-        suffix: String,
-    },
-    Prepend {
-        prefix: String,
-    },
+
+    /// Extract substring by character index or range.
+    ///
+    /// Supports Unicode-aware character indexing with negative indices
+    /// for counting from the end. Handles out-of-bounds gracefully.
+    ///
+    /// # Fields
+    ///
+    /// * `range` - Character range specification
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// // Single character
+    /// let template = Template::parse("{substring:1}").unwrap();
+    /// assert_eq!(template.format("hello").unwrap(), "e");
+    ///
+    /// // Character range
+    /// let template = Template::parse("{substring:1..4}").unwrap();
+    /// assert_eq!(template.format("hello").unwrap(), "ell");
+    /// ```
+    Substring { range: RangeSpec },
+
+    /// Append text to the end of a string.
+    ///
+    /// Adds the specified suffix to the end of the input string,
+    /// supporting escape sequences and Unicode text.
+    ///
+    /// # Fields
+    ///
+    /// * `suffix` - Text to append
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// let template = Template::parse("{append:!}").unwrap();
+    /// assert_eq!(template.format("hello").unwrap(), "hello!");
+    /// ```
+    Append { suffix: String },
+
+    /// Prepend text to the beginning of a string.
+    ///
+    /// Adds the specified prefix to the beginning of the input string,
+    /// supporting escape sequences and Unicode text.
+    ///
+    /// # Fields
+    ///
+    /// * `prefix` - Text to prepend
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// let template = Template::parse("{prepend:>>}").unwrap();
+    /// assert_eq!(template.format("hello").unwrap(), ">>hello");
+    /// ```
+    Prepend { prefix: String },
+
+    /// Remove ANSI escape sequences from text.
+    ///
+    /// Strips color codes, cursor movement commands, and other ANSI escape
+    /// sequences while preserving the actual text content and Unicode characters.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// let template = Template::parse("{strip_ansi}").unwrap();
+    /// let input = "\x1b[31mRed Text\x1b[0m";
+    /// assert_eq!(template.format(input).unwrap(), "Red Text");
+    /// ```
     StripAnsi,
-    Filter {
-        pattern: String,
-    },
-    FilterNot {
-        pattern: String,
-    },
-    Slice {
-        range: RangeSpec,
-    },
-    Map {
-        operations: Vec<StringOp>,
-    },
-    Sort {
-        direction: SortDirection,
-    },
+
+    /// Keep only list items matching a regex pattern.
+    ///
+    /// **Syntax:** `filter:PATTERN`
+    ///
+    /// Filters a list to retain only items that match the specified regex pattern.
+    /// When applied to a single string, keeps the string if it matches or returns empty.
+    ///
+    /// **Behavior on Different Input Types:**
+    /// - **List:** Keeps items that match the pattern
+    /// - **String:** Returns the string if it matches, empty string otherwise
+    ///
+    /// # Fields
+    ///
+    /// * `pattern` - Regex pattern for matching items
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// // Keep items starting with vowels
+    /// let template = Template::parse("{split:,:..|filter:^[aeiou]|join:,}").unwrap();
+    /// assert_eq!(template.format("apple,banana,orange,grape").unwrap(), "apple,orange");
+    ///
+    /// // Keep items containing numbers
+    /// let template = Template::parse("{split:,:..|filter:\\d+|join:,}").unwrap();
+    /// assert_eq!(template.format("item1,test,file22,doc").unwrap(), "item1,file22");
+    ///
+    /// // Filter .txt files
+    /// let template = Template::parse("{split:,:..|filter:\\.txt$|join:\\n}").unwrap();
+    /// assert_eq!(template.format("file.txt,readme.md,data.txt").unwrap(), "file.txt\ndata.txt");
+    /// ```
+    Filter { pattern: String },
+
+    /// Remove list items matching a regex pattern.
+    ///
+    /// **Syntax:** `filter_not:PATTERN`
+    ///
+    /// Filters a list to remove items that match the specified regex pattern.
+    /// When applied to a single string, removes the string if it matches.
+    ///
+    /// **Behavior on Different Input Types:**
+    /// - **List:** Removes items that match the pattern
+    /// - **String:** Returns empty string if it matches, original string otherwise
+    ///
+    /// # Fields
+    ///
+    /// * `pattern` - Regex pattern for matching items to remove
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// // Remove specific items
+    /// let template = Template::parse("{split:,:..|filter_not:banana|join:,}").unwrap();
+    /// assert_eq!(template.format("apple,banana,orange").unwrap(), "apple,orange");
+    ///
+    /// // Remove comments (lines starting with #)
+    /// let template = Template::parse("{split:\\n:..|filter_not:^#|join:\\n}").unwrap();
+    /// let input = "line1\n# comment\nline2\n# another comment\nline3";
+    /// assert_eq!(template.format(input).unwrap(), "line1\nline2\nline3");
+    ///
+    /// // Remove empty lines
+    /// let template = Template::parse("{split:\\n:..|filter_not:^$|join:\\n}").unwrap();
+    /// assert_eq!(template.format("line1\n\nline2\n\nline3").unwrap(), "line1\nline2\nline3");
+    /// ```
+    FilterNot { pattern: String },
+
+    /// Select a range of items from a list.
+    ///
+    /// Extracts a subset of items from a list using range syntax,
+    /// supporting negative indexing and various range types.
+    ///
+    /// # Fields
+    ///
+    /// * `range` - Range specification for item selection
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// let template = Template::parse("{split:,:..|slice:1..3|join:,}").unwrap();
+    /// assert_eq!(template.format("a,b,c,d,e").unwrap(), "b,c");
+    /// ```
+    Slice { range: RangeSpec },
+
+    /// Apply a sub-pipeline to each item in a list.
+    ///
+    /// Maps a sequence of operations over each item in a list, enabling
+    /// complex per-item transformations while maintaining list structure.
+    ///
+    /// # Fields
+    ///
+    /// * `operations` - List of operations to apply to each item
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// let template = Template::parse("{split:,:..|map:{trim|upper}|join:,}").unwrap();
+    /// assert_eq!(template.format(" a , b , c ").unwrap(), "A,B,C");
+    /// ```
+    Map { operations: Vec<StringOp> },
+
+    /// Sort list items alphabetically.
+    ///
+    /// Sorts a list of strings in ascending or descending alphabetical order
+    /// using lexicographic comparison with Unicode support.
+    ///
+    /// # Fields
+    ///
+    /// * `direction` - Sort direction (ascending or descending)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// let template = Template::parse("{split:,:..|sort|join:,}").unwrap();
+    /// assert_eq!(template.format("c,a,b").unwrap(), "a,b,c");
+    ///
+    /// let template = Template::parse("{split:,:..|sort:desc|join:,}").unwrap();
+    /// assert_eq!(template.format("a,b,c").unwrap(), "c,b,a");
+    /// ```
+    Sort { direction: SortDirection },
+
+    /// Reverse a string or list order.
+    ///
+    /// For strings, reverses the character order. For lists, reverses the item order.
+    /// Properly handles Unicode characters and grapheme clusters.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// // Reverse string
+    /// let template = Template::parse("{reverse}").unwrap();
+    /// assert_eq!(template.format("hello").unwrap(), "olleh");
+    ///
+    /// // Reverse list
+    /// let template = Template::parse("{split:,:..|reverse|join:,}").unwrap();
+    /// assert_eq!(template.format("a,b,c").unwrap(), "c,b,a");
+    /// ```
     Reverse,
+
+    /// Remove duplicate items from a list.
+    ///
+    /// **Syntax:** `unique`
+    ///
+    /// Filters a list to keep only the first occurrence of each unique item,
+    /// preserving the original order of first appearances.
+    ///
+    /// **Order Preservation:** The first occurrence of each item is kept, maintaining
+    /// the original order.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// // Basic deduplication
+    /// let template = Template::parse("{split:,:..|unique|join:,}").unwrap();
+    /// assert_eq!(template.format("a,b,a,c,b").unwrap(), "a,b,c");
+    ///
+    /// // Remove duplicate lines
+    /// let template = Template::parse("{split:\\n:..|unique|join:\\n}").unwrap();
+    /// let input = "line1\nline2\nline1\nline3\nline2";
+    /// assert_eq!(template.format(input).unwrap(), "line1\nline2\nline3");
+    ///
+    /// // Combine with sort for alphabetical unique list
+    /// let template = Template::parse("{split:,:..|unique|sort|join:,}").unwrap();
+    /// assert_eq!(template.format("c,a,b,a,c").unwrap(), "a,b,c");
+    /// ```
     Unique,
+
+    /// Pad a string to a specified width.
+    ///
+    /// Adds padding characters to reach the target width, supporting
+    /// left, right, or both-sides padding with customizable fill characters.
+    ///
+    /// # Fields
+    ///
+    /// * `width` - Target width in characters
+    /// * `char` - Character to use for padding
+    /// * `direction` - Where to add padding (left, right, or both)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// // Right padding (default)
+    /// let template = Template::parse("{pad:5}").unwrap();
+    /// assert_eq!(template.format("hi").unwrap(), "hi   ");
+    ///
+    /// // Left padding with custom character
+    /// let template = Template::parse("{pad:5:0:left}").unwrap();
+    /// assert_eq!(template.format("42").unwrap(), "00042");
+    /// ```
     Pad {
         width: usize,
         char: char,
         direction: PadDirection,
     },
+
+    /// Extract text using regex patterns with optional capture groups.
+    ///
+    /// Extracts the first match of a regex pattern, optionally selecting
+    /// a specific capture group for more precise extraction.
+    ///
+    /// # Fields
+    ///
+    /// * `pattern` - Regex pattern to match
+    /// * `group` - Optional capture group number (0 = entire match)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// // Extract numbers
+    /// let template = Template::parse(r"{regex_extract:\d+}").unwrap();
+    /// assert_eq!(template.format("item123").unwrap(), "123");
+    ///
+    /// // Extract capture group
+    /// let template = Template::parse(r"{regex_extract:(\w+)@(\w+):1}").unwrap();
+    /// assert_eq!(template.format("user@domain.com").unwrap(), "user");
+    /// ```
     RegexExtract {
         pattern: String,
         group: Option<usize>,
     },
 }
 
+/// Specification for selecting ranges of items or characters.
+///
+/// Supports Rust-like range syntax with negative indexing for flexible
+/// selection of subsequences from strings or lists.
+///
+/// # Variants
+///
+/// * [`Index`] - Single item selection
+/// * [`Range`] - Range-based selection with optional bounds
+///
+/// [`Index`]: RangeSpec::Index
+/// [`Range`]: RangeSpec::Range
 #[derive(Debug, Clone, Copy)]
 pub enum RangeSpec {
+    /// Select a single item by index.
+    ///
+    /// Supports negative indexing where `-1` is the last item,
+    /// `-2` is second to last, etc.
+    ///
+    /// # Examples
+    ///
+    /// - `1` - Second item (0-indexed)
+    /// - `-1` - Last item
+    /// - `0` - First item
     Index(isize),
-    Range(Option<isize>, Option<isize>, bool), // (start, end, inclusive)
+
+    /// Select a range of items with optional start and end bounds.
+    ///
+    /// The third field indicates whether the end bound is inclusive.
+    /// `None` values indicate open bounds (start from beginning or go to end).
+    ///
+    /// # Fields
+    ///
+    /// * `start` - Optional start index (None = from beginning)
+    /// * `end` - Optional end index (None = to end)
+    /// * `inclusive` - Whether end bound is inclusive
+    ///
+    /// # Examples
+    ///
+    /// - `(Some(1), Some(3), false)` - Items 1,2 (exclusive end)
+    /// - `(Some(1), Some(3), true)` - Items 1,2,3 (inclusive end)
+    /// - `(Some(2), None, false)` - From item 2 to end
+    /// - `(None, Some(3), false)` - First 3 items
+    Range(Option<isize>, Option<isize>, bool),
 }
 
+/// Direction for trimming operations.
+///
+/// Specifies which end(s) of a string to trim characters from.
 #[derive(Debug, Clone, Copy)]
 pub enum TrimDirection {
+    /// Trim from both ends (default).
     Both,
+    /// Trim from left (start) only.
     Left,
+    /// Trim from right (end) only.
     Right,
 }
 
+/// Direction for sorting operations.
+///
+/// Specifies the order for sorting list items.
 #[derive(Debug, Clone, Copy)]
 pub enum SortDirection {
+    /// Ascending order (A to Z).
     Asc,
+    /// Descending order (Z to A).
     Desc,
 }
 
+/// Direction for padding operations.
+///
+/// Specifies where to add padding characters to reach target width.
 #[derive(Debug, Clone, Copy)]
 pub enum PadDirection {
+    /// Add padding to the left (right-align text).
     Left,
+    /// Add padding to the right (left-align text).
     Right,
+    /// Add padding to both sides (center text).
     Both,
 }
 
+/// Resolves an index to a valid array position.
+///
+/// Handles negative indexing and bounds clamping to ensure valid array access.
+/// Negative indices count backwards from the end of the collection.
+///
+/// # Arguments
+///
+/// * `idx` - The index to resolve (can be negative)
+/// * `len` - The length of the collection
+///
+/// # Returns
+///
+/// A valid array index clamped to `[0, len)` range.
+///
+/// # Examples
+///
+/// ```rust
+/// // This is an internal function, shown for documentation
+/// // resolve_index(1, 5) -> 1
+/// // resolve_index(-1, 5) -> 4 (last item)
+/// // resolve_index(10, 5) -> 4 (clamped to last item)
+/// ```
 fn resolve_index(idx: isize, len: usize) -> usize {
     let len_i = len as isize;
     let resolved = if idx < 0 { len_i + idx } else { idx };
     resolved.clamp(0, len_i.max(0)) as usize
 }
 
+/// Applies a range specification to a slice, returning selected items.
+///
+/// This is a generic function that works with any cloneable type, supporting
+/// both single index selection and range-based selection with proper bounds checking.
+///
+/// # Arguments
+///
+/// * `items` - The slice to select from
+/// * `range` - The range specification
+///
+/// # Returns
+///
+/// A vector containing the selected items.
+///
+/// # Examples
+///
+/// ```rust
+/// // This is an internal function, shown for documentation
+/// // let items = vec!["a", "b", "c", "d"];
+/// // apply_range(&items, &RangeSpec::Index(1)) -> vec!["b"]
+/// // apply_range(&items, &RangeSpec::Range(Some(1), Some(3), false)) -> vec!["b", "c"]
+/// ```
 fn apply_range<T: Clone>(items: &[T], range: &RangeSpec) -> Vec<T> {
     let len = items.len();
     if len == 0 {
@@ -139,6 +740,41 @@ fn apply_range<T: Clone>(items: &[T], range: &RangeSpec) -> Vec<T> {
     }
 }
 
+/// Applies a sequence of operations to an input string.
+///
+/// This is the main execution engine for the pipeline system. It processes
+/// operations sequentially, maintaining type safety and providing comprehensive
+/// error handling with optional debug output.
+///
+/// # Arguments
+///
+/// * `input` - The input string to transform
+/// * `ops` - Slice of operations to apply in sequence
+/// * `debug` - Whether to output debug information to stderr
+///
+/// # Returns
+///
+/// * `Ok(String)` - The transformed result
+/// * `Err(String)` - Error description if any operation fails
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - Any regex pattern fails to compile
+/// - Operations are applied to incompatible types
+/// - Nested map operations are attempted
+/// - Invalid arguments are provided to operations
+///
+/// # Examples
+///
+/// ```rust
+/// use string_pipeline::Template;
+///
+/// // This function is used internally by Template::format()
+/// let template = Template::parse("{upper|trim}").unwrap();
+/// let result = template.format("  hello  ").unwrap();
+/// assert_eq!(result, "HELLO");
+/// ```
 pub fn apply_ops(input: &str, ops: &[StringOp], debug: bool) -> Result<String, String> {
     apply_ops_internal(input, ops, debug, None)
 }

@@ -1,12 +1,57 @@
+//! Template parsing implementation.
+//!
+//! This module contains the parser for string pipeline templates, converting
+//! template syntax into executable operation sequences. The parser uses the
+//! Pest parser generator for robust syntax handling with comprehensive error reporting.
+//!
+//! The parser supports the full template syntax including operations, ranges,
+//! escape sequences, and debug flags, with intelligent handling of special
+//! characters in different contexts.
+
 use pest::Parser;
 use pest_derive::Parser;
 
 use super::{PadDirection, RangeSpec, SortDirection, StringOp, TrimDirection};
 
+/// Pest parser for template syntax.
+///
+/// This parser handles the complete template grammar defined in `template.pest`,
+/// including operations, arguments, ranges, and escape sequences.
 #[derive(Parser)]
 #[grammar = "pipeline/template.pest"]
 struct TemplateParser;
 
+/// Parses a template string into operations and debug flag.
+///
+/// This is the main entry point for template parsing. It processes the complete
+/// template syntax and returns a sequence of operations along with any debug settings.
+///
+/// # Arguments
+///
+/// * `template` - The template string to parse
+///
+/// # Returns
+///
+/// * `Ok((Vec<StringOp>, bool))` - Operations and debug flag
+/// * `Err(String)` - Parse error with detailed description
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - Template syntax is malformed
+/// - Unknown operations are used
+/// - Arguments are missing or invalid
+/// - Range specifications are incorrect
+/// - Regex patterns are invalid
+///
+/// # Examples
+///
+/// ```rust
+/// // This is an internal function used by Template::parse()
+/// // let (ops, debug) = parse_template("{upper|trim}").unwrap();
+/// // assert_eq!(ops.len(), 2);
+/// // assert!(!debug);
+/// ```
 pub fn parse_template(template: &str) -> Result<(Vec<StringOp>, bool), String> {
     let pairs = TemplateParser::parse(Rule::template, template)
         .map_err(|e| format!("Parse error: {}", e))?
@@ -35,6 +80,27 @@ pub fn parse_template(template: &str) -> Result<(Vec<StringOp>, bool), String> {
     Ok((ops, debug))
 }
 
+/// Parses a single operation from a parse tree node.
+///
+/// Converts a parsed operation node into the corresponding `StringOp` variant,
+/// handling all supported operations and their arguments.
+///
+/// # Arguments
+///
+/// * `pair` - Pest parse tree node representing an operation
+///
+/// # Returns
+///
+/// * `Ok(StringOp)` - The parsed operation
+/// * `Err(String)` - Parse error description
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - Operation arguments are invalid
+/// - Range specifications are malformed
+/// - Regex patterns fail to compile
+/// - Required arguments are missing
 fn parse_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String> {
     match pair.as_rule() {
         Rule::shorthand_range => {
@@ -111,19 +177,67 @@ fn parse_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String
     }
 }
 
+/// Extracts and processes a single argument from an operation.
+///
+/// Takes the first inner node as an argument and processes escape sequences.
+///
+/// # Arguments
+///
+/// * `pair` - Parse tree node containing the argument
+///
+/// # Returns
+///
+/// * `Ok(String)` - Processed argument with escape sequences resolved
+/// * `Err(String)` - Error if argument is missing
 fn extract_single_arg(pair: pest::iterators::Pair<Rule>) -> Result<String, String> {
     let inner = pair.into_inner().next().unwrap();
     Ok(process_arg(inner.as_str()))
 }
 
+/// Extracts a single argument without escape sequence processing.
+///
+/// Used for regex patterns and other contexts where literal strings are needed.
+///
+/// # Arguments
+///
+/// * `pair` - Parse tree node containing the argument
+///
+/// # Returns
+///
+/// * `Ok(String)` - Raw argument string
+/// * `Err(String)` - Error if argument is missing
 fn extract_single_arg_raw(pair: pest::iterators::Pair<Rule>) -> Result<String, String> {
     Ok(pair.into_inner().next().unwrap().as_str().to_string())
 }
 
+/// Extracts a range specification argument.
+///
+/// Parses the range specification from the operation arguments.
+///
+/// # Arguments
+///
+/// * `pair` - Parse tree node containing the range
+///
+/// # Returns
+///
+/// * `Ok(RangeSpec)` - Parsed range specification
+/// * `Err(String)` - Error if range is malformed
 fn extract_range_arg(pair: pest::iterators::Pair<Rule>) -> Result<RangeSpec, String> {
     parse_range_spec(pair.into_inner().next().unwrap())
 }
 
+/// Parses trim operation characters from arguments.
+///
+/// Determines which characters to trim based on the operation arguments,
+/// distinguishing between character specifications and direction arguments.
+///
+/// # Arguments
+///
+/// * `pair` - Parse tree node for the trim operation
+///
+/// # Returns
+///
+/// The characters to trim, or empty string for default whitespace trimming.
 fn parse_trim_chars(pair: pest::iterators::Pair<Rule>) -> String {
     let mut parts = pair.into_inner();
 
@@ -147,6 +261,17 @@ fn parse_trim_chars(pair: pest::iterators::Pair<Rule>) -> String {
     }
 }
 
+/// Parses trim operation direction from arguments.
+///
+/// Determines the trimming direction (left, right, or both) from the operation arguments.
+///
+/// # Arguments
+///
+/// * `pair` - Parse tree node for the trim operation
+///
+/// # Returns
+///
+/// The trim direction, defaulting to `Both` if not specified.
 fn parse_trim_direction(pair: pest::iterators::Pair<Rule>) -> TrimDirection {
     let mut parts = pair.into_inner();
 
@@ -175,6 +300,17 @@ fn parse_trim_direction(pair: pest::iterators::Pair<Rule>) -> TrimDirection {
     TrimDirection::Both
 }
 
+/// Parses sort operation direction from arguments.
+///
+/// Determines the sort direction (ascending or descending) from the operation arguments.
+///
+/// # Arguments
+///
+/// * `pair` - Parse tree node for the sort operation
+///
+/// # Returns
+///
+/// The sort direction, defaulting to ascending if not specified.
 fn parse_sort_direction(pair: pest::iterators::Pair<Rule>) -> SortDirection {
     if let Some(p) = pair.into_inner().next() {
         match p.as_str() {
@@ -186,6 +322,19 @@ fn parse_sort_direction(pair: pest::iterators::Pair<Rule>) -> SortDirection {
     }
 }
 
+/// Parses a pad operation with width, character, and direction arguments.
+///
+/// Processes the padding operation arguments to extract width, padding character,
+/// and padding direction with appropriate defaults.
+///
+/// # Arguments
+///
+/// * `pair` - Parse tree node for the pad operation
+///
+/// # Returns
+///
+/// * `Ok(StringOp::Pad)` - Parsed pad operation
+/// * `Err(String)` - Error if width is invalid
 fn parse_pad_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String> {
     let mut parts = pair.into_inner();
     let width = parts
@@ -219,6 +368,19 @@ fn parse_pad_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, St
     })
 }
 
+/// Parses a regex extract operation with pattern and optional group.
+///
+/// Processes regex extraction arguments to extract the pattern and optional
+/// capture group number.
+///
+/// # Arguments
+///
+/// * `pair` - Parse tree node for the regex extract operation
+///
+/// # Returns
+///
+/// * `Ok(StringOp::RegexExtract)` - Parsed regex extract operation
+/// * `Err(String)` - Error if arguments are invalid
 fn parse_regex_extract_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String> {
     let mut parts = pair.into_inner();
     let pattern = parts.next().unwrap().as_str().to_string();
@@ -226,6 +388,19 @@ fn parse_regex_extract_operation(pair: pest::iterators::Pair<Rule>) -> Result<St
     Ok(StringOp::RegexExtract { pattern, group })
 }
 
+/// Parses a map operation with nested operation list.
+///
+/// Processes the map operation to extract the nested operations that should
+/// be applied to each list item.
+///
+/// # Arguments
+///
+/// * `pair` - Parse tree node for the map operation
+///
+/// # Returns
+///
+/// * `Ok(StringOp::Map)` - Parsed map operation with nested operations
+/// * `Err(String)` - Error if nested operations are invalid
 fn parse_map_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String> {
     let map_op_pair = pair.into_inner().next().unwrap();
     let operation_list_pair = map_op_pair.into_inner().next().unwrap();
@@ -239,6 +414,19 @@ fn parse_map_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, St
     Ok(StringOp::Map { operations })
 }
 
+/// Parses operations that can be used inside map blocks.
+///
+/// Handles the subset of operations that are valid within map contexts,
+/// including both string operations and list operations that work on individual items.
+///
+/// # Arguments
+///
+/// * `pair` - Parse tree node for the map inner operation
+///
+/// # Returns
+///
+/// * `Ok(StringOp)` - Parsed operation valid for map context
+/// * `Err(String)` - Error if operation is invalid or unsupported in map
 fn parse_map_inner_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String> {
     match pair.as_rule() {
         // String operations (existing)
@@ -304,6 +492,30 @@ fn parse_map_inner_operation(pair: pest::iterators::Pair<Rule>) -> Result<String
     }
 }
 
+/// Processes escape sequences in argument strings.
+///
+/// Converts escape sequences like `\n`, `\t`, `\:`, etc. into their literal
+/// characters, enabling special character support in template arguments.
+///
+/// # Arguments
+///
+/// * `s` - The raw argument string to process
+///
+/// # Returns
+///
+/// The processed string with escape sequences converted to literal characters.
+///
+/// # Supported Escape Sequences
+///
+/// - `\n` - Newline
+/// - `\t` - Tab
+/// - `\r` - Carriage return
+/// - `\:` - Literal colon
+/// - `\|` - Literal pipe
+/// - `\\` - Literal backslash
+/// - `\/` - Literal forward slash
+/// - `\{` - Literal opening brace
+/// - `\}` - Literal closing brace
 fn process_arg(s: &str) -> String {
     if !s.contains('\\') {
         return s.to_string();
@@ -334,6 +546,22 @@ fn process_arg(s: &str) -> String {
     result
 }
 
+/// Parses sed-style replacement strings.
+///
+/// Extracts pattern, replacement, and flags from sed-style syntax like `s/pattern/replacement/flags`.
+///
+/// # Arguments
+///
+/// * `pair` - Parse tree node containing the sed string
+///
+/// # Returns
+///
+/// * `Ok((pattern, replacement, flags))` - Parsed sed components
+/// * `Err(String)` - Error if sed syntax is invalid
+///
+/// # Errors
+///
+/// Returns an error if the pattern is empty (which would be invalid in regex).
 fn parse_sed_string(pair: pest::iterators::Pair<Rule>) -> Result<(String, String, String), String> {
     let mut parts = pair.into_inner();
 
@@ -352,6 +580,28 @@ fn parse_sed_string(pair: pest::iterators::Pair<Rule>) -> Result<(String, String
     ))
 }
 
+/// Parses range specifications from template syntax.
+///
+/// Converts range syntax like `1..3`, `..5`, `2..`, etc. into `RangeSpec` values
+/// with proper handling of inclusive/exclusive bounds and negative indexing.
+///
+/// # Arguments
+///
+/// * `pair` - Parse tree node containing the range specification
+///
+/// # Returns
+///
+/// * `Ok(RangeSpec)` - Parsed range specification
+/// * `Err(String)` - Error if range syntax is invalid
+///
+/// # Supported Range Types
+///
+/// - Single index: `1`, `-1`
+/// - Exclusive range: `1..3`
+/// - Inclusive range: `1..=3`
+/// - Open start: `..3`, `..=3`
+/// - Open end: `2..`
+/// - Full range: `..`
 fn parse_range_spec(pair: pest::iterators::Pair<Rule>) -> Result<RangeSpec, String> {
     let inner = pair.into_inner().next().unwrap();
     match inner.as_rule() {
