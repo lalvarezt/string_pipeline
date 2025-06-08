@@ -2,7 +2,7 @@ use clap::{CommandFactory, Parser};
 use std::fs;
 use std::io::{self, Read};
 use std::path::PathBuf;
-use string_pipeline::Template;
+use string_pipeline::{MultiTemplate, Template};
 
 #[derive(Parser)]
 #[command(
@@ -11,7 +11,8 @@ use string_pipeline::Template;
     about = "Powerful CLI tool and Rust library for chainable string transformations using intuitive template syntax",
     long_about = "A powerful string transformation CLI tool and Rust library that makes complex text processing \
         simple. Transform data using intuitive template syntax — chain operations like split, join, replace, filter, \
-        and others in a single readable expression."
+        and others in a single readable expression. Supports both single templates (e.g., '{upper}') and multi-templates \
+        with mixed text and operations (e.g., 'Name: {split: :0} Age: {split: :1}') with intelligent caching."
 )]
 struct Cli {
     /// The template string to apply
@@ -118,6 +119,9 @@ fn show_syntax_help() {
 BASIC SYNTAX:
   {{operation1|operation2|operation3}}
 
+MULTI-TEMPLATE SYNTAX:
+  literal text {{operation}} more text {{operation}}
+
 RANGE SYNTAX:
   N        - Single index (5 = 6th item, 0-indexed)
   N..M     - Range exclusive (1..3 = items 1,2)
@@ -126,10 +130,20 @@ RANGE SYNTAX:
   ..M      - From start to M-1 (..3 = first 3 items)
   ..       - All items
 
-EXAMPLES:
+SINGLE TEMPLATE EXAMPLES:
   {{split:,:..|map:{{upper}}|join:-}}
   {{trim|split: :..|filter:^[A-Z]|sort}}
   {{!split:,:..|slice:1..3}}  (debug mode)
+
+MULTI-TEMPLATE EXAMPLES:
+  'Name: {{split: :0}} Age: {{split: :1}}'
+  'First: {{split:,:0}} Second: {{split:,:1}}'
+  'some string {{split:,:1}} some string {{split:,:2}}'
+
+CACHING:
+  Multi-templates automatically cache repeated operations for efficiency.
+  In 'A: {{split:,:0}} B: {{split:,:1}} C: {{split:,:0}}', split is
+  calculated only once, with subsequent operations reusing the cached result.
 
 ESCAPING:
   \\:  - Literal colon
@@ -185,21 +199,94 @@ fn main() {
     };
 
     // Apply debug flags to template
-    let final_template = if cli.debug && !template_str.starts_with("{!") {
-        if let Some(stripped) = template_str.strip_prefix('{') {
-            format!("{{!{}", stripped)
+    let final_template = if cli.debug && !template_str.contains("{!") {
+        // Check if this will be a multi-template
+        let is_multi_template_debug =
+            if template_str.starts_with('{') && template_str.ends_with('}') {
+                // Count top-level braces (not nested ones)
+                let mut brace_count = 0;
+                let mut depth = 0;
+                let chars = template_str.chars();
+
+                for ch in chars {
+                    if ch == '{' {
+                        depth += 1;
+                        if depth == 1 {
+                            brace_count += 1;
+                        }
+                    } else if ch == '}' {
+                        depth -= 1;
+                    }
+                }
+
+                brace_count > 1
+            } else {
+                // Has text outside of braces, definitely multi-template
+                true
+            };
+
+        if is_multi_template_debug {
+            // Multi-template: add debug to each individual template section
+            let mut result = String::new();
+            let mut chars = template_str.chars().peekable();
+
+            while let Some(ch) = chars.next() {
+                if ch == '{' && chars.peek() != Some(&'!') {
+                    result.push_str("{!");
+                } else {
+                    result.push(ch);
+                }
+            }
+            result
         } else {
-            format!("{{!{}}}", template_str)
+            // Single template: wrap with {!...}
+            if let Some(stripped) = template_str.strip_prefix('{') {
+                format!("{{!{}", stripped)
+            } else {
+                format!("{{!{}}}", template_str)
+            }
         }
     } else {
         template_str
     };
 
+    // Detect if this is a multi-template or single template
+    // Multi-template: has literal text outside of braces OR multiple top-level template sections
+    let is_multi_template = if final_template.starts_with('{') && final_template.ends_with('}') {
+        // Count top-level braces (not nested ones)
+        let mut brace_count = 0;
+        let mut depth = 0;
+        let chars = final_template.chars();
+
+        for ch in chars {
+            if ch == '{' {
+                depth += 1;
+                if depth == 1 {
+                    brace_count += 1;
+                }
+            } else if ch == '}' {
+                depth -= 1;
+            }
+        }
+
+        brace_count > 1
+    } else {
+        // Has text outside of braces, definitely multi-template
+        true
+    };
+
     // Parse and validate template
-    let _template = Template::parse(&final_template).unwrap_or_else(|e| {
-        eprintln!("Error parsing template: {}", e);
-        std::process::exit(1);
-    });
+    if is_multi_template {
+        let _multi_template = MultiTemplate::parse(&final_template).unwrap_or_else(|e| {
+            eprintln!("Error parsing template: {}", e);
+            std::process::exit(1);
+        });
+    } else {
+        let _template = Template::parse(&final_template).unwrap_or_else(|e| {
+            eprintln!("Error parsing template: {}", e);
+            std::process::exit(1);
+        });
+    }
 
     // If just validating, exit here
     if cli.validate {
@@ -245,18 +332,36 @@ fn main() {
         final_template.clone()
     };
 
-    // Parse the final template for processing
-    let processing_template = Template::parse(&final_template_for_processing).unwrap_or_else(|e| {
-        eprintln!("Error parsing template: {}", e);
-        std::process::exit(1);
-    });
+    // Process input with appropriate template type
+    let result = if is_multi_template {
+        // Parse and process with MultiTemplate
+        let multi_template =
+            MultiTemplate::parse(&final_template_for_processing).unwrap_or_else(|e| {
+                eprintln!("Error parsing template: {}", e);
+                std::process::exit(1);
+            });
 
-    // Process input
-    let result = match processing_template.format(&input) {
-        Ok(result) => result,
-        Err(e) => {
-            eprintln!("Error formatting input: {}", e);
-            std::process::exit(1);
+        match multi_template.format(&input) {
+            Ok(result) => result,
+            Err(e) => {
+                eprintln!("Error formatting input: {}", e);
+                std::process::exit(1);
+            }
+        }
+    } else {
+        // Parse and process with single Template
+        let processing_template =
+            Template::parse(&final_template_for_processing).unwrap_or_else(|e| {
+                eprintln!("Error parsing template: {}", e);
+                std::process::exit(1);
+            });
+
+        match processing_template.format(&input) {
+            Ok(result) => result,
+            Err(e) => {
+                eprintln!("Error formatting input: {}", e);
+                std::process::exit(1);
+            }
         }
     };
 

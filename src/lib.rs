@@ -210,4 +210,4 @@
 
 mod pipeline;
 
-pub use pipeline::Template;
+pub use pipeline::{MultiTemplate, Template};

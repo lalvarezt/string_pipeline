@@ -14,6 +14,9 @@ use pest_derive::Parser;
 
 use super::{PadDirection, RangeSpec, SortDirection, StringOp, TrimDirection};
 
+// Import the new template section types
+use super::template::TemplateSection;
+
 // Common separator constant to avoid repeated allocations
 const SPACE_SEP: &str = " ";
 
@@ -90,6 +93,89 @@ pub fn parse_template(template: &str) -> Result<(Vec<StringOp>, bool), String> {
     }
 
     Ok((ops, debug))
+}
+
+/// Parses a multi-template string containing mixed literal text and template sections.
+///
+/// This function processes strings that contain both literal text and template operations,
+/// creating a sequence of sections that can be processed with caching support.
+///
+/// # Arguments
+///
+/// * `template` - The multi-template string to parse
+///
+/// # Returns
+///
+/// * `Ok((Vec<TemplateSection>, bool))` - Template sections and debug flag
+/// * `Err(String)` - Parse error with detailed description
+///
+/// # Examples
+///
+/// ```rust
+/// // This is an internal function used by MultiTemplate::parse()
+/// // let (sections, debug) = parse_multi_template("Hello {upper} world").unwrap();
+/// // assert_eq!(sections.len(), 3); // "Hello ", upper operation, " world"
+/// ```
+pub fn parse_multi_template(template: &str) -> Result<(Vec<TemplateSection>, bool), String> {
+    let mut sections = Vec::new();
+    let mut current_literal = String::new();
+    let mut chars = template.chars().peekable();
+    let mut debug = false;
+
+    while let Some(ch) = chars.next() {
+        if ch == '{' {
+            // Found start of template section
+
+            // Save any accumulated literal text
+            if !current_literal.is_empty() {
+                sections.push(TemplateSection::Literal(current_literal.clone()));
+                current_literal.clear();
+            }
+
+            // Find the matching closing brace
+            let mut brace_count = 1;
+            let mut template_content = String::new();
+
+            for inner_ch in chars.by_ref() {
+                if inner_ch == '{' {
+                    brace_count += 1;
+                    template_content.push(inner_ch);
+                } else if inner_ch == '}' {
+                    brace_count -= 1;
+                    if brace_count == 0 {
+                        break; // Found matching closing brace
+                    } else {
+                        template_content.push(inner_ch);
+                    }
+                } else {
+                    template_content.push(inner_ch);
+                }
+            }
+
+            if brace_count > 0 {
+                return Err("Unclosed template brace".to_string());
+            }
+
+            // Parse the template content
+            let full_template = format!("{{{}}}", template_content);
+            let (ops, section_debug) = parse_template(&full_template)?;
+            if section_debug {
+                debug = true; // If any section has debug enabled, enable for the whole multi-template
+            }
+
+            sections.push(TemplateSection::Template(ops));
+        } else {
+            // Regular character, add to current literal
+            current_literal.push(ch);
+        }
+    }
+
+    // Add any remaining literal text
+    if !current_literal.is_empty() {
+        sections.push(TemplateSection::Literal(current_literal));
+    }
+
+    Ok((sections, debug))
 }
 
 /// Parses a single operation from a parse tree node.

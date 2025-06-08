@@ -1,6 +1,8 @@
+use std::collections::{HashMap, hash_map::DefaultHasher};
 use std::fmt::Display;
+use std::hash::{Hash, Hasher};
 
-use crate::pipeline::{StringOp, apply_ops, parser};
+use crate::pipeline::{DebugContext, RangeSpec, StringOp, apply_ops_internal, apply_range, parser};
 
 /// A compiled string transformation template with chainable operations.
 ///
@@ -365,7 +367,27 @@ impl Template {
     /// assert_eq!(template.format("a,b").unwrap(), "b"); // Clamps to last item
     /// ```
     pub fn format(&self, input: &str) -> Result<String, String> {
-        apply_ops(input, &self.ops, self.debug)
+        if self.debug {
+            let debug_context = DebugContext::new_template(true, self.raw.clone());
+            debug_context.print_template_header("SINGLE TEMPLATE", input, None);
+
+            let result =
+                apply_ops_internal(input, &self.ops, self.debug, Some(debug_context.clone()))?;
+
+            // Show consistent cache statistics format
+            use crate::pipeline::{REGEX_CACHE, SPLIT_CACHE};
+            let regex_cache = REGEX_CACHE.lock().unwrap();
+            let split_cache = SPLIT_CACHE.lock().unwrap();
+            let cache_info = format!(
+                "Cache stats: {} regex patterns, {} split operations cached",
+                regex_cache.len(),
+                split_cache.len()
+            );
+            debug_context.print_template_footer("SINGLE TEMPLATE", &result, Some(&cache_info));
+            Ok(result)
+        } else {
+            apply_ops_internal(input, &self.ops, false, None)
+        }
     }
 
     /// Returns the original template string.
@@ -465,5 +487,576 @@ impl Display for Template {
     /// ```
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.raw)
+    }
+}
+
+/// A compiled multi-template string processor that handles mixed text and template sections with caching.
+///
+/// A `MultiTemplate` represents a parsed string containing both literal text and template sections,
+/// supporting efficient caching of intermediate results to avoid redundant computations.
+///
+/// # Multi-Template Syntax
+///
+/// Multi-templates consist of literal text mixed with template sections:
+///
+/// ```text
+/// some literal text {operation1|operation2} more text {operation3}
+/// ```
+///
+/// # Caching Benefits
+///
+/// When the same operation appears multiple times in a multi-template, intermediate results
+/// are cached to avoid redundant computations:
+///
+/// ```rust
+/// use string_pipeline::MultiTemplate;
+///
+/// // The split operation will only be performed once, cached for reuse
+/// let template = MultiTemplate::parse("First: {split:,:0} Second: {split:,:1}").unwrap();
+/// let result = template.format("apple,banana,cherry").unwrap();
+/// assert_eq!(result, "First: apple Second: banana");
+/// ```
+#[derive(Debug, Clone)]
+pub struct MultiTemplate {
+    /// The original template string for display and debugging.
+    raw: String,
+    /// Parsed sections containing literal text and template operations.
+    sections: Vec<TemplateSection>,
+    /// Whether debug mode is enabled for detailed operation tracing.
+    debug: bool,
+}
+
+/// A section within a multi-template, either literal text or a template operation.
+#[derive(Debug, Clone)]
+pub enum TemplateSection {
+    /// Literal text to include as-is in the output.
+    Literal(String),
+    /// A template operation sequence to apply to the input.
+    Template(Vec<StringOp>),
+}
+
+/// Unified cache system for MultiTemplate operations
+struct TemplateCache {
+    operations: HashMap<CacheKey, String>,
+    splits: HashMap<SplitCacheKey, Vec<String>>,
+}
+
+impl TemplateCache {
+    fn new() -> Self {
+        Self {
+            operations: HashMap::new(),
+            splits: HashMap::new(),
+        }
+    }
+
+    fn stats(&self) -> String {
+        format!(
+            "Operations: {}, Splits: {}",
+            self.operations.len(),
+            self.splits.len()
+        )
+    }
+}
+
+/// Cache key for memoizing split operation results.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+struct SplitCacheKey {
+    input_hash: u64,
+    separator: String,
+}
+
+/// Cache key for memoizing complete operation results.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+struct CacheKey {
+    input_hash: u64,
+    ops_signature: String,
+}
+
+impl MultiTemplate {
+    /// Creates a new MultiTemplate with the specified sections and debug flag.
+    fn new(raw: String, sections: Vec<TemplateSection>, debug: bool) -> Self {
+        Self {
+            raw,
+            sections,
+            debug,
+        }
+    }
+
+    /// Format operations summary for debug output
+    fn format_operations_summary(ops: &[StringOp]) -> String {
+        ops.iter()
+            .map(|op| match op {
+                StringOp::Split { sep, range } => format!(
+                    "split('{}',{})",
+                    sep,
+                    match range {
+                        RangeSpec::Index(i) => format!("{}", i),
+                        RangeSpec::Range(start, end, inclusive) => {
+                            match (start, end) {
+                                (None, None) => "..".to_string(),
+                                (Some(s), None) => format!("{}...", s),
+                                (None, Some(e)) => {
+                                    if *inclusive {
+                                        format!("..={}", e)
+                                    } else {
+                                        format!("..{}", e)
+                                    }
+                                }
+                                (Some(s), Some(e)) => {
+                                    let op = if *inclusive { "..=" } else { ".." };
+                                    format!("{}{}{}", s, op, e)
+                                }
+                            }
+                        }
+                    }
+                ),
+                StringOp::Upper => "upper".to_string(),
+                StringOp::Lower => "lower".to_string(),
+                StringOp::Append { suffix } => format!("append('{}')", suffix),
+                StringOp::Prepend { prefix } => format!("prepend('{}')", prefix),
+                StringOp::Replace {
+                    pattern,
+                    replacement,
+                    ..
+                } => format!("replace('{}' -> '{}')", pattern, replacement),
+                _ => format!("{:?}", op).to_lowercase(),
+            })
+            .collect::<Vec<_>>()
+            .join(" | ")
+    }
+
+    /// Parses a multi-template string into a reusable MultiTemplate.
+    ///
+    /// # Arguments
+    ///
+    /// * `template` - The multi-template string to parse
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(MultiTemplate)` - Successfully parsed multi-template
+    /// * `Err(String)` - Parse error with detailed description
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::MultiTemplate;
+    ///
+    /// // Parse a multi-template with literal text and operations
+    /// let template = MultiTemplate::parse("Name: {split: :0} Age: {split: :1}").unwrap();
+    /// let result = template.format("John 25").unwrap();
+    /// assert_eq!(result, "Name: John Age: 25");
+    ///
+    /// // Templates with the same operation will be cached
+    /// let template = MultiTemplate::parse("A: {split:,:0} B: {split:,:1} C: {split:,:0}").unwrap();
+    /// let result = template.format("x,y,z").unwrap();
+    /// assert_eq!(result, "A: x B: y C: x");
+    /// ```
+    pub fn parse(template: &str) -> Result<Self, String> {
+        let (sections, debug) = parser::parse_multi_template(template)?;
+        Ok(Self::new(template.to_string(), sections, debug))
+    }
+
+    /// Applies the multi-template to an input string with optimized caching.
+    ///
+    /// This implementation caches split operations separately from index selection
+    /// to avoid redundant splitting when accessing different indices from the same split.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - The input string to transform
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(String)` - The transformed result
+    /// * `Err(String)` - Processing error description
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::MultiTemplate;
+    ///
+    /// let template = MultiTemplate::parse("Start {upper} End").unwrap();
+    /// let result = template.format("hello").unwrap();
+    /// assert_eq!(result, "Start HELLO End");
+    /// ```
+    pub fn format(&self, input: &str) -> Result<String, String> {
+        use std::time::Instant;
+
+        let mut cache = TemplateCache::new();
+        let mut result = String::new();
+
+        let mut hasher = DefaultHasher::new();
+        input.hash(&mut hasher);
+        let input_hash = hasher.finish();
+
+        let start_time = if self.debug {
+            Some(Instant::now())
+        } else {
+            None
+        };
+
+        if self.debug {
+            let debug_context = DebugContext::new_template(true, self.raw.clone());
+            let additional_info = format!(
+                "{} sections to process (literal: {}, template: {})",
+                self.sections.len(),
+                self.sections.len() - self.template_section_count(),
+                self.template_section_count()
+            );
+            debug_context.print_template_header("MULTI-TEMPLATE", input, Some(&additional_info));
+
+            for (i, section) in self.sections.iter().enumerate() {
+                match section {
+                    TemplateSection::Literal(text) => {
+                        let content = if text.trim().is_empty() && text.len() <= 2 {
+                            "whitespace".to_string()
+                        } else if text.len() <= 20 {
+                            format!("'{}'", text)
+                        } else {
+                            format!("'{}...' ({} chars)", &text[..15], text.len())
+                        };
+                        debug_context.print_section(
+                            i + 1,
+                            self.sections.len(),
+                            "literal",
+                            &content,
+                        );
+                        result.push_str(text);
+                    }
+                    TemplateSection::Template(ops) => {
+                        let ops_summary = Self::format_operations_summary(ops);
+                        debug_context.print_section(
+                            i + 1,
+                            self.sections.len(),
+                            "template",
+                            &ops_summary,
+                        );
+
+                        let section_result = self.apply_template_section_optimized(
+                            input,
+                            ops,
+                            input_hash,
+                            &mut cache,
+                            &Some(&debug_context),
+                        )?;
+                        result.push_str(&section_result);
+                        debug_context.print_result("", &section_result);
+                    }
+                }
+            }
+
+            let total_elapsed = start_time.unwrap().elapsed();
+            let cache_info = format!(
+                "Total execution time: {:?}, Cache stats - {}",
+                total_elapsed,
+                cache.stats()
+            );
+            debug_context.print_template_footer("MULTI-TEMPLATE", &result, Some(&cache_info));
+        } else {
+            for section in &self.sections {
+                match section {
+                    TemplateSection::Literal(text) => {
+                        result.push_str(text);
+                    }
+                    TemplateSection::Template(ops) => {
+                        let section_result = self.apply_template_section_optimized(
+                            input, ops, input_hash, &mut cache, &None,
+                        )?;
+                        result.push_str(&section_result);
+                    }
+                }
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// Apply a template section with optimized caching for split operations.
+    fn apply_template_section_optimized(
+        &self,
+        input: &str,
+        ops: &[StringOp],
+        input_hash: u64,
+        cache: &mut TemplateCache,
+        debug_context: &Option<&DebugContext>,
+    ) -> Result<String, String> {
+        // Check if this is a simple split+index operation that can be optimized
+        if ops.len() == 1 {
+            if let StringOp::Split { sep, range } = &ops[0] {
+                return self.apply_optimized_split(
+                    input,
+                    sep,
+                    range,
+                    input_hash,
+                    &mut cache.splits,
+                    debug_context,
+                );
+            }
+        }
+
+        // Fall back to regular operation caching for complex operations
+        let ops_signature = format!("{:?}", ops);
+        let cache_key = CacheKey {
+            input_hash,
+            ops_signature: ops_signature.clone(),
+        };
+
+        if let Some(cached) = cache.operations.get(&cache_key) {
+            if let Some(ctx) = debug_context {
+                ctx.print_cache_operation("CACHE HIT", "Reusing previous result");
+            }
+            Ok(cached.clone())
+        } else {
+            if let Some(ctx) = debug_context {
+                ctx.print_cache_operation("CACHE MISS", "Computing and storing result");
+            }
+            // Keep verbose debug for apply_ops_internal to show detailed pipeline execution
+            let section_result = apply_ops_internal(
+                input,
+                ops,
+                self.debug,
+                debug_context.as_ref().map(|ctx| (*ctx).clone()),
+            )?;
+            cache.operations.insert(cache_key, section_result.clone());
+            Ok(section_result)
+        }
+    }
+
+    /// Apply an optimized split operation with separate caching for split results.
+    fn apply_optimized_split(
+        &self,
+        input: &str,
+        separator: &str,
+        range: &RangeSpec,
+        input_hash: u64,
+        split_cache: &mut HashMap<SplitCacheKey, Vec<String>>,
+        debug_context: &Option<&DebugContext>,
+    ) -> Result<String, String> {
+        let split_key = SplitCacheKey {
+            input_hash,
+            separator: separator.to_string(),
+        };
+
+        // Get or compute the split result
+        let split_result = if let Some(cached_split) = split_cache.get(&split_key) {
+            if let Some(ctx) = debug_context {
+                ctx.print_cache_operation(
+                    "SPLIT CACHE HIT",
+                    &format!("Reusing split by '{}'", separator),
+                );
+            }
+            cached_split.clone()
+        } else {
+            if let Some(ctx) = debug_context {
+                ctx.print_cache_operation(
+                    "SPLIT CACHE MISS",
+                    &format!("Computing split by '{}'", separator),
+                );
+            }
+            let parts: Vec<String> = if separator.is_empty() {
+                input.chars().map(|c| c.to_string()).collect()
+            } else {
+                input.split(separator).map(|s| s.to_string()).collect()
+            };
+            split_cache.insert(split_key, parts.clone());
+            parts
+        };
+
+        // Apply the range selection to the cached split result
+        let selected = apply_range(&split_result, range);
+
+        if let Some(ctx) = debug_context {
+            let range_desc = match range {
+                RangeSpec::Index(i) => format!("item[{}]", i),
+                RangeSpec::Range(start, end, inclusive) => {
+                    let start_str = start
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| "start".to_string());
+                    let end_str = end
+                        .map(|e| e.to_string())
+                        .unwrap_or_else(|| "end".to_string());
+                    let op = if *inclusive { "..=" } else { ".." };
+                    format!("range[{}{}{}]", start_str, op, end_str)
+                }
+            };
+            ctx.print_step(&format!(
+                "Selecting {} from {} parts",
+                range_desc,
+                split_result.len()
+            ));
+        }
+
+        // Convert back to the expected format (join with same separator if multiple items)
+        match selected.len() {
+            0 => Ok(String::new()),
+            1 => Ok(selected[0].clone()),
+            _ => {
+                // For multiple items, this should be rare in split+index operations
+                // but we handle it by joining with the original separator
+                Ok(selected.join(separator))
+            }
+        }
+    }
+
+    /// Returns the original multi-template string.
+    pub fn template_string(&self) -> &str {
+        &self.raw
+    }
+
+    /// Returns whether debug mode is enabled.
+    pub fn is_debug_enabled(&self) -> bool {
+        self.debug
+    }
+
+    /// Returns the number of sections in this multi-template.
+    pub fn section_count(&self) -> usize {
+        self.sections.len()
+    }
+
+    /// Returns the number of template sections (excluding literal text).
+    pub fn template_section_count(&self) -> usize {
+        self.sections
+            .iter()
+            .filter(|s| matches!(s, TemplateSection::Template(_)))
+            .count()
+    }
+}
+
+impl TryFrom<&str> for MultiTemplate {
+    type Error = String;
+
+    /// Creates a MultiTemplate from a string slice.
+    ///
+    /// This is equivalent to calling `MultiTemplate::parse()`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::MultiTemplate;
+    /// use std::convert::TryInto;
+    ///
+    /// let template: MultiTemplate = "Hello {upper}!".try_into().unwrap();
+    /// assert_eq!(template.format("world").unwrap(), "Hello WORLD!");
+    /// ```
+    fn try_from(template: &str) -> Result<Self, Self::Error> {
+        Self::parse(template)
+    }
+}
+
+impl Display for MultiTemplate {
+    /// Formats the MultiTemplate for display, showing the original template string.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::MultiTemplate;
+    ///
+    /// let template = MultiTemplate::parse("Hello {upper}!").unwrap();
+    /// println!("{}", template); // Output: "Hello {upper}!"
+    /// ```
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.raw)
+    }
+}
+
+#[cfg(test)]
+mod multi_template_tests {
+    use super::*;
+
+    #[test]
+    fn test_multi_template_basic() {
+        let template = MultiTemplate::parse("Hello {upper} world!").unwrap();
+        let result = template.format("test").unwrap();
+        assert_eq!(result, "Hello TEST world!");
+    }
+
+    #[test]
+    fn test_multi_template_multiple_operations() {
+        let template = MultiTemplate::parse("First: {split:,:0} Second: {split:,:1}").unwrap();
+        let result = template.format("apple,banana,cherry").unwrap();
+        assert_eq!(result, "First: apple Second: banana");
+    }
+
+    #[test]
+    fn test_multi_template_caching() {
+        // This should use the same split operation twice, demonstrating caching
+        let template =
+            MultiTemplate::parse("A: {split:,:0} B: {split:,:1} C: {split:,:0}").unwrap();
+        let result = template.format("x,y,z").unwrap();
+        assert_eq!(result, "A: x B: y C: x");
+    }
+
+    #[test]
+    fn test_multi_template_no_templates() {
+        let template = MultiTemplate::parse("Just literal text").unwrap();
+        let result = template.format("anything").unwrap();
+        assert_eq!(result, "Just literal text");
+    }
+
+    #[test]
+    fn test_multi_template_only_template() {
+        let template = MultiTemplate::parse("{upper}").unwrap();
+        let result = template.format("hello").unwrap();
+        assert_eq!(result, "HELLO");
+    }
+
+    #[test]
+    fn test_multi_template_complex_example() {
+        // Example from the user's request
+        let template =
+            MultiTemplate::parse("some string {split:,:1} some string {split:,:2}").unwrap();
+        let result = template.format("a,b,c,d").unwrap();
+        assert_eq!(result, "some string b some string c");
+    }
+
+    #[test]
+    fn test_multi_template_debug_mode() {
+        let template = MultiTemplate::parse("Test {!upper} mode").unwrap();
+        assert!(template.is_debug_enabled());
+        let result = template.format("hello").unwrap();
+        assert_eq!(result, "Test HELLO mode");
+    }
+
+    #[test]
+    fn test_multi_template_nested_braces() {
+        let template = MultiTemplate::parse("Result: {split:,:..|map:{upper}|join:,}").unwrap();
+        let result = template.format("hello,world").unwrap();
+        assert_eq!(result, "Result: HELLO,WORLD");
+    }
+
+    #[test]
+    fn test_multi_template_error_unclosed_brace() {
+        let result = MultiTemplate::parse("Hello {upper world");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Unclosed template brace"));
+    }
+
+    #[test]
+    fn test_multi_template_section_counts() {
+        let template = MultiTemplate::parse("A {upper} B {lower} C").unwrap();
+        assert_eq!(template.section_count(), 5); // "A ", upper, " B ", lower, " C"
+        assert_eq!(template.template_section_count(), 2); // upper and lower
+    }
+
+    #[test]
+    fn test_multi_template_split_optimization() {
+        // This test verifies that multiple split operations with the same separator
+        // reuse the cached split result rather than splitting multiple times
+        let template = MultiTemplate::parse("A: {0} B: {1} C: {2} D: {0}").unwrap();
+        let result = template.format("apple banana cherry").unwrap();
+        assert_eq!(result, "A: apple B: banana C: cherry D: apple");
+
+        // Test with comma-separated data
+        let template = MultiTemplate::parse("{split:,:0}-{split:,:1}-{split:,:0}").unwrap();
+        let result = template.format("x,y,z").unwrap();
+        assert_eq!(result, "x-y-x");
+    }
+
+    #[test]
+    fn test_multi_template_mixed_operations() {
+        // Test that split optimization doesn't interfere with other operations
+        let template = MultiTemplate::parse("First: {0} Upper: {upper} Last: {2}").unwrap();
+        let result = template.format("hello world test").unwrap();
+        assert_eq!(result, "First: hello Upper: HELLO WORLD TEST Last: test");
     }
 }
