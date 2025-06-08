@@ -3,6 +3,21 @@
 All notable changes to this project will be documented in this file.
 <!-- ignore lint rules that are often triggered by content generated from commits / git-cliff -->
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style -->
+## [0.11.1](https://github.com/lalvarezt/string_pipeline/compare/0.11.0..0.11.1) - 2025-06-08
+
+### 🐛 Bug Fixes
+
+- *(workflow)* Issue with windows shell detection - ([23a477e](https://github.com/lalvarezt/string_pipeline/commit/23a477ede2550c2e40c7a3e6d0cdc40cf2b595b2))
+
+### 📚 Documentation
+
+- *(lib)* Minor tweaks for consistency with markdown doc - ([dc9df4e](https://github.com/lalvarezt/string_pipeline/commit/dc9df4ec2774322097a8215cd76ff1b1700d890b))
+- *(template)* Add MultiTemplate documentation - ([60f00ca](https://github.com/lalvarezt/string_pipeline/commit/60f00caba10046d85ef93f6800260676e9210023))
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump to 0.11.1 - ([463360b](https://github.com/lalvarezt/string_pipeline/commit/463360bf77cd3d063c79bdf462d48f28c0aef837))
+
 ## [0.11.0](https://github.com/lalvarezt/string_pipeline/compare/0.10.0..0.11.0) - 2025-06-08
 
 ### ⛰️  Features
@@ -17,6 +32,7 @@ All notable changes to this project will be documented in this file.
 
 ### ⚙️ Miscellaneous Tasks
 
+- *(changelog)* Update changelog - ([9c787c3](https://github.com/lalvarezt/string_pipeline/commit/9c787c34e967ed7eacf7055c872853164ed8f4a1))
 - Bump to 0.11.0 - ([4bca5ee](https://github.com/lalvarezt/string_pipeline/commit/4bca5eef2f5375d070be4a72f9cd3504f8c15b23))
 
 ## [0.10.0](https://github.com/lalvarezt/string_pipeline/compare/0.9.0..0.10.0) - 2025-06-07
