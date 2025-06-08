@@ -220,36 +220,10 @@ string-pipeline -o json '{upper}' 'hello'
 Suppress debug output and validation messages with `--quiet` or `-q`.
 
 ```bash
-# 🔊 Normal debug mode (verbose)
-string-pipeline -d '{split:,:..|map:{upper}}' 'a,b,c'
-# DEBUG: ═══════════════════════════════════════════════
-# DEBUG: PIPELINE START: 2 operations to apply
-# DEBUG: Initial input: Str("a,b,c")
-# DEBUG: ───────────────────────────────────────────────
-# DEBUG: STEP 1/2: Applying Split { sep: ",", range: Range(None, None, false) }
-# DEBUG: Input: Str("a,b,c")
-# DEBUG: Result: List(3 items: ["a", "b", "c"])
-# DEBUG: Step completed in 342.7µs
-# DEBUG: ───────────────────────────────────────────────
-# DEBUG: STEP 2/2: Applying Map { operations: [Upper] }
-# DEBUG: MAP OPERATION: Processing 3 items
-# DEBUG: ┌─ Processing item 1 of 3 ─────────────
-# DEBUG: │  Input: "a" → Output: "A"
-# DEBUG: └────────────────────────────────────────────
-# DEBUG: ┌─ Processing item 2 of 3 ─────────────
-# DEBUG: │  Input: "b" → Output: "B"
-# DEBUG: └────────────────────────────────────────────
-# DEBUG: ┌─ Processing item 3 of 3 ─────────────
-# DEBUG: │  Input: "c" → Output: "C"
-# DEBUG: └────────────────────────────────────────────
-# DEBUG: MAP COMPLETED: 3 → 3 items
-# DEBUG: Result: List(3 items: ["A", "B", "C"])
-# DEBUG: Step completed in 15.2841ms
-# DEBUG: ───────────────────────────────────────────────
-# DEBUG: PIPELINE COMPLETE
-# DEBUG: Total execution time: 18.7456ms
-# DEBUG: ═══════════════════════════════════════════════
-# A,B,C
+# 🔊 Normal debug mode (shows detailed step-by-step processing)
+string-pipeline -d '{split:,:..|map:{upper}}' "hello,world"
+# [Detailed debug output - see Debug System Guide for complete examples]
+# HELLO,WORLD
 
 # 🤫 Quiet debug mode (result only)
 string-pipeline -d -q '{split:,:..|map:{upper}}' 'a,b,c'
@@ -276,6 +250,8 @@ Enable step-by-step processing visualization.
 - 🔄 Each operation being applied
 - 📊 Intermediate results after each step
 - 🗺️ Detailed map operation processing
+- ⏱️ Performance timing for each step
+- 📊 Cache statistics
 - ✅ Final output
 
 **Debug Examples:**
@@ -283,31 +259,7 @@ Enable step-by-step processing visualization.
 ```bash
 # 🔍 Basic debugging
 string-pipeline -d '{split:,:..|map:{upper}}' 'hello,world'
-
-# Output:
-# DEBUG: ═══════════════════════════════════════════════
-# DEBUG: PIPELINE START: 2 operations to apply
-# DEBUG: Initial input: Str("hello,world")
-# DEBUG: ───────────────────────────────────────────────
-# DEBUG: STEP 1/2: Applying Split { sep: ",", range: Range(None, None, false) }
-# DEBUG: Input: Str("hello,world")
-# DEBUG: Result: List(2 items: ["hello", "world"])
-# DEBUG: Step completed in 548.4µs
-# DEBUG: ───────────────────────────────────────────────
-# DEBUG: STEP 2/2: Applying Map { operations: [Upper] }
-# DEBUG: MAP OPERATION: Processing 2 items
-# DEBUG: ┌─ Processing item 1 of 2 ─────────────
-# DEBUG: │  Input: "hello" → Output: "HELLO"
-# DEBUG: └────────────────────────────────────────────
-# DEBUG: ┌─ Processing item 2 of 2 ─────────────
-# DEBUG: │  Input: "world" → Output: "WORLD"
-# DEBUG: └────────────────────────────────────────────
-# DEBUG: Result: List(2 items: ["HELLO", "WORLD"])
-# DEBUG: Step completed in 20.0277ms
-# DEBUG: ───────────────────────────────────────────────
-# DEBUG: PIPELINE COMPLETE
-# DEBUG: Total execution time: 23.0989ms
-# DEBUG: ═══════════════════════════════════════════════
+# [Shows detailed step-by-step processing - see Debug System Guide]
 # HELLO,WORLD
 
 # 🤫 Quiet debugging (result only)
@@ -727,197 +679,56 @@ fi
 
 ## ⚡ Performance & Benchmarking
 
-String Pipeline includes simple benchmarking tools for measuring performance and basic optimization.
+String Pipeline includes built-in performance measurement tools accessible via the CLI.
 
 ### 🔬 Built-in Benchmarking Tool
 
-The benchmarking binary provides timing analysis:
+Run comprehensive performance benchmarks:
 
 ```bash
-# Build the benchmark tool
+# Build and run benchmarks
 cargo build --release --bin bench
-
-# Run benchmarks (1000 iterations)
 ./target/release/bench
 
 # Quick performance check
 ./target/release/bench --iterations 100
 
-# JSON output for scripts
-./target/release/bench --format json > benchmark_results.json
+# JSON output for automation
+./target/release/bench --format json > results.json
 ```
 
-### 📊 Performance Metrics
+### 🔍 Real-Time Performance Monitoring
 
-**Understanding the Output:**
-
-```bash
-./target/release/bench --iterations 100
-```
-
-```text
-📊 Summary:
-• Total tests run: 33
-• Total execution time: 49.78ms
-• Iterations per test: 100
-
-📈 Detailed Results:
-Operation                                               Average          Min          Max
-----------------------------------------------------------------------------------------
-Single: upper                                             125ns        100ns        150ns
-Single: split                                            3.46μs       2.90μs       3.90μs
-Map: split + map(upper) + join                           7.79μs       6.80μs       8.80μs
-Complex: split + map(upper+replace) + join              50.77μs      45.10μs      58.40μs
-```
-
-### 🎯 Using Performance Data
-
-**Identify Bottlenecks:**
-
-1. **🕐 Timing Analysis**
-   - Operations > 50μs may need optimization
-   - Look for outliers indicating inconsistent performance
-   - Compare similar operations to understand overhead
-
-2. **📈 Scaling Patterns**
-   - Basic operations: O(n) with input size
-   - Map operations: O(n × complexity) where complexity is sub-template cost
-   - Regex operations: Compilation overhead + O(n) matching
-
-### 🚀 Real-Time Performance Monitoring
-
-**CLI Debug Timing:**
+Use debug mode to see timing information for your specific templates:
 
 ```bash
 # Get per-operation timing with debug mode
-string-pipeline -d '{split:,:..|map:{upper}|sort}' 'large,data,set'
+string-pipeline -d '{split:,:..|map:{upper}|sort}' 'your,data,here'
 ```
 
-Look for timing information in debug output:
+Debug output includes step-by-step timing:
 
 ```text
 DEBUG: Step completed in 342.7µs
-DEBUG: MAP COMPLETED: 3 → 3 items
-DEBUG: Step completed in 15.2841ms
 DEBUG: Total execution time: 18.7456ms
 ```
 
-### 🏭 Production Performance Optimization
+### 🚀 Quick Optimization Tips
 
-**Template Optimization Strategies:**
-
-1. **⚡ Operation Ordering**
-
-   ```bash
-   # ✅ Filter early to reduce data
-   '{split:,:..|filter:important|map:{expensive_operation}}'
-
-   # ❌ Process all data then filter
-   '{split:,:..|map:{expensive_operation}|filter:IMPORTANT}'
-   ```
-
-2. **🎯 Range Optimization**
-
-   ```bash
-   # ✅ Direct range specification
-   '{split:,:0..10}'
-
-   # ❌ Split all then slice
-   '{split:,:..|slice:0..10}'
-   ```
-
-3. **🔄 Map Consolidation**
-
-   ```bash
-   # ✅ Single map operation
-   '{split:,:..|map:{trim|upper|append:!}}'
-
-   # ❌ Multiple map operations
-   '{split:,:..|map:{trim}|map:{upper}|map:{append:!}}'
-   ```
-
-### 📈 CI/CD Performance Integration
-
-**Automated Performance Testing:**
+**Template Performance Best Practices:**
 
 ```bash
-#!/bin/bash
-# performance_check.sh
+# ✅ Filter early to reduce data
+'{split:,:..|filter:important|map:{expensive_operation}}'
 
-# Run benchmarks and save results
-./target/release/bench --format json > current_benchmark.json
+# ✅ Use direct ranges instead of slice
+'{split:,:0..10}'
 
-# Compare with baseline (implement your comparison logic)
-if [ -f baseline_benchmark.json ]; then
-    # Your performance comparison logic here
-    echo "Comparing against baseline..."
-fi
-
-# Performance threshold check
-TOTAL_TIME=$(jq '.summary.total_execution_time_ns' current_benchmark.json)
-THRESHOLD=100000000  # 100ms threshold
-
-if [ "$TOTAL_TIME" -gt "$THRESHOLD" ]; then
-    echo "Performance threshold exceeded!"
-    exit 1
-fi
+# ✅ Combine operations in single map
+'{split:,:..|map:{trim|upper|append:!}}'
 ```
 
-**GitHub Actions Integration:**
-
-```yaml
-# .github/workflows/performance.yml
-- name: Run Performance Tests
-  run: |
-    cargo build --release --bin bench
-    ./target/release/bench --format json > benchmark_results.json
-
-- name: Upload Performance Results
-  uses: actions/upload-artifact@v3
-  with:
-    name: benchmark-results
-    path: benchmark_results.json
-```
-
-### 🔍 Profiling Complex Templates
-
-**Step-by-Step Performance Analysis:**
-
-```bash
-# Profile a complex template piece by piece
-echo "Complex template performance analysis:"
-
-# Step 1: Measure split operation
-time string-pipeline '{split:,:..|!}' "$LARGE_DATA"
-
-# Step 2: Measure split + map
-time string-pipeline '{split:,:..|map:{upper}}' "$LARGE_DATA"
-
-# Step 3: Measure full pipeline
-time string-pipeline '{split:,:..|map:{upper|replace:s/A/X/}|sort}' "$LARGE_DATA"
-```
-
-### 💡 Performance Best Practices
-
-**For High-Throughput Applications:**
-
-1. **🏗️ Architecture Choices**
-   - Use the Rust library directly for maximum performance
-   - Batch processing instead of per-item CLI calls
-   - Pre-compile templates once, reuse many times
-
-2. **📊 Data Considerations**
-   - Larger input strings amortize operation overhead
-   - Consider memory vs. speed trade-offs for very large datasets
-   - Profile with realistic data sizes and patterns
-
-3. **🔧 Optimization Workflow**
-   - Start with benchmark tool baseline
-   - Use debug mode to identify bottlenecks
-   - Apply optimization strategies systematically
-   - Re-benchmark to check improvements
-
-> 📊 **More Details:** For performance measurement tips and optimization ideas, see the [Performance Benchmarking Guide](benchmarking.md).
+> 📊 **Comprehensive Guide:** For detailed benchmarking methodology, performance analysis, automation scripts, and optimization strategies, see the [🏆 Performance Benchmarking Guide](benchmarking.md).
 
 ## 🔧 Troubleshooting
 
@@ -960,7 +771,7 @@ head -5 input.txt                 # Check first few lines
 wc -l input.txt                   # Check line count
 
 # 🔍 Test with simple template first
-string-pipeline '{identity}' -f input.txt
+string-pipeline '{upper}' -f input.txt
 ```
 
 #### 🔤 Character Encoding Problems

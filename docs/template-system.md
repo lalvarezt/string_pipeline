@@ -9,6 +9,15 @@ A powerful string processing template system with support for splitting, transfo
   - [Basic Structure](#basic-structure)
   - [Operation Chaining](#operation-chaining)
   - [List Rendering Behavior](#list-rendering-behavior)
+- [🔗 Multi-Template System](#-multi-template-system)
+  - [📖 Concept](#-concept)
+  - [🎨 Basic Syntax](#-basic-syntax)
+  - [💡 Examples](#-examples)
+  - [⚡ Performance Optimization](#-performance-optimization)
+  - [🎛️ Template Detection](#️-template-detection)
+  - [💡 Best Practices](#-best-practices)
+  - [🔧 Error Handling](#-error-handling)
+  - [🌟 Real-World Use Cases](#-real-world-use-cases)
 - [📊 Operations Reference](#-operations-reference)
   - [🎯 Operation Type System](#-operation-type-system) - Understanding input/output types
   - [🔪 Split](#-split) - Split text into parts
@@ -42,12 +51,11 @@ A powerful string processing template system with support for splitting, transfo
 - [🐛 Debug Mode](#-debug-mode)
 - [💡 Examples](#-examples)
 - [⚠️ Troubleshooting](#️-troubleshooting)
-  - [Common Errors](#common-errors)
-  - [Best Practices](#best-practices)
-    - [✅ Do's](#-dos)
-    - [❌ Don'ts](#-donts)
-    - [Performance Tips](#performance-tips)
-- [⚡ Performance Characteristics](#-performance-characteristics)
+  - [🚨 Common Errors & Solutions](#-common-errors--solutions)
+  - [💡 Best Practices](#-best-practices-1)
+    - [🏗️ Template Development](#️-template-development)
+    - [⚡ Performance Tips](#-performance-tips)
+    - [❌ Common Mistakes to Avoid](#-common-mistakes-to-avoid)
 
 ## 🚀 Quick Start
 
@@ -129,6 +137,202 @@ In this example:
 
 > 💡 **Note:** To have full control over the output format, always use an explicit `join` operation as the final step.
 > 🐛 **Debug Tip:** Use [Debug Mode](#-debug-mode) (`{!...}`) to see exactly which separator is being tracked and used for final rendering. This helps identify when and how the separator changes during processing.
+
+## 🔗 Multi-Template System
+
+String Pipeline supports **multi-templates** - strings containing both literal text and template sections that can share cached operations for optimal performance.
+
+### 📖 Concept
+
+A multi-template combines literal text with multiple template sections in a single string:
+
+```text
+some literal text {operation1} more text {operation2|operation3}
+```
+
+**Key Benefits:**
+
+- **🔗 Mixed Content** - Combine static text with dynamic transformations
+- **⚡ Smart Caching** - Automatically cache operations that repeat across template sections
+- **🎯 Flexible Formatting** - Create complex output formats with minimal effort
+- **🐛 Full Debug Support** - Debug mode works seamlessly with multi-templates
+
+### 🎨 Basic Syntax
+
+```text
+# Single template section
+Hello {upper} World!
+
+# Multiple template sections
+Name: {split: :0} Age: {split: :1}
+
+# Complex with literal text
+Processing {split:,:0} → Result: {split:,:..|map:{upper}|join:-}
+```
+
+### 💡 Examples
+
+#### 📄 Simple Text Formatting
+
+```bash
+# Create formatted messages
+string-pipeline "Hello {upper}, welcome!" "world"
+# Output: "Hello WORLD, welcome!"
+
+# Extract and format data
+string-pipeline "Name: {split: :0} Age: {split: :1}" "John 25"
+# Output: "Name: John Age: 25"
+
+# Processing status
+string-pipeline "Processing {split:,:0}... Status: {split:,:1|upper}" "file.txt,complete"
+# Output: "Processing file.txt... Status: COMPLETE"
+```
+
+#### 🔄 Data Transformation
+
+```bash
+# CSV to formatted output
+string-pipeline "User: {split:,:0} ({split:,:2}) - Score: {split:,:1}" "Alice,95,Premium"
+# Output: "User: Alice (Premium) - Score: 95"
+
+# Log formatting
+string-pipeline "[{split: :0|upper}] {split: :1..}" "info user logged in successfully"
+# Output: "[INFO] user logged in successfully"
+
+# Path processing
+string-pipeline "File: {split:/:-1} Dir: {split:/:..-1|join:/}" "/home/user/docs/file.txt"
+# Output: "File: file.txt Dir: /home/user/docs"
+```
+
+#### 🎯 Advanced Multi-Template Usage
+
+```bash
+# Complex report generation
+string-pipeline "Summary: {split:,:..|unique|join: } unique items, first: {split:,:0}, last: {split:,:-1}" "apple,banana,apple,cherry,banana"
+# Output: "Summary: apple banana cherry unique items, first: apple, last: banana"
+
+# Configuration parsing
+string-pipeline "Host: {split: :0|split:=:1} Port: {split: :1|split:=:1} SSL: {split: :-1|split:=:1|upper}" "host=localhost port=8080 ssl=true"
+# Output: "Host: host Port: 8080 SSL: TRUE"
+
+# Multi-step processing
+string-pipeline "Original: {} -> Processed: {split:,:0|upper|append:!}" "hello,world"
+# Output: Original: hello,world -> Processed: HELLO!
+```
+
+### ⚡ Performance Optimization
+
+Multi-templates automatically cache operation results to avoid redundant processing:
+
+#### 📊 Caching Example
+
+```bash
+# This template uses split:,:0 twice but only splits once
+string-pipeline "First: {split:,:0} Again: {split:,:0}" "apple,banana,cherry"
+# Output: "First: apple Again: apple"
+# ⚡ Optimization: "apple,banana,cherry" is split only once, then cached
+```
+
+#### 🔍 Cache Efficiency
+
+The caching system optimizes these patterns:
+
+```bash
+# ✅ Automatically optimized - same split operation cached
+"A: {split:,:0} B: {split:,:1} C: {split:,:0}"
+
+# ✅ Automatically optimized - different ranges, same split cached
+"Start: {split: :0} Middle: {split: :1..3} End: {split: :-1}"
+
+# ✅ Automatically optimized - complex operations cached
+"Original: {split:,:..|map:{upper}} Sorted: {split:,:..|map:{upper}|sort}"
+```
+
+### 🎛️ Template Detection
+
+String Pipeline automatically detects multi-templates vs single templates:
+
+| Template Type | Detection Rule | Example |
+|---------------|----------------|---------|
+| **Single Template** | Starts with `{`, ends with `}`, single template section | `{split:,:0|upper}` |
+| **Multi-Template** | Has literal text outside braces OR multiple template sections | `Hello {upper}` or `{upper} and {lower}` |
+
+### 💡 Best Practices
+
+#### ✅ Effective Multi-Template Usage
+
+```bash
+# ✅ Use multi-templates for mixed content
+"Status: {split:,:1|upper} for user {split:,:0}"
+
+# ✅ Leverage caching for repeated operations
+"Name: {split: :0} Email: {regex_extract:@.*} Name again: {split: :0}"
+
+# ✅ Combine with single templates for complex workflows
+echo "John Doe john@example.com" | string-pipeline "User: {split: :0..1|join: } Contact: {regex_extract:\\w+@\\w+\\.\\w+}"
+```
+
+#### ❌ Common Mistakes
+
+```bash
+# ❌ Don't use multi-templates when single templates suffice
+"Hello {upper} World" → input: "test"  # Outputs: "Hello TEST World"
+# Better: Use it when you actually need the literal text
+
+# ❌ Don't over-complicate when simple operations work
+"Result: {split:,:0|append:!|prepend:->}"
+# Better: "Result: ->{split:,:0}!" (if the literal parts are truly static)
+```
+
+### 🔧 Error Handling
+
+Multi-templates provide clear error messages for common issues:
+
+```bash
+# ❌ Unclosed brace
+"Hello {upper world"
+# Error: Unclosed template brace
+
+# ❌ Invalid operation in section
+"Status: {invalid_op} complete"
+# Error parsing template: Unknown operation: invalid_op
+
+# ❌ Type mismatch in template section
+"Count: {sort}"
+# Error: sort operation can only be applied to lists. Use split first.
+```
+
+### 🌟 Real-World Use Cases
+
+#### 📊 Report Generation
+
+```bash
+# System status report
+string-pipeline "System: {split:,:0} CPU: {split:,:1}% Memory: {split:,:2}% Status: {split:,:3|upper}" "server01,45,67,healthy"
+# Output: "System: server01 CPU: 45% Memory: 67% Status: HEALTHY"
+```
+
+#### 🗂️ File Processing
+
+```bash
+# Process file listings
+string-pipeline "File: {split:/:‑1|pad:20: :right} Size: {split: :4} Modified: {split: :5..7|join: }" "$(ls -la file.txt)"
+```
+
+#### 🔗 API Response Formatting
+
+```bash
+# Format JSON-like data
+string-pipeline '{"name": "{split:,:0}", "age": {split:,:1}, "status": "{split:,:2|upper}"}' "Alice,30,active"
+# Output: {"name": "Alice", "age": 30, "status": "ACTIVE"}
+```
+
+> 🎯 **When to Use Multi-Templates:**
+>
+> - **Mixed content** - Combining static text with dynamic data
+> - **Report generation** - Creating formatted output with multiple data points
+> - **Template reuse** - When the same input needs processing in multiple ways
+> - **Performance critical** - Leverage automatic caching for repeated operations
 
 ## 📊 Operations Reference
 
@@ -954,44 +1158,30 @@ Regular output goes to `stdout`, debug information goes to `stderr`.
 ### Quick Example
 
 ```bash
-Input: "hello,world"
-Template: "{!split:,:..|map:{upper}|join:-}"
-
-Debug Output:
-DEBUG: ═══════════════════════════════════════════════
-DEBUG: PIPELINE START: 3 operations to apply
-DEBUG: Initial input: Str("hello,world")
-DEBUG: ───────────────────────────────────────────────
-DEBUG: STEP 1/3: Applying Split { sep: ",", range: Range(None, None, false) }
-DEBUG: Input: Str("hello,world")
-DEBUG: Result: List(2 items: ["hello", "world"])
-DEBUG: Step completed in 548.4µs
-DEBUG: ───────────────────────────────────────────────
-DEBUG: STEP 2/3: Applying Map { operations: [Upper] }
-DEBUG: MAP OPERATION: Processing 2 items
-DEBUG: ┌─ Processing item 1 of 2 ─────────────
-DEBUG: │  Input: "hello" → Output: "HELLO"
-DEBUG: └────────────────────────────────────────────
-DEBUG: ┌─ Processing item 2 of 2 ─────────────
-DEBUG: │  Input: "world" → Output: "WORLD"
-DEBUG: └────────────────────────────────────────────
-DEBUG: Result: List(2 items: ["HELLO", "WORLD"])
-DEBUG: Step completed in 20.0277ms
-DEBUG: ───────────────────────────────────────────────
-DEBUG: STEP 3/3: Applying Join { sep: "-" }
-DEBUG: Result: String("HELLO-WORLD")
-DEBUG: Total execution time: 23.0989ms
-DEBUG: ═══════════════════════════════════════════════
-HELLO-WORLD
+string-pipeline "{!split:,:..|map:{upper}|join:-}" "hello,world"
+# DEBUG: 🚀 PIPELINE START: 3 operations to apply
+# DEBUG: STEP 1/3: Applying Split { sep: ",", range: Range(None, None, false) }
+# DEBUG: 🎯 Result: List(2 items: ["hello", "world"])
+# DEBUG: Step completed in 1.282182ms
+# DEBUG: STEP 2/3: Applying Map { operations: [Upper] }
+# DEBUG: Processing item 1 of 2: "hello" → "HELLO"
+# DEBUG: Processing item 2 of 2: "world" → "WORLD"
+# DEBUG: Step completed in 112.108µs
+# DEBUG: STEP 3/3: Applying Join { sep: "-" }
+# DEBUG: 🎯 Result: String("HELLO-WORLD")
+# DEBUG: Total execution time: 1.853268ms
+# HELLO-WORLD
 ```
 
-> 💡 **Need more?** The [🐛 Debug System Guide](debug-system.md) provides detailed coverage of:
+### 🔍 Complete Debug Coverage
+
+> 🐛 **For comprehensive debugging documentation**, see the [Debug System Guide](debug-system.md) which provides:
 >
-> - **Complex pipeline debugging** with map operations
-> - **Performance analysis** and bottleneck identification
-> - **Error debugging** with type mismatch diagnosis
-> - **Advanced techniques** for production debugging
-> - **Real-world examples** and optimization case studies
+> - **🔧 Advanced debugging techniques** - Complex pipeline analysis and map operation debugging
+> - **⚡ Performance profiling** - Bottleneck identification and optimization strategies
+> - **🚨 Error diagnosis** - Type mismatch debugging and troubleshooting workflows
+> - **🏭 Production debugging** - Real-world examples and monitoring techniques
+> - **📊 Complete debug output examples** - Full verbose debugging sessions with detailed analysis
 
 ## 💡 Examples
 
@@ -1095,317 +1285,149 @@ string-pipeline '{split:,:..|map:{prepend:• |append: ✓}}' 'First item,Second
 
 > 🐛 **For comprehensive debugging and troubleshooting**, see the [🔍 Debug System Guide](debug-system.md) which covers advanced error diagnosis, performance debugging, and real-world troubleshooting scenarios with detailed examples.
 
-### Common Errors
+### 🚨 Common Errors & Solutions
 
-### Parse Errors
+#### 📝 Template Syntax Errors
 
-**Problem:** `Parse error: Expected operation`
-
-```bash
-# Wrong:
-{split:,|invalid_op}
-
-# Correct:
-{split:,:..|upper}
-```
-
-**Problem:** `Parse error: Expected '}'`
+| Error Message | Problem | Solution |
+|---------------|---------|----------|
+| `Parse error: Expected operation` | Invalid operation name or missing range | Use valid operations with proper syntax |
+| `Parse error: Expected '}'` | Unclosed template | Always close templates with `}` |
+| `Parse error: Unexpected character` | Invalid characters in template | Check escaping and syntax |
 
 ```bash
-# Wrong:
-{split:,:..
+# ❌ Common syntax mistakes
+{split:,|invalid_op}     # Missing range, invalid operation
+{split:,:..              # Missing closing brace
+{split:,:..|join}        # Missing separator argument
 
-# Correct:
-{split:,:..}
+# ✅ Correct syntax
+{split:,:..|upper}       # Valid operation with range
+{split:,:..}             # Properly closed template
+{split:,:..|join:-}      # Complete arguments
 ```
 
-### Operation Errors
+#### 🔄 Type Mismatch Errors
 
-**Problem:** `Operation can only be applied to lists`
+| Error Pattern | Cause | Fix |
+|---------------|-------|-----|
+| `Operation can only be applied to lists` | String operation on list-only operation | Use `split` first or check operation requirements |
+| `Operation can only be applied to strings` | List operation on string-only operation | Use `map` for string operations on lists |
+| `Invalid operation for this data type` | Wrong operation type | See [🎯 Operation Type System](#-operation-type-system) |
 
 ```bash
-# Wrong: Trying to join a string
-Input: "hello"
-Template: "{join:-}"
+# ❌ Type mismatch examples
+"hello" → {sort}                    # Error: sort needs list
+"a,b,c" → {split:,:..|upper}       # Error: upper needs string, got list
+["a","b"] → {trim}                  # Error: trim needs string, got list
 
-# Correct: Split first
-Template: "{split: :..|join:-}"
+# ✅ Correct type usage
+"hello world" → {split: :..|sort}   # Split string → sort list
+"a,b,c" → {split:,:..|map:{upper}} # String ops via map
+"  hello  " → {trim}               # String operation on string
 ```
 
-**Problem:** `Operation can only be applied to strings`
+#### 🔍 Regex & Pattern Errors
+
+| Error Type | Common Cause | Solution |
+|------------|--------------|----------|
+| `Invalid regex pattern` | Malformed regex syntax | Use proper regex syntax, escape metacharacters |
+| `Compilation error` | Complex regex issues | Test regex separately, simplify pattern |
+| `No matches found` | Pattern doesn't match input | Use debug mode to verify data format |
 
 ```bash
-# Wrong: Trying to apply string operation to list
-Input: "a,b,c"
-Template: "{split:,:..|upper}"
+# ❌ Regex mistakes
+{filter:[}                          # Unclosed character class
+{regex_extract:*+}                  # Invalid regex syntax
+{replace:s/(/replacement/}          # Unescaped parenthesis
 
-# Correct: Use map for string operations on lists
-Template: "{split:,:..|map:{upper}}"
+# ✅ Correct regex usage
+{filter:\\[}                        # Escaped bracket literal
+{regex_extract:\\w+}                # Valid word pattern
+{replace:s/\\(/replacement/g}       # Properly escaped
 ```
 
-> 💡 **Type System Reference:** See the [🎯 Operation Type System](#-operation-type-system) section for complete details on which operations accept which input types and their expected outputs.
+#### 📏 Range Specification Errors
 
-**Problem:** `Invalid regex`
+| Error | Issue | Correct Format |
+|-------|-------|----------------|
+| `Invalid range specification` | Non-numeric range | Use numbers: `1..3`, `0..=5`, `-2..` |
+| `Range out of bounds` | Index beyond data | Ranges auto-clamp, but verify data length |
+| `Empty range result` | Start >= end | Ensure start < end for valid ranges |
 
 ```bash
-# Wrong: Unescaped regex metacharacters
-{filter:[}
+# ❌ Range errors
+{split:,:abc}                       # Non-numeric range
+{substring:end..start}              # Invalid variable names
+{slice:10..5}                       # Start > end
 
-# Correct: Proper regex
-{filter:\\[}
+# ✅ Correct ranges
+{split:,:1..3}                      # Numeric range
+{substring:0..5}                    # Valid character range
+{slice:-3..}                        # Last 3 items
 ```
 
-### Range Errors
+### 💡 Best Practices
 
-**Problem:** `Invalid range specification`
+#### 🏗️ Template Development
 
 ```bash
-# Wrong:
-{split:,:abc}
+# ✅ Start simple and build complexity gradually
+{split:,:..}                        # Step 1: Basic split
+{split:,:..|map:{upper}}            # Step 2: Add transformation
+{split:,:..|map:{trim|upper}|join:-} # Step 3: Complete pipeline
 
-# Correct:
-{split:,:1..3}
+# ✅ Use debug mode during development
+{!split:,:..|map:{upper}|join:-}
+
+# ✅ Test with simple data first
+{split:,:1..3}  # Test with: "a,b,c,d,e" → "b,c"
+
+# ✅ Understand the type system - see [🎯 Operation Type System](#-operation-type-system) section
 ```
 
-### Best Practices
+#### ⚡ Performance Tips
 
-### ✅ Do's
+```bash
+# ✅ Filter early to reduce data volume
+{split:,:..|filter:important|map:{expensive_operation}}
 
-1. **Understand the type system** before building complex templates:
+# ✅ Use specific ranges instead of processing everything
+{split:,:0..10}  # Direct range (faster)
 
-   ```bash
-   # Know what each operation accepts and returns
-   # See the Operation Type System section for complete details
-   ```
+# ✅ Combine operations in single map
+{split: :..|map:{trim|upper|append:!}}  # Single map (efficient)
 
-2. **Use debug mode** when developing complex templates:
+# ✅ Use appropriate operations for data types
+{split:,:..|sort}           # Correct: list operation on list
+{split:,:..|map:{upper}}    # Correct: string operation via map
+```
 
-   ```bash
-   {!split:,:..|map:{upper}|join:-}
-   ```
+#### ❌ Common Mistakes to Avoid
 
-3. **Start simple** and build complexity gradually:
+```bash
+# ❌ Wrong operation for data type
+{split:,:..|upper}          # Error: upper needs string, not list
+{sort}                      # Error: sort needs list, not string
 
-   ```bash
-   # Start with:
-   {split:,:..}
+# ❌ Inefficient processing order
+{split:,:..|map:{expensive}|filter:RESULT}  # Process all, then filter
 
-   # Then add:
-   {split:,:..|map:{upper}}
+# ❌ Over-escaping in regex
+{filter:\\.txt$}            # Looks for literal backslash + .txt
 
-   # Finally:
-   {split:,:..|map:{trim|upper}|join:-}
-   ```
-
-4. **Test ranges** with simple data first:
-
-   ```bash
-   # Test with: "a,b,c,d,e"
-   {split:,:1..3}  # Should output: "b,c"
-   ```
-
-5. **Escape when in doubt**:
-
-   ```bash
-   {append:\:value}  # Safe
-   ```
-
-### ❌ Don'ts
-
-1. **Don't use map operations that work on lists:**
-
-   ```bash
-   # Wrong:
-   {split:,:..|map:{sort}}
-
-   # Correct:
-   {split:,:..|sort}
-   ```
-
-2. **Don't forget to split before list operations:**
-
-   ```bash
-   # Wrong:
-   "hello,world" -> {slice:1..}
-
-   # Correct:
-   "hello,world" -> {split:,:..|slice:1..}
-
-   # Even better
-   "hello,world" -> {split:,:1..}
-   ```
-
-3. **Don't over-escape in regex patterns:**
-
-   ```bash
-   # Usually okay:
-   {filter:\.txt$}
-
-   # Over-escaped:
-   {filter:\\.txt$}  # This looks for literal backslash + .txt
-   ```
-
-### Performance Tips
-
-1. **Filter early** in the pipeline to reduce data:
-
-   ```bash
-   # Good:
-   {split:,:..|filter:important|map:{upper}|sort}
-
-   # Less efficient:
-   {split:,:..|map:{upper}|sort|filter:IMPORTANT}
-   ```
-
-2. **Use specific ranges** instead of processing everything:
-
-   ```bash
-   # Better:
-   {split:,:0..10|map:{upper}}
-
-   # Potentially slower with large input:
-   {split:,:..|map:{upper}|slice:0..10}
-   ```
-
-3. **Combine operations** when possible:
-
-   ```bash
-   # More efficient:
-   {split: :..|map:{trim|upper}}
-
-   # Less efficient:
-   {split: :..|map:{trim}|map:{upper}}
-   ```
-
-4. **Use replace optimization**:
-
-   ```bash
-   # Faster for simple patterns:
-   {replace:s/hello/hi/}  # No regex compilation
-
-   # Slower for simple patterns:
-   {replace:s/h.*o/hi/}   # Requires regex engine
-   ```
+# ❌ Multiple separate maps
+{split:,:..|map:{trim}|map:{upper}|map:{append:!}}  # Inefficient
+```
 
 ---
 
-💡 **Need more help?**
+🚀 **You're now equipped to master the String Pipeline template system!**
 
-🔍 **Try debug mode** (`{!...}`) to see exactly how your template is being processed!
+💡 **Pro Tip:** Start with simple templates and gradually build complexity. Use debug mode liberally during development!
 
-🐛 **For advanced debugging**, check out the [Debug System Guide](debug-system.md) for comprehensive troubleshooting techniques, performance analysis, and real-world debugging examples!
+📚 **Essential Resources:**
 
-## ⚡ Performance Characteristics
-
-Understanding operation performance helps optimize templates for production use and identifies potential bottlenecks in complex pipelines.
-
-### 🏆 Performance Categories
-
-**🚀 Ultra-Fast Operations (100-200ns)**
-
-- `upper`, `lower`, `trim` - Basic string transformations with minimal overhead
-- Perfect for high-frequency processing
-
-**⚡ Fast Operations (500ns-5μs)**
-
-- `reverse`, `append`, `prepend` - Simple transformations and concatenations
-- `split`, `join`, `sort` - Core list operations with optimized algorithms
-
-**🔄 Moderate Operations (5-20μs)**
-
-- `unique`, `filter`, `slice` - Operations requiring data examination
-- Good for medium-complexity workflows
-
-**🔍 Complex Operations (20-100μs)**
-
-- `replace`, `regex_extract` - Pattern matching with regex compilation
-- `map` operations - Per-item processing overhead
-- Consider caching compiled patterns for repeated use
-
-### 📊 Real-World Performance Data
-
-Based on simple benchmarks with 1000 iterations on test data:
-
-| Operation Category | Average Time | Best Use Case |
-|-------------------|--------------|---------------|
-| **String Basics** | 130-150ns | Real-time processing, hot paths |
-| **List Processing** | 3-6μs | Data pipelines, batch processing |
-| **Map Operations** | 8-15μs | Item-by-item transformations |
-| **Complex Patterns** | 50-100μs | Advanced text processing |
-
-### 🎯 Optimization Strategies
-
-**For High-Performance Applications:**
-
-1. **Minimize Map Operations**
-
-   ```bash
-   # Faster: Single map with multiple operations
-   {split:,:..|map:{trim|upper|append:!}}
-
-   # Slower: Multiple separate map operations
-   {split:,:..|map:{trim}|map:{upper}|map:{append:!}}
-   ```
-
-2. **Filter Early in Pipeline**
-
-   ```bash
-   # Efficient: Reduce data size early
-   {split:,:..|filter:important|map:{complex_processing}}
-
-   # Inefficient: Process all data then filter
-   {split:,:..|map:{complex_processing}|filter:IMPORTANT}
-   ```
-
-3. **Use Specific Ranges**
-
-   ```bash
-   # Direct: Split with range (faster)
-   {split:,:1..10}
-
-   # Indirect: Split all then slice (slower for large inputs)
-   {split:,:..|slice:1..10}
-   ```
-
-### 🔬 Testing Your Templates
-
-Use the built-in benchmarking tool to measure your specific templates:
-
-```bash
-# Build the benchmark tool
-cargo build --release --bin bench
-
-# Run performance tests
-./target/release/bench --iterations 1000
-
-# Get machine-readable results
-./target/release/bench --format json > performance.json
-```
-
-**Custom Template Testing:**
-
-For performance-sensitive applications, consider creating custom tests for your specific templates and data patterns. The debug system also provides per-operation timing:
-
-```bash
-# Debug with timing information
-string-pipeline '{!your_complex_template}' "your_data"
-# Look for "Step completed in XXXμs" in debug output
-```
-
-### 🏭 Production Considerations
-
-**Release Builds:** Always use `--release` builds in production - they're 3-10x faster than debug builds.
-
-**Memory Usage:** Most operations have minimal memory overhead, but be aware that:
-
-- `unique` maintains a hash set of seen values
-- `sort` creates temporary collections
-- Large `split` operations create many string allocations
-
-**Scaling Patterns:**
-
-- Operations scale linearly with input size
-- Map operations scale with both input size and sub-template complexity
-- Regex operations have compilation overhead but efficient matching
-
-> 📊 **Performance Details:** See the [Performance Benchmarking Guide](benchmarking.md) for timing data, automation tips, and optimization ideas.
+- 🐛 **[Debug System Guide](debug-system.md)** - Master debugging techniques and error diagnosis
+- 🏆 **[Performance Benchmarking Guide](benchmarking.md)** - Optimize templates for production use
+- 🔗 **[Command Line Interface Guide](command-line-options.md)** - CLI features and automation tips

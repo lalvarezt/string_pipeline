@@ -10,16 +10,13 @@ A comprehensive debugging system for visualizing, analyzing, and troubleshooting
   - [Inline Debug Syntax](#inline-debug-syntax)
   - [CLI Debug Flag](#cli-debug-flag)
   - [Debug Mode Comparison](#debug-mode-comparison)
-- [🔍 Understanding Debug Output](#-understanding-debug-output)
-  - [Pipeline Structure Display](#pipeline-structure-display)
-  - [Step-by-Step Execution](#step-by-step-execution)
-  - [Map Operation Visualization](#map-operation-visualization)
-  - [Performance Metrics](#performance-metrics)
-  - [🗺️ Complex Pipeline Debugging](#️-complex-pipeline-debugging)
+- [🔍 Understanding Debug Output Structure](#-understanding-debug-output-structure)
+  - [Hierarchical Debug Architecture](#hierarchical-debug-architecture)
+  - [Visual Hierarchy System](#visual-hierarchy-system)
+- [🗺️ Complex Pipeline Debugging](#️-complex-pipeline-debugging)
   - [Simple Map Operations](#simple-map-operations)
   - [Multi-Step Map Pipelines](#multi-step-map-pipelines)
   - [List Operations in Maps](#list-operations-in-maps)
-  - [Nested Transformations](#nested-transformations)
 - [⚡ Performance Analysis](#-performance-analysis)
   - [Timing Information](#timing-information)
   - [Memory Usage Tracking](#memory-usage-tracking)
@@ -28,32 +25,6 @@ A comprehensive debugging system for visualizing, analyzing, and troubleshooting
 - [🚨 Error Debugging](#-error-debugging)
   - [Parse Error Analysis](#parse-error-analysis)
   - [Runtime Error Diagnosis](#runtime-error-diagnosis)
-  - [Type Mismatch Debugging](#type-mismatch-debugging)
-  - [Common Error Patterns](#common-error-patterns)
-- [📊 Debug Output Reference](#-debug-output-reference)
-  - [Visual Elements](#visual-elements)
-  - [Message Types](#message-types)
-  - [Context Information](#context-information)
-  - [Data Format Display](#data-format-display)
-- [💡 Best Practices](#-best-practices)
-  - [Development Workflow](#development-workflow)
-  - [Performance Testing](#performance-testing)
-  - [Benchmarking Integration](#benchmarking-integration)
-  - [Production Debugging](#production-debugging)
-  - [Template Optimization](#template-optimization)
-- [🎯 Real-World Examples](#-real-world-examples)
-  - [Data Processing Pipeline](#data-processing-pipeline)
-  - [Complex Transformation Debugging](#complex-transformation-debugging)
-  - [Performance Optimization Case Study](#performance-optimization-case-study)
-  - [Error Resolution Examples](#error-resolution-examples)
-- [⚠️ Troubleshooting](#️-troubleshooting)
-  - [Debug Output Issues](#debug-output-issues)
-  - [Performance Problems](#performance-problems)
-  - [Common Debugging Mistakes](#common-debugging-mistakes)
-- [🔧 Advanced Debugging Techniques](#-advanced-debugging-techniques)
-  - [Selective Debugging](#selective-debugging)
-  - [Quiet Debug Mode](#quiet-debug-mode)
-  - [Debug Output Filtering](#debug-output-filtering)
 
 ## 🌟 Overview
 
@@ -62,12 +33,13 @@ The String Pipeline debug system provides comprehensive visibility into template
 ### ✨ Key Features
 
 - **🔍 Step-by-Step Execution Tracking** - See exactly how data flows through each operation
-- **🗺️ Map Operation Visualization** - Detailed per-item processing in map operations
-- **⚡ Performance Metrics** - Timing and memory usage for every operation
-- **🎯 Hierarchical Display** - Clear visual structure showing operation nesting
+- **🗺️ Map Operation Visualization** - Detailed per-item processing in map operations with full sub-pipeline execution
+- **⚡ Performance Metrics** - Timing and memory usage for every operation and sub-operation
+- **🎯 Hierarchical Display** - Clear visual structure showing operation nesting and sub-pipelines
 - **🚨 Error Context** - Detailed error information with operation context
-- **📊 Data Type Visualization** - See how values transform between types
+- **📊 Data Type Visualization** - See how values transform between types with detailed formatting
 - **🔧 Flexible Activation** - Enable via template syntax or CLI flags
+- **💾 Cache Statistics** - Monitor regex and split operation cache performance
 
 ### 🎯 When to Use Debug Mode
 
@@ -97,39 +69,9 @@ string-pipeline --debug --quiet '{split:,:..|map:{upper}}' 'hello,world'
 
 **Quick Example Output:**
 
-```text
-DEBUG: ═══════════════════════════════════════════════
-DEBUG: PIPELINE START: 2 operations to apply
-DEBUG: Initial input: Str("hello,world")
-DEBUG: Operations to apply:
-DEBUG:   1. Split { sep: ",", range: Range(None, None, false) }
-DEBUG:   2. Map { operations: [Upper] }
-DEBUG: ───────────────────────────────────────────────
-DEBUG: STEP 1/2: Applying Split { sep: ",", range: Range(None, None, false) }
-DEBUG: Input: Str("hello,world")
-DEBUG: Result: List(2 items: ["hello", "world"])
-DEBUG: Step completed in 548.4µs
-DEBUG: ───────────────────────────────────────────────
-DEBUG: STEP 2/2: Applying Map { operations: [Upper] }
-DEBUG: Input: List(["hello", "world"])
-DEBUG: MAP OPERATION: Processing 2 items
-DEBUG: ┌─ Processing item 1 of 2 ─────────────
-DEBUG: │  Input: "hello"
-DEBUG: │  Output: "HELLO"
-DEBUG: └────────────────────────────────────────────
-DEBUG: ┌─ Processing item 2 of 2 ─────────────
-DEBUG: │  Input: "world"
-DEBUG: │  Output: "WORLD"
-DEBUG: └────────────────────────────────────────────
-DEBUG: MAP COMPLETED: 2 → 2 items
-DEBUG: Result: List(2 items: ["HELLO", "WORLD"])
-DEBUG: Step completed in 20.0277ms
-DEBUG: ───────────────────────────────────────────────
-DEBUG: PIPELINE COMPLETE
-DEBUG: Total execution time: 23.0989ms
-DEBUG: Final result: List(["HELLO", "WORLD"])
-DEBUG: ═══════════════════════════════════════════════
-HELLO,WORLD
+```bash
+string-pipeline '{!split:,:..|map:{upper}}' 'hello,world'
+# See detailed debug output in: Simple Map Operations section below
 ```
 
 ## 🔧 Enabling Debug Mode
@@ -200,117 +142,122 @@ string-pipeline --debug --quiet '{split:,:..|map:{upper}}' 'a,b,c'
 | **🧪 Development** | Perfect for iteration | Good for testing |
 | **📊 Consistency** | Varies by template | Uniform output |
 
-## 🔍 Understanding Debug Output
+## 🔍 Understanding Debug Output Structure
 
-### Pipeline Structure Display
+### Hierarchical Debug Architecture
 
-The debug system shows a clear overview of your pipeline structure before execution.
+The debug system uses a multi-level hierarchical structure to organize execution information, with distinct visual markers and consistent formatting patterns.
+
+#### Level 1: Template Session Container
 
 ```text
 DEBUG: ═══════════════════════════════════════════════
-DEBUG: PIPELINE START: 3 operations to apply
-DEBUG: Initial input: Str("apple,banana,cherry")
-DEBUG: Operations to apply:
-DEBUG:   1. Split { sep: ",", range: Range(None, None, false) }
-DEBUG:   2. Map { operations: [Upper, Append { suffix: "!" }] }
-DEBUG:   3. Join { sep: " | " }
-DEBUG: ───────────────────────────────────────────────
+DEBUG: SINGLE TEMPLATE START
+DEBUG: Template: "{!split:,:..|map:{upper}}"
+DEBUG: Input: "hello,world"
 ```
 
-**Structure Elements:**
+**Container Structure:**
 
-| Element | Purpose | Information Provided |
-|---------|---------|---------------------|
-| **═ Header ═** | Section separator | Visual organization |
-| **Operation Count** | Pipeline complexity | Total operations to execute |
-| **Initial Input** | Starting data | Input type and value |
-| **Operation List** | Execution plan | Detailed operation parameters |
-| **── Separator ──** | Section boundary | Visual flow control |
+- **Double-line border (`═`)**: Marks boundaries for major execution contexts (templates, pipelines, sub-pipelines)
+- **Session header**: Identifies execution context type (`SINGLE TEMPLATE START`, `🚀 PIPELINE START`, `🔧 SUB-PIPELINE START`, etc.)
+- **Template declaration**: Shows the raw template syntax being processed (template level only)
+- **Initial input**: Displays the starting data with explicit type information
 
-### Step-by-Step Execution
-
-Each operation is tracked individually with detailed input/output information.
+#### Level 2: Pipeline Execution Flow
 
 ```text
-DEBUG: STEP 2/3: Applying Map { operations: [Upper, Append { suffix: "!" }] }
-DEBUG: Input: List(["apple", "banana", "cherry"])
-DEBUG: MAP OPERATION: Processing 3 items
-DEBUG: Map pipeline: 2 operations
-DEBUG:   Map step 1: Upper
-DEBUG:   Map step 2: Append { suffix: "!" }
 DEBUG: ───────────────────────────────────────────────
+DEBUG: STEP 2/3: Applying Map { operations: [Upper] }
+DEBUG: Input: List(2 items: ["hello", "world"])
+DEBUG: 🎯 Result: List(2 items: ["HELLO", "WORLD"])
+DEBUG: Step completed in 10.8ms
 ```
 
-**Step Information:**
+**Pipeline Structure Elements:**
 
-| Component | Description | Value |
-|-----------|-------------|-------|
-| **Step Number** | Current/Total position | `2/3` |
-| **Operation Name** | What's being applied | `Map { operations: [...] }` |
-| **Input Type** | Data type and content | `List(["apple", "banana", "cherry"])` |
-| **Context Details** | Operation-specific info | Item count, sub-operations |
+- **Single-line separator (`─`)**: Separates individual steps within execution contexts
+- **Step counter**: `STEP X/Y` format showing current position in operation sequence
+- **Operation descriptor**: Detailed operation name with parameters (`Map { operations: [...] }`)
+- **Input/Output tracking**: Explicit data flow with type annotations
+- **Performance markers**: Step-level timing with `🎯 Result` indicators
 
-### Map Operation Visualization
-
-Map operations receive special detailed visualization showing per-item processing.
+#### Level 3: Sub-Pipeline Nesting
 
 ```text
-DEBUG: ┌─ Processing item 1 of 3 ─────────────
-DEBUG: │  Input: "apple"
-DEBUG: [Item 1/3] [map]     ═══════════════════════════════════════════════
-DEBUG: [Item 1/3] [map]     PIPELINE START: 2 operations to apply
-DEBUG: [Item 1/3] [map]     Initial input: String("apple")
-DEBUG: [Item 1/3] [map]     ───────────────────────────────────────────────
-DEBUG: [Item 1/3] [map]     STEP 1/2: Applying Upper
-DEBUG: [Item 1/3] [map]     Input: String("apple")
-DEBUG: [Item 1/3] [map]     Result: String("APPLE")
-DEBUG: [Item 1/3] [map]     Step completed in 718.5µs
-DEBUG: [Item 1/3] [map]     ───────────────────────────────────────────────
-DEBUG: [Item 1/3] [map]     STEP 2/2: Applying Append { suffix: "!" }
-DEBUG: [Item 1/3] [map]     Input: String("APPLE")
-DEBUG: [Item 1/3] [map]     Result: String("APPLE!")
-DEBUG: [Item 1/3] [map]     Step completed in 618.1µs
-DEBUG: [Item 1/3] [map]     ───────────────────────────────────────────────
-DEBUG: [Item 1/3] [map]     PIPELINE COMPLETE
-DEBUG: [Item 1/3] [map]     Total execution time: 8.4076ms
-DEBUG: [Item 1/3] [map]     Final result: String("APPLE!")
-DEBUG: [Item 1/3] [map]     ═══════════════════════════════════════════════
-DEBUG: │  Output: "APPLE!"
-DEBUG: └────────────────────────────────────────────
+DEBUG: ═══════════════════════════════════════════════
+DEBUG: 🔧 SUB-PIPELINE START: 1 operations to apply
+DEBUG: Initial input: String("hello")
+DEBUG: ───────────────────────────────────────────────
+DEBUG: STEP 1/1: Applying Upper
+DEBUG: Input: String("hello")
+DEBUG: 🎯 Result: String("HELLO")
+DEBUG: Step completed in 20.804µs
+DEBUG: ───────────────────────────────────────────────
+DEBUG: ✅ SUB-PIPELINE COMPLETE
+DEBUG: Total execution time: 67.432µs
+DEBUG: 🎯 Final result: String("HELLO")
+DEBUG: ═══════════════════════════════════════════════
 ```
 
-**Map Visualization Features:**
+**Nested Structure Characteristics:**
 
-| Element | Purpose | Information |
-|---------|---------|-------------|
-| **Box Drawing** | Visual item boundaries | `┌─` `│` `└─` characters |
-| **Item Counter** | Progress tracking | `1 of 3`, `2 of 3`, etc. |
-| **Nested Pipeline** | Sub-pipeline execution | Full pipeline debug per item |
-| **Context Tags** | Source identification | `[Item X/Y] [map]` prefix |
-| **Individual Timing** | Per-item performance | Execution time per item |
+- **Nested container borders**: Sub-pipelines use same `═` borders but with `🔧` prefix
+- **Independent step counting**: Sub-pipelines maintain their own `STEP X/Y` sequences
+- **Isolated scope indicators**: `SUB-PIPELINE START/COMPLETE` markers clearly delineate nested execution
+- **Context preservation**: Main pipeline context is maintained around sub-pipeline blocks
 
-### Performance Metrics
+### Visual Hierarchy System
 
-Every operation includes detailed timing and memory information.
+#### Border Significance
+
+| Border Type | Level | Usage | Purpose |
+|-------------|-------|-------|---------|
+| `═══════════` | Container | Template, Pipeline, and Sub-pipeline boundaries | Major execution context boundaries |
+| `───────────` | Step | Operation separators within containers | Individual step separation |
+| `DEBUG:` | Prefix | All debug lines | Consistent identification |
+
+#### Icon Semantics
+
+| Icon | Meaning | Context | Information Type |
+|------|---------|---------|------------------|
+| `🔧` | Sub-pipeline | Nested execution | Indicates recursive processing |
+| `🎯` | Result | Output data | Final operation result |
+| `✅` | Completion | Section end | Successful execution marker |
+
+#### Data Type Representation
 
 ```text
-DEBUG: Result: List(3 items: ["APPLE!", "BANANA!", "CHERRY!"])
-DEBUG: Step completed in 42.1523ms
-DEBUG: Memory: ~48 chars across 3 items
-DEBUG: ───────────────────────────────────────────────
-DEBUG: PIPELINE COMPLETE
-DEBUG: Total execution time: 45.7832ms
-DEBUG: Final result: List(["APPLE!", "BANANA!", "CHERRY!"])
+DEBUG: Input: String("hello")           # Simple scalar
+DEBUG: Input: List(2 items: [...])      # Collection with count
+DEBUG: Input: Object(3 fields: {...})   # Structured data with field count
 ```
 
-**Performance Metrics:**
+**Type Display Pattern:**
 
-| Metric | Description | Use Case |
-|--------|-------------|----------|
-| **Step Timing** | Individual operation time | Identify slow operations |
-| **Total Time** | Complete pipeline execution | Milliseconds | Overall performance |
-| **Memory Usage** | Approximate data size | Memory optimization |
-| **Item Counts** | Data volume tracking | Scaling analysis |
+- **Type name**: Explicit Rust-style type identification (`String`, `List`, `Object`)
+- **Content preview**: Truncated content for readability
+- **Metadata**: Quantitative information (item counts, field counts, byte sizes)
+- **Nested formatting**: Multi-line display for complex structures with proper indentation
+
+### Performance Integration
+
+#### Timing Hierarchy
+
+```text
+DEBUG: Step completed in 829.4µs        # Individual operation timing
+DEBUG: Total execution time: 3.0871ms   # Pipeline-level timing
+DEBUG: Cache stats: 0 regex, 1 split    # Resource utilization summary
+```
+
+**Performance Structure:**
+
+- **Granular timing**: Every operation receives individual timing measurement
+- **Cumulative tracking**: Pipeline and template-level total times
+- **Resource metrics**: Cache usage statistics for optimization insights
+- **Unit consistency**: Automatic unit scaling (µs, ms, s) based on magnitude
+
+This hierarchical structure enables developers to drill down from high-level template execution to individual operation details while maintaining clear visual separation and consistent information density at each level.
 
 ## 🗺️ Complex Pipeline Debugging
 
@@ -318,97 +265,344 @@ DEBUG: Final result: List(["APPLE!", "BANANA!", "CHERRY!"])
 
 Debug basic map operations with string transformations.
 
-**Template:** `{!split:,:..|map:{upper}}`
-**Input:** `"hello,world,test"`
-
-```text
-DEBUG: MAP OPERATION: Processing 3 items
-DEBUG: Map pipeline: 1 operations
-DEBUG:   Map step 1: Upper
-DEBUG: ───────────────────────────────────────────────
-DEBUG: ┌─ Processing item 1 of 3 ─────────────
-DEBUG: │  Input: "hello"
-DEBUG: │  Output: "HELLO"
-DEBUG: └────────────────────────────────────────────
-DEBUG: ┌─ Processing item 2 of 3 ─────────────
-DEBUG: │  Input: "world"
-DEBUG: │  Output: "WORLD"
-DEBUG: └────────────────────────────────────────────
-DEBUG: ┌─ Processing item 3 of 3 ─────────────
-DEBUG: │  Input: "test"
-DEBUG: │  Output: "TEST"
-DEBUG: └────────────────────────────────────────────
-DEBUG: MAP COMPLETED: 3 → 3 items
+```bash
+string-pipeline "{!split:,:..|map:{upper}}" "hello,world"
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: SINGLE TEMPLATE START
+# DEBUG: Template: "{!split:,:..|map:{upper}}"
+# DEBUG: Input: "hello,world"
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: 🚀 PIPELINE START: 2 operations to apply
+# DEBUG: Initial input: String("hello,world")
+# DEBUG: Operations to apply:
+# DEBUG:   1. Split { sep: ",", range: Range(None, None, false) }
+# DEBUG:   2. Map { operations: [Upper] }
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 1/2: Applying Split { sep: ",", range: Range(None, None, false) }
+# DEBUG: Input: String("hello,world")
+# DEBUG: 🎯 Result: List(2 items: [
+# DEBUG:   "hello"
+# DEBUG:   "world"
+# DEBUG: ])
+# DEBUG: Step completed in 1.09718ms
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 2/2: Applying Map { operations: [Upper] }
+# DEBUG: Input: List(2 items: ["hello", "world"])
+# DEBUG: Processing item 1 of 2
+# DEBUG: Map item input: "hello"
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: 🔧 SUB-PIPELINE START: 1 operations to apply
+# DEBUG: Initial input: String("hello")
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 1/1: Applying Upper
+# DEBUG: Input: String("hello")
+# DEBUG: 🎯 Result: String("HELLO")
+# DEBUG: Step completed in 35.612µs
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: ✅ SUB-PIPELINE COMPLETE
+# DEBUG: Total execution time: 103.315µs
+# DEBUG: 🎯 Final result: String("HELLO")
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: Map item output: "HELLO"
+# DEBUG: Processing item 2 of 2
+# DEBUG: Map item input: "world"
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: 🔧 SUB-PIPELINE START: 1 operations to apply
+# DEBUG: Initial input: String("world")
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 1/1: Applying Upper
+# DEBUG: Input: String("world")
+# DEBUG: 🎯 Result: String("WORLD")
+# DEBUG: Step completed in 3.825µs
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: ✅ SUB-PIPELINE COMPLETE
+# DEBUG: Total execution time: 23.916µs
+# DEBUG: 🎯 Final result: String("WORLD")
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: Map item output: "WORLD"
+# DEBUG: MAP COMPLETED: 2 → 2 items
+# DEBUG: 🎯 Result: List(2 items: [
+# DEBUG:   "HELLO"
+# DEBUG:   "WORLD"
+# DEBUG: ])
+# DEBUG: Step completed in 223.781µs
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: ✅ PIPELINE COMPLETE
+# DEBUG: Total execution time: 1.763036ms
+# DEBUG: 🎯 Final result: List(2 items: [
+# DEBUG:   "HELLO"
+# DEBUG:   "WORLD"
+# DEBUG: ])
+# DEBUG: Cache stats: 0 regex patterns, 1 split operations cached
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: ✅ SINGLE TEMPLATE COMPLETE
+# DEBUG: 🎯 Final result: "HELLO,WORLD"
+# DEBUG: Cache stats: 0 regex patterns, 1 split operations cached
+# DEBUG: ═══════════════════════════════════════════════
+# HELLO,WORLD
 ```
 
 **Key Insights:**
 
-- **📊 Item Processing**: Each item processed individually
-- **🔄 Transformation**: Clear input → output mapping
-- **⚡ Performance**: Individual timing per item available
+- **📊 Item Processing**: Each item processed as a complete sub-pipeline
+- **🔄 Transformation**: Clear input → output mapping with detailed steps
+- **⚡ Performance**: Individual timing per sub-pipeline execution
 
 ### Multi-Step Map Pipelines
 
 Debug complex multi-operation map pipelines.
 
-**Template:** `{!split:,:..|map:{split: :0|upper|append:_USER}}`
-**Input:** `"alice 123,bob 456"`
-
-```text
-DEBUG: MAP OPERATION: Processing 2 items
-DEBUG: Map pipeline: 3 operations
-DEBUG:   Map step 1: Split { sep: " ", range: Index(0) }
-DEBUG:   Map step 2: Upper
-DEBUG:   Map step 3: Append { suffix: "_USER" }
-DEBUG: ───────────────────────────────────────────────
-DEBUG: ┌─ Processing item 1 of 2 ─────────────
-DEBUG: │  Input: "alice 123"
-DEBUG: [Item 1/2] [map]     STEP 1/3: Applying Split { sep: " ", range: Index(0) }
-DEBUG: [Item 1/2] [map]     Input: String("alice 123")
-DEBUG: [Item 1/2] [map]     Result: String("alice")
-DEBUG: [Item 1/2] [map]     STEP 2/3: Applying Upper
-DEBUG: [Item 1/2] [map]     Input: String("alice")
-DEBUG: [Item 1/2] [map]     Result: String("ALICE")
-DEBUG: [Item 1/2] [map]     STEP 3/3: Applying Append { suffix: "_USER" }
-DEBUG: [Item 1/2] [map]     Input: String("ALICE")
-DEBUG: [Item 1/2] [map]     Result: String("ALICE_USER")
-DEBUG: │  Output: "ALICE_USER"
-DEBUG: └────────────────────────────────────────────
+```bash
+string-pipeline "{!split:,:..|map:{trim|upper}}" "  apple  , banana "
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: SINGLE TEMPLATE START
+# DEBUG: Template: "{!split:,:..|map:{trim|upper}}"
+# DEBUG: Input: "  apple  , banana "
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: 🚀 PIPELINE START: 2 operations to apply
+# DEBUG: Initial input: String("  apple  , banana ")
+# DEBUG: Operations to apply:
+# DEBUG:   1. Split { sep: ",", range: Range(None, None, false) }
+# DEBUG:   2. Map { operations: [Trim { chars: "", direction: Both }, Upper] }
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 1/2: Applying Split { sep: ",", range: Range(None, None, false) }
+# DEBUG: Input: String("  apple  , banana ")
+# DEBUG: 🎯 Result: List(2 items: [
+# DEBUG:   "  apple  "
+# DEBUG:   " banana "
+# DEBUG: ])
+# DEBUG: Step completed in 1.071951ms
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 2/2: Applying Map { operations: [Trim { chars: "", direction: Both }, Upper] }
+# DEBUG: Input: List(2 items: ["  apple  ", " banana "])
+# DEBUG: Processing item 1 of 2
+# DEBUG: Map item input: "  apple  "
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: 🔧 SUB-PIPELINE START: 2 operations to apply
+# DEBUG: Initial input: String("  apple  ")
+# DEBUG: Operations to apply:
+# DEBUG:   1. Trim { chars: "", direction: Both }
+# DEBUG:   2. Upper
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 1/2: Applying Trim { chars: "", direction: Both }
+# DEBUG: Input: String("  apple  ")
+# DEBUG: 🎯 Result: String("apple")
+# DEBUG: Step completed in 10.667µs
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 2/2: Applying Upper
+# DEBUG: Input: String("apple")
+# DEBUG: 🎯 Result: String("APPLE")
+# DEBUG: Step completed in 5.091µs
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: ✅ SUB-PIPELINE COMPLETE
+# DEBUG: Total execution time: 93.585µs
+# DEBUG: 🎯 Final result: String("APPLE")
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: Map item output: "APPLE"
+# DEBUG: Processing item 2 of 2
+# DEBUG: Map item input: " banana "
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: 🔧 SUB-PIPELINE START: 2 operations to apply
+# DEBUG: Initial input: String(" banana ")
+# DEBUG: Operations to apply:
+# DEBUG:   1. Trim { chars: "", direction: Both }
+# DEBUG:   2. Upper
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 1/2: Applying Trim { chars: "", direction: Both }
+# DEBUG: Input: String(" banana ")
+# DEBUG: 🎯 Result: String("banana")
+# DEBUG: Step completed in 15.748µs
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 2/2: Applying Upper
+# DEBUG: Input: String("banana")
+# DEBUG: 🎯 Result: String("BANANA")
+# DEBUG: Step completed in 15.242µs
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: ✅ SUB-PIPELINE COMPLETE
+# DEBUG: Total execution time: 90.132µs
+# DEBUG: 🎯 Final result: String("BANANA")
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: Map item output: "BANANA"
+# DEBUG: MAP COMPLETED: 2 → 2 items
+# DEBUG: 🎯 Result: List(2 items: [
+# DEBUG:   "APPLE"
+# DEBUG:   "BANANA"
+# DEBUG: ])
+# DEBUG: Step completed in 297.991µs
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: ✅ PIPELINE COMPLETE
+# DEBUG: Total execution time: 1.806645ms
+# DEBUG: 🎯 Final result: List(2 items: [
+# DEBUG:   "APPLE"
+# DEBUG:   "BANANA"
+# DEBUG: ])
+# DEBUG: Cache stats: 0 regex patterns, 1 split operations cached
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: ✅ SINGLE TEMPLATE COMPLETE
+# DEBUG: 🎯 Final result: "APPLE,BANANA"
+# DEBUG: Cache stats: 0 regex patterns, 1 split operations cached
+# DEBUG: ═══════════════════════════════════════════════
+# APPLE,BANANA
 ```
 
 **Key Insights:**
 
-- **🔗 Pipeline Flow**: Multi-step transformation per item
-- **📊 Data Evolution**: See how data changes at each step
-- **🎯 Operation Chain**: Clear operation sequence
+- **🔗 Pipeline Flow**: Multi-step transformation per item shown as complete sub-pipeline
+- **📊 Data Evolution**: See how data changes at each step with timing information
+- **🎯 Operation Chain**: Clear operation sequence with detailed execution trace
 
 ### List Operations in Maps
 
 Debug map operations that use list transformations.
 
-**Template:** `{!split:,:..|map:{split: :..|unique|sort|join:-}}`
-**Input:** `"apple banana apple,cherry banana"`
-
-```text
-DEBUG: MAP OPERATION: Processing 2 items
-DEBUG: Map pipeline: 4 operations
-DEBUG:   Map step 1: Split { sep: " ", range: Range(None, None, false) }
-DEBUG:   Map step 2: Unique
-DEBUG:   Map step 3: Sort { direction: Asc }
-DEBUG:   Map step 4: Join { sep: "-" }
-DEBUG: ───────────────────────────────────────────────
-DEBUG: ┌─ Processing item 1 of 2 ─────────────
-DEBUG: │  Input: "apple banana apple"
-DEBUG: [Item 1/2] [map]     STEP 1/4: Applying Split
-DEBUG: [Item 1/2] [map]     Result: List(3 items: ["apple", "banana", "apple"])
-DEBUG: [Item 1/2] [map]     STEP 2/4: Applying Unique
-DEBUG: [Item 1/2] [map]     Result: List(2 items: ["apple", "banana"])
-DEBUG: [Item 1/2] [map]     STEP 3/4: Applying Sort
-DEBUG: [Item 1/2] [map]     Result: List(2 items: ["apple", "banana"])
-DEBUG: [Item 1/2] [map]     STEP 4/4: Applying Join { sep: "-" }
-DEBUG: [Item 1/2] [map]     Result: String("apple-banana")
-DEBUG: │  Output: "apple-banana"
-DEBUG: └────────────────────────────────────────────
+```bash
+string-pipeline "{!split:,:..|map:{split: :..|unique|sort|join:-}}" "apple banana apple,cherry banana"
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: SINGLE TEMPLATE START
+# DEBUG: Template: "{!split:,:..|map:{split: :..|unique|sort|join:-}}"
+# DEBUG: Input: "apple banana apple,cherry banana"
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: 🚀 PIPELINE START: 2 operations to apply
+# DEBUG: Initial input: String("apple banana apple,cherry banana")
+# DEBUG: Operations to apply:
+# DEBUG:   1. Split { sep: ",", range: Range(None, None, false) }
+# DEBUG:   2. Map { operations: [
+# DEBUG:       1: Split { sep: " ", range: Range(None, None, false) }
+# DEBUG:       2: Unique
+# DEBUG:       3: Sort { direction: Asc }
+# DEBUG:       4: Join { sep: "-" }
+# DEBUG:     ] }
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 1/2: Applying Split { sep: ",", range: Range(None, None, false) }
+# DEBUG: Input: String("apple banana apple,cherry banana")
+# DEBUG: 🎯 Result: List(2 items: [
+# DEBUG:   "apple banana apple"
+# DEBUG:   "cherry banana"
+# DEBUG: ])
+# DEBUG: Step completed in 1.619179ms
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 2/2: Applying Map (with 4 operations)
+# DEBUG: Map { operations: [
+# DEBUG:     1: Split { sep: " ", range: Range(None, None, false) }
+# DEBUG:     2: Unique
+# DEBUG:     3: Sort { direction: Asc }
+# DEBUG:     4: Join { sep: "-" }
+# DEBUG:   ] }
+# DEBUG: Input: List(2 items: ["apple banana apple", "cherry banana"])
+# DEBUG: Processing item 1 of 2
+# DEBUG: Map item input: "apple banana apple"
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: 🔧 SUB-PIPELINE START: 4 operations to apply
+# DEBUG: Initial input: String("apple banana apple")
+# DEBUG: Operations to apply:
+# DEBUG:   1. Split { sep: " ", range: Range(None, None, false) }
+# DEBUG:   2. Unique
+# DEBUG:   3. Sort { direction: Asc }
+# DEBUG:   4. Join { sep: "-" }
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 1/4: Applying Split { sep: " ", range: Range(None, None, false) }
+# DEBUG: Input: String("apple banana apple")
+# DEBUG: 🎯 Result: List(3 items: [
+# DEBUG:   "apple"
+# DEBUG:   "banana"
+# DEBUG:   "apple"
+# DEBUG: ])
+# DEBUG: Step completed in 44.309µs
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 2/4: Applying Unique
+# DEBUG: Input: List(3 items: ["apple", "banana", "apple"])
+# DEBUG: 🎯 Result: List(2 items: [
+# DEBUG:   "apple"
+# DEBUG:   "banana"
+# DEBUG: ])
+# DEBUG: Step completed in 39.795µs
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 3/4: Applying Sort { direction: Asc }
+# DEBUG: Input: List(2 items: ["apple", "banana"])
+# DEBUG: 🎯 Result: List(2 items: [
+# DEBUG:   "apple"
+# DEBUG:   "banana"
+# DEBUG: ])
+# DEBUG: Step completed in 451.904µs
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 4/4: Applying Join { sep: "-" }
+# DEBUG: Input: List(2 items: ["apple", "banana"])
+# DEBUG: 🎯 Result: String("apple-banana")
+# DEBUG: Step completed in 43.291µs
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: ✅ SUB-PIPELINE COMPLETE
+# DEBUG: Total execution time: 925.081µs
+# DEBUG: 🎯 Final result: String("apple-banana")
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: Map item output: "apple-banana"
+# DEBUG: Processing item 2 of 2
+# DEBUG: Map item input: "cherry banana"
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: 🔧 SUB-PIPELINE START: 4 operations to apply
+# DEBUG: Initial input: String("cherry banana")
+# DEBUG: Operations to apply:
+# DEBUG:   1. Split { sep: " ", range: Range(None, None, false) }
+# DEBUG:   2. Unique
+# DEBUG:   3. Sort { direction: Asc }
+# DEBUG:   4. Join { sep: "-" }
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 1/4: Applying Split { sep: " ", range: Range(None, None, false) }
+# DEBUG: Input: String("cherry banana")
+# DEBUG: 🎯 Result: List(2 items: [
+# DEBUG:   "cherry"
+# DEBUG:   "banana"
+# DEBUG: ])
+# DEBUG: Step completed in 19.503µs
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 2/4: Applying Unique
+# DEBUG: Input: List(2 items: ["cherry", "banana"])
+# DEBUG: 🎯 Result: List(2 items: [
+# DEBUG:   "cherry"
+# DEBUG:   "banana"
+# DEBUG: ])
+# DEBUG: Step completed in 22.853µs
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 3/4: Applying Sort { direction: Asc }
+# DEBUG: Input: List(2 items: ["cherry", "banana"])
+# DEBUG: 🎯 Result: List(2 items: [
+# DEBUG:   "banana"
+# DEBUG:   "cherry"
+# DEBUG: ])
+# DEBUG: Step completed in 27.211µs
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 4/4: Applying Join { sep: "-" }
+# DEBUG: Input: List(2 items: ["banana", "cherry"])
+# DEBUG: 🎯 Result: String("banana-cherry")
+# DEBUG: Step completed in 8.535µs
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: ✅ SUB-PIPELINE COMPLETE
+# DEBUG: Total execution time: 243.62µs
+# DEBUG: 🎯 Final result: String("banana-cherry")
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: Map item output: "banana-cherry"
+# DEBUG: MAP COMPLETED: 2 → 2 items
+# DEBUG: 🎯 Result: List(2 items: [
+# DEBUG:   "apple-banana"
+# DEBUG:   "banana-cherry"
+# DEBUG: ])
+# DEBUG: Step completed in 1.302789ms
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: ✅ PIPELINE COMPLETE
+# DEBUG: Total execution time: 3.224402ms
+# DEBUG: 🎯 Final result: List(2 items: [
+# DEBUG:   "apple-banana"
+# DEBUG:   "banana-cherry"
+# DEBUG: ])
+# DEBUG: Cache stats: 0 regex patterns, 3 split operations cached
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: ✅ SINGLE TEMPLATE COMPLETE
+# DEBUG: 🎯 Final result: "apple-banana,banana-cherry"
+# DEBUG: Cache stats: 0 regex patterns, 3 split operations cached
+# DEBUG: ═══════════════════════════════════════════════
+# apple-banana,banana-cherry
 ```
 
 **Key Insights:**
@@ -416,25 +610,6 @@ DEBUG: └───────────────────────�
 - **📋 List Processing**: Shows list operations within map
 - **🔄 Type Changes**: String → List → String transformations
 - **🧹 Data Cleaning**: See duplicate removal and sorting
-
-### Nested Transformations
-
-Debug complex nested operations with multiple levels.
-
-```bash
-# Complex log processing example
-string-pipeline '{!split:\n:1..|map:{replace:s/ +/ /g|split: :0..3|filter:^[a-z]|sort|join:,}}' \
-"USER         PID %CPU %MEM
-root           1  0.0  0.1
-alice        123  0.1  0.5
-bob          456  0.0  0.2"
-```
-
-**Key Features:**
-
-- **🏗️ Hierarchical Structure**: Multiple nesting levels clearly shown
-- **🔍 Context Tracking**: Each level maintains operation context
-- **📊 Performance Impact**: See how nesting affects timing
 
 ## ⚡ Performance Analysis
 
@@ -454,31 +629,49 @@ The debug system provides comprehensive timing data for performance analysis.
 **Example Output:**
 
 ```text
-DEBUG: STEP 1/3: Applying Split { sep: ",", range: Range(None, None, false) }
-DEBUG: Step completed in 548.4µs
-DEBUG: STEP 2/3: Applying Map { operations: [Upper, Append] }
-DEBUG: Step completed in 20.0277ms
-DEBUG: STEP 3/3: Applying Join { sep: "-" }
-DEBUG: Step completed in 156.2µs
-DEBUG: Total execution time: 23.0989ms
+DEBUG: STEP 1/2: Applying Split { sep: ",", range: Range(None, None, false) }
+DEBUG: Input: String("hello,world")
+DEBUG: 🎯 Result: List(2 items: [
+DEBUG:   "hello"
+DEBUG:   "world"
+DEBUG: ])
+DEBUG: Step completed in 594.8µs
+DEBUG: ───────────────────────────────────────────────
+DEBUG: STEP 2/2: Applying Map { operations: [Trim, Upper] }
+DEBUG: Step completed in 10.8661ms
+DEBUG: ───────────────────────────────────────────────
+DEBUG: ✅ PIPELINE COMPLETE
+DEBUG: Total execution time: 21.018ms
+DEBUG: Cache stats: 0 regex patterns, 1 split operations cached
 ```
 
 ### Memory Usage Tracking
 
-Monitor memory consumption throughout pipeline execution.
+Monitor memory consumption throughout pipeline execution for large datasets.
 
-**Memory Metrics:**
+**Memory Metrics (Large Datasets Only):**
 
 ```text
 DEBUG: Memory: ~48 chars across 3 items
 DEBUG: Memory: ~156 chars in string
 ```
 
+**Activation Thresholds:**
+
+| Data Type | Threshold | Purpose |
+|-----------|-----------|---------|
+| **Lists** | > 1000 items | Track memory in large collections |
+| **Strings** | > 10,000 characters | Monitor large string processing |
+
+**Memory Information:**
+
 | Metric Type | Description | Calculation |
 |-------------|-------------|-------------|
 | **List Memory** | Character count across items | Sum of all item lengths |
 | **String Memory** | Direct character count | String length |
 | **Approximate** | Estimation for performance | Character-based calculation |
+
+> **Note:** Memory tracking only appears when processing large datasets to avoid cluttering debug output for typical use cases.
 
 ### Bottleneck Identification
 
@@ -557,10 +750,30 @@ Use debug mode to diagnose runtime errors.
 ```bash
 # ❌ Applying string operation to list
 string-pipeline '{!split:,:..|upper}' 'a,b,c'
-# DEBUG shows:
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: SINGLE TEMPLATE START
+# DEBUG: Template: "{!split:,:..|upper}"
+# DEBUG: Input: "a,b,c"
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: 🚀 PIPELINE START: 2 operations to apply
+# DEBUG: Initial input: String("a,b,c")
+# DEBUG: Operations to apply:
+# DEBUG:   1. Split { sep: ",", range: Range(None, None, false) }
+# DEBUG:   2. Upper
+# DEBUG: ───────────────────────────────────────────────
+# DEBUG: STEP 1/2: Applying Split { sep: ",", range: Range(None, None, false) }
+# DEBUG: Input: String("a,b,c")
+# DEBUG: 🎯 Result: List(3 items: [
+# DEBUG:   "a"
+# DEBUG:   "b"
+# DEBUG:   "c"
+# DEBUG: ])
+# DEBUG: Step completed in 1.409827ms
+# DEBUG: ───────────────────────────────────────────────
 # DEBUG: STEP 2/2: Applying Upper
-# DEBUG: Input: List(["a", "b", "c"])
-# ERROR: upper operation can only be applied to strings. Use map:{upper} for lists.
+# DEBUG: Input: List(3 items: ["a", "b", "c"])
+# Error formatting input: Upper operation can only be applied to strings. Use map to apply to lists.
 ```
 
 **Debug-Guided Fix:**
@@ -569,557 +782,6 @@ string-pipeline '{!split:,:..|upper}' 'a,b,c'
 # ✅ Correct approach
 string-pipeline '{!split:,:..|map:{upper}}' 'a,b,c'
 # DEBUG shows successful map operation
-```
-
-### Type Mismatch Debugging
-
-Debug output clearly shows data types at each step.
-
-**Example Debug Output:**
-
-```text
-DEBUG: STEP 1/2: Applying Split
-DEBUG: Input: Str("a,b,c")           # ← String input
-DEBUG: Result: List(["a", "b", "c"]) # ← List output
-DEBUG: STEP 2/2: Applying Upper
-DEBUG: Input: List(["a", "b", "c"])  # ← Type mismatch!
-```
-
-**Type Flow Analysis:**
-
-| Step | Input Type | Operation | Output Type | Status |
-|------|------------|-----------|-------------|---------|
-| 1 | `Str` | `split` | `List` | ✅ Valid |
-| 2 | `List` | `upper` | - | ❌ Error |
-
-### Common Error Patterns
-
-**Pattern 1: Missing Map Operation**
-
-```bash
-# ❌ Wrong
-{split:,:..|upper}
-
-# ✅ Correct
-{split:,:..|map:{upper}}
-```
-
-**Pattern 2: Invalid Range**
-
-```bash
-# ❌ Wrong
-{split:,:abc}
-
-# ✅ Correct
-{split:,:1..3}
-```
-
-**Pattern 3: Regex Errors**
-
-```bash
-# ❌ Wrong
-{filter:[}
-
-# ✅ Correct
-{filter:\\[}
-```
-
-## 📊 Debug Output Reference
-
-### Visual Elements
-
-The debug system uses consistent visual elements for clarity.
-
-| Element | Unicode | Purpose | Context |
-|---------|---------|---------|---------|
-| **Header** | `═══════` | Major sections | Pipeline start/end |
-| **Separator** | `───────` | Step boundaries | Between operations |
-| **Box Top** | `┌─────` | Item start | Map item processing |
-| **Box Side** | `│` | Item content | Map item details |
-| **Box Bottom** | `└─────` | Item end | Map item completion |
-
-### Message Types
-
-Different message types provide specific information.
-
-| Type | Format | Information |
-|------|--------|-------------|
-| **🏗️ Structure** | `PIPELINE START: N operations` | Execution plan |
-| **🔄 Step** | `STEP X/Y: Applying Operation` | Current operation |
-| **📊 Result** | `Result: Type(value)` | Operation output |
-| **⚡ Timing** | `Step completed in Xms` | Performance data |
-| **🗺️ Map** | `MAP OPERATION: Processing N items` | Map operation start |
-| **✅ Complete** | `PIPELINE COMPLETE` | Execution end |
-
-### Context Information
-
-Debug messages include rich context information.
-
-**Context Elements:**
-
-```text
-DEBUG: [Item 2/5] [map]     STEP 1/3: Applying Upper
-       │         │          │         │
-       │         │          │         └─ Operation being applied
-       │         │          └─ Step number in sub-pipeline
-       │         └─ Context type (map operation)
-       └─ Item number and total
-```
-
-### Data Format Display
-
-Debug output shows data in human-readable formats.
-
-**Data Type Representations:**
-
-| Type | Format | Example |
-|------|--------|---------|
-| **String** | `Str("value")` | `Str("hello world")` |
-| **List** | `List(N items: [...])` | `List(3 items: ["a", "b", "c"])` |
-| **Large List** | `List(N items: showing first/last)` | `List(100 items: ["a", "b", "c"]...["x", "y", "z"])` |
-
-## 💡 Best Practices
-
-### Development Workflow
-
-**1. 🧪 Iterative Development:**
-
-```bash
-# ✅ Start simple
-string-pipeline '{!split:,:..}' 'a,b,c'
-
-# ✅ Add operations incrementally
-string-pipeline '{!split:,:..|map:{upper}}' 'a,b,c'
-
-# ✅ Build complexity gradually
-string-pipeline '{!split:,:..|map:{upper|append:!}|sort}' 'c,a,b'
-```
-
-**2. 🔍 Debug-First Approach:**
-
-```bash
-# ✅ Always debug new templates
-string-pipeline '{!new_template}' 'test_data'
-
-# ✅ Remove debug when satisfied
-string-pipeline '{final_template}' 'production_data'
-```
-
-### Performance Testing
-
-**1. 📊 Baseline Measurement:**
-
-```bash
-# Measure performance with debug
-string-pipeline '{!complex_template}' 'large_dataset'
-# Note timing information
-
-# Test optimizations
-string-pipeline '{!optimized_template}' 'large_dataset'
-# Compare timing improvements
-```
-
-**2. 🎯 Targeted Optimization:**
-
-```bash
-# Identify slow operations from debug output
-# Focus optimization efforts on bottlenecks
-# Re-measure to verify improvements
-```
-
-### Benchmarking Integration
-
-The debug system works well with the built-in benchmarking tools for performance analysis.
-
-**🔬 Basic Performance Analysis:**
-
-```bash
-# 1. Run benchmarks
-cargo build --release --bin bench
-./target/release/bench --iterations 1000 > performance_baseline.txt
-
-# 2. Look at performance patterns from benchmark data
-grep "Complex:" performance_baseline.txt | sort -k3 -n
-
-# 3. Debug specific slow operations
-string-pipeline -d '{split:,:..|map:{upper|replace:s/A/X/}}' 'test,data,with,A'
-```
-
-**📊 Performance-Driven Debugging Workflow:**
-
-1. **Baseline Measurement:**
-
-   ```bash
-   # Get performance data
-   ./target/release/bench --format json > current_performance.json
-
-   # Extract slow operations (>50μs)
-   jq '.categories[] | .[] | select(.average_time_ns > 50000)' current_performance.json
-   ```
-
-2. **Targeted Debug Analysis:**
-
-   ```bash
-   # Debug the slowest operations specifically
-   string-pipeline -d '{split:,:..|map:{replace:s/old/new/}}' 'sample,data'
-
-   # Focus on timing information in debug output
-   # Look for: "Step completed in XXXμs"
-   ```
-
-3. **Optimization Verification:**
-
-   ```bash
-   # Before optimization - debug timing
-   string-pipeline -d '{split:,:..|map:{trim}|map:{upper}}' 'data'
-
-   # After optimization - debug timing
-   string-pipeline -d '{split:,:..|map:{trim|upper}}' 'data'
-
-   # Re-run benchmarks to check improvement
-   ./target/release/bench --iterations 100
-   ```
-
-**🎯 Connecting Debug Insights to Benchmark Data:**
-
-| Debug Observation | Benchmark Category | Action |
-|-------------------|-------------------|---------|
-| High map processing time | `map_operations` | Consolidate operations |
-| Slow regex operations | `complex_operations` | Optimize patterns |
-| Multiple similar steps | All categories | Combine operations |
-| Large intermediate lists | `multiple_simple_operations` | Filter earlier |
-
-**⚡ Real-Time Performance Debugging:**
-
-```bash
-# Monitor performance during development
-watch -n 2 'echo "Current template performance:" && \
-time string-pipeline "{!your_template}" "test_data" 2>&1 | \
-grep -E "(Step completed|Total execution time)"'
-```
-
-**🔗 Integration with CI/CD:**
-
-```bash
-#!/bin/bash
-# performance_regression_debug.sh
-
-# Run benchmarks and check for changes
-./target/release/bench --format json > current.json
-
-# If changes detected, enable debug mode for analysis
-TOTAL_TIME=$(jq '.summary.total_execution_time_ns' current.json)
-if [ "$TOTAL_TIME" -gt "$THRESHOLD" ]; then
-    echo "Performance changes detected. Analyzing..."
-
-    # Debug the slowest operations
-    string-pipeline -d '{complex_template}' 'test_data' > debug_analysis.log 2>&1
-
-    # Extract timing information
-    grep "Step completed" debug_analysis.log | sort -k4 -n
-fi
-```
-
-> 📊 **Performance Analysis:** The [Performance Benchmarking Guide](benchmarking.md) provides benchmarking tips that work well with the debug system's timing information for performance optimization workflows.
-
-### Production Debugging
-
-**1. 🤫 Quiet Debug Mode:**
-
-```bash
-# ✅ Production-safe debugging
-string-pipeline --debug --quiet '{template}' 'data' > output.txt 2> debug.log
-
-# ✅ Analyze debug log separately
-cat debug.log | grep "Step completed" | sort -k4 -n
-```
-
-**2. 🔒 Controlled Debug Activation:**
-
-```bash
-# ✅ Environment-controlled debugging
-if [ "$DEBUG_MODE" = "true" ]; then
-    DEBUG_FLAG="--debug"
-else
-    DEBUG_FLAG=""
-fi
-
-string-pipeline $DEBUG_FLAG '{template}' 'data'
-```
-
-### Template Optimization
-
-**1. 🧹 Operation Combining:**
-
-```bash
-# ❌ Multiple maps (inefficient)
-{split:,:..|map:{trim}|map:{upper}|map:{append:!}}
-
-# ✅ Single map (efficient)
-{split:,:..|map:{trim|upper|append:!}}
-```
-
-**2. 🎯 Early Filtering:**
-
-```bash
-# ❌ Filter after processing (wasteful)
-{split:,:..|map:{expensive_operation}|filter:pattern}
-
-# ✅ Filter before processing (efficient)
-{split:,:..|filter:pattern|map:{expensive_operation}}
-```
-
-## 🎯 Real-World Examples
-
-### Data Processing Pipeline
-
-**Scenario:** Processing CSV data with multiple transformations.
-
-```bash
-# Input: "Name,Age,City\nJohn Doe,30,NYC\nJane Smith,25,LA"
-string-pipeline '{!split:\n:1..|map:{split:,:0|trim|upper|append: (User)}|sort}' \
-"Name,Age,City
-John Doe,30,NYC
-Jane Smith,25,LA"
-```
-
-**Debug Analysis:**
-
-```text
-DEBUG: PIPELINE START: 2 operations to apply
-DEBUG: STEP 1/2: Applying Split { sep: "\n", range: Range(1, None, false) }
-DEBUG: Input: Str("Name,Age,City\nJohn Doe,30,NYC\nJane Smith,25,LA")
-DEBUG: Result: List(2 items: ["John Doe,30,NYC", "Jane Smith,25,LA"])
-DEBUG: STEP 2/2: Applying Map
-DEBUG: MAP OPERATION: Processing 2 items
-DEBUG: ┌─ Processing item 1 of 2 ─────────────
-DEBUG: │  Input: "John Doe,30,NYC"
-DEBUG: [Item 1/2] [map] STEP 1/4: Applying Split { sep: ",", range: Index(0) }
-DEBUG: [Item 1/2] [map] Result: String("John Doe")
-DEBUG: [Item 1/2] [map] STEP 2/4: Applying Trim
-DEBUG: [Item 1/2] [map] Result: String("John Doe")
-DEBUG: [Item 1/2] [map] STEP 3/4: Applying Upper
-DEBUG: [Item 1/2] [map] Result: String("JOHN DOE")
-DEBUG: [Item 1/2] [map] STEP 4/4: Applying Append { suffix: " (User)" }
-DEBUG: [Item 1/2] [map] Result: String("JOHN DOE (User)")
-DEBUG: │  Output: "JOHN DOE (User)"
-DEBUG: └────────────────────────────────────────────
-```
-
-**Insights:**
-
-- **📊 Clear Data Flow**: See CSV parsing step by step
-- **🔄 Transformation Chain**: Each map operation tracked
-- **⚡ Performance**: Individual timing for optimization
-
-### Complex Transformation Debugging
-
-**Scenario:** Log processing with complex regex and filtering.
-
-```bash
-string-pipeline '{!split:\n:..|filter:ERROR|map:{regex_extract:\d{2}:\d{2}:\d{2}|prepend:Time: }|join: | }' \
-"2023-01-01 10:30:15 INFO Process started
-2023-01-01 10:30:45 ERROR Connection failed
-2023-01-01 10:31:02 ERROR Timeout occurred
-2023-01-01 10:31:15 INFO Process completed"
-```
-
-**Debug Output Shows:**
-
-- **🧹 Filtering**: Only ERROR lines processed
-- **🔍 Regex Extraction**: Time extraction from each line
-- **🎨 Formatting**: Prefix addition and final joining
-
-### Performance Optimization Case Study
-
-**Before Optimization:**
-
-```bash
-string-pipeline '{!split:,:..|map:{trim}|map:{upper}|filter:^[A-Z]{3,}|map:{append:!}}' \
-'  apple  ,  hi  ,  banana  ,  go  ,  cherry  '
-```
-
-**Debug shows multiple map operations:**
-
-- Map 1: Trim operations
-- Map 2: Upper operations
-- Filter: Length filtering
-- Map 3: Append operations
-
-**After Optimization:**
-
-```bash
-string-pipeline '{!split:,:..|map:{trim|upper}|filter:^[A-Z]{3,}|map:{append:!}}' \
-'  apple  ,  hi  ,  banana  ,  go  ,  cherry  '
-```
-
-**Performance Improvement:**
-
-- Reduced map operations from 3 to 2
-- Combined trim and upper into single map
-- 40% performance improvement shown in timing
-
-### Error Resolution Examples
-
-**Error 1: Type Mismatch**
-
-```bash
-# ❌ Problem
-string-pipeline '{!split:,:..|sort|upper}' 'c,a,b'
-# DEBUG shows sort returns List, upper expects String
-```
-
-**Resolution:**
-
-```bash
-# ✅ Solution
-string-pipeline '{!split:,:..|sort|map:{upper}}' 'c,a,b'
-# DEBUG shows correct List → Map → List flow
-```
-
-**Error 2: Invalid Range**
-
-```bash
-# ❌ Problem
-string-pipeline '{!split:,:end}' 'a,b,c'
-# Parse error: Invalid range specification
-```
-
-**Resolution:**
-
-```bash
-# ✅ Solution
-string-pipeline '{!split:,:-1}' 'a,b,c'
-# DEBUG shows correct range usage
-```
-
-## ⚠️ Troubleshooting
-
-### Debug Output Issues
-
-**Problem:** Debug output not appearing.
-
-**Solutions:**
-
-1. **✅ Check Debug Activation:**
-
-   ```bash
-   # Inline debug
-   string-pipeline '{!operation}' 'input'
-
-   # CLI debug
-   string-pipeline --debug '{operation}' 'input'
-   ```
-
-2. **✅ Verify Template Syntax:**
-
-   ```bash
-   string-pipeline --validate '{!operation}'
-   ```
-
-3. **✅ Check Error Output:**
-
-   ```bash
-   string-pipeline '{!operation}' 'input' 2>&1 | grep DEBUG
-   ```
-
-### Performance Problems
-
-**Problem:** Debug mode is too slow.
-
-**Solutions:**
-
-1. **🤫 Use Quiet Mode:**
-
-   ```bash
-   string-pipeline --debug --quiet '{template}' 'input'
-   ```
-
-2. **🎯 Test with Small Data:**
-
-   ```bash
-   string-pipeline '{!template}' 'small_test_data'
-   ```
-
-3. **📊 Profile Specific Operations:**
-
-   ```bash
-   # Test individual operations
-   string-pipeline '{!operation1}' 'test'
-   string-pipeline '{!operation2}' 'test'
-   ```
-
-### Common Debugging Mistakes
-
-**1. ❌ Debugging Production Data**
-
-```bash
-# Wrong: Debug with large production data
-string-pipeline '{!complex_template}' large_production_file.txt
-
-# Right: Test with small sample first
-head -10 large_production_file.txt | string-pipeline '{!complex_template}'
-```
-
-**2. ❌ Ignoring Performance Warnings**
-
-```bash
-# Wrong: Ignoring slow operations shown in debug
-DEBUG: Step completed in 2.5s  # ← Red flag!
-
-# Right: Investigate and optimize slow operations
-```
-
-**3. ❌ Not Using Validation**
-
-```bash
-# Wrong: Debug invalid templates
-string-pipeline '{!broken_template}' 'input'
-
-# Right: Validate first
-string-pipeline --validate '{template}' && \
-string-pipeline '{!template}' 'input'
-```
-
-## 🔧 Advanced Debugging Techniques
-
-### Selective Debugging
-
-Debug only specific parts of complex pipelines.
-
-```bash
-# Debug just the first part
-string-pipeline '{!split:,:..|map:{upper}}' 'input' | \
-string-pipeline '{filter:^[A-Z]{3,}|sort}'
-
-# Debug just the second part
-string-pipeline '{split:,:..|map:{upper}}' 'input' | \
-string-pipeline '{!filter:^[A-Z]{3,}|sort}'
-```
-
-### Quiet Debug Mode
-
-Get debug information without overwhelming output.
-
-```bash
-# Combine debug with quiet for clean logs
-string-pipeline --debug --quiet '{template}' 'input' 2> debug.log
-cat debug.log | grep -E "(Step completed|Total execution)"
-```
-
-### Debug Output Filtering
-
-Extract specific debug information.
-
-```bash
-# Extract only timing information
-string-pipeline '{!template}' 'input' 2>&1 | grep "completed in"
-
-# Extract only map operations
-string-pipeline '{!template}' 'input' 2>&1 | grep "MAP OPERATION"
-
-# Extract memory usage
-string-pipeline '{!template}' 'input' 2>&1 | grep "Memory:"
 ```
 
 ---
