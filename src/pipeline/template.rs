@@ -204,7 +204,7 @@ use crate::pipeline::{DebugContext, RangeSpec, StringOp, apply_ops_internal, app
 ///     println!("{}", result);
 /// }
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Template {
     /// The original template string for display and debugging.
     raw: String,
