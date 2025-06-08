@@ -144,7 +144,7 @@ Good for **automation**, **scripts**, and **data processing**:
     "map_operations": [...]
   },
   "timestamp": "2024-01-15T10:30:45Z",
-  "version": "0.10.0"
+  "version": "0.11.0"
 }
 ```
 
@@ -428,7 +428,7 @@ Map: split + map(replace) + join                        49.16μs      42.90μs  
     ]
   },
   "timestamp": "2024-01-15T10:30:45Z",
-  "version": "0.10.0"
+  "version": "0.11.0"
 }
 ```
 
