@@ -107,6 +107,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
       - name: Cargo build
+        shell: bash
         run: |
           if [[ "${{ matrix.use-cross }}" == "true" ]]; then
             cargo install cross
