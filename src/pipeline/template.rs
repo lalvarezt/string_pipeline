@@ -35,7 +35,7 @@ use crate::pipeline::{DebugContext, RangeSpec, StringOp, apply_ops_internal, app
 /// | **Append/Prepend** | `append:<text>`, `prepend:<text>` | Add text to ends |
 /// | **Map** | `map:{<operations>}` | Apply sub-pipeline to each list item |
 /// | **Filter** | `filter:<regex>`, `filter_not:<regex>` | Keep/remove items matching pattern |
-/// | **Sort** | `sort[:asc\|desc]` | Sort list items |
+/// | **Sort** | `sort[:asc or desc]` | Sort list items |
 /// | **Slice** | `slice:<range>` | Select list elements by range |
 /// | **Unique** | `unique` | Remove duplicate list items |
 /// | **Reverse** | `reverse` | Reverse string or list |
@@ -54,7 +54,7 @@ use crate::pipeline::{DebugContext, RangeSpec, StringOp, apply_ops_internal, app
 /// | `N..=M` | Inclusive range | `{split:,:1..=3}` → elements 1,2,3 |
 /// | `N..` | From N to end | `{split:,:2..}` → from 2nd to end |
 /// | `..M` | From start to M-1 | `{split:,:..3}` → first 3 elements |
-/// | `..=M` | From start to M inclusive | `{split:,:..=2}` → first 3 elements |
+/// | `..=M` | From start to M inclusive | `{split:,:..=2}` → elements 0,1,2 |
 /// | `..` | All elements | `{split:,:..}` → all elements |
 ///
 /// Negative indices count from the end (`-1` = last, `-2` = second to last).
@@ -146,7 +146,7 @@ use crate::pipeline::{DebugContext, RangeSpec, StringOp, apply_ops_internal, app
 /// use string_pipeline::Template;
 ///
 /// let template = Template::parse("{!split:,:..}").unwrap();
-/// // Outputs detailed operation traces to stderr
+/// // Outputs detailed operation traces with hierarchical structure to stderr
 /// let result = template.format("a,b,c").unwrap();
 /// assert_eq!(result, "a,b,c");
 /// ```

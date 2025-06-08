@@ -10,7 +10,7 @@
 //! - **🎯 Precise Control**: Python-like ranges with Rust syntax (`-2..`, `1..=3`)
 //! - **🗺️ Powerful Mapping**: Apply sub-pipelines to each list item
 //! - **🔍 Regex Support**: sed-like patterns for complex transformations
-//! - **🐛 Debug Mode**: Step-by-step operation visualization
+//! - **🐛 Debug Mode**: Hierarchical operation visualization with detailed tracing
 //! - **📥 Flexible I/O**: CLI tool + embeddable Rust library
 //! - **🦀 Performance optimized**: Zero-copy operations where possible, efficient memory usage
 //! - **🌍 Unicode support**: Full UTF-8 and Unicode character handling
@@ -85,9 +85,28 @@
 //! use string_pipeline::Template;
 //!
 //! let template = Template::parse("{!split:,:..}").unwrap();
-//! // Outputs debug information to stderr during processing
+//! // Outputs detailed debug information during processing
 //! let result = template.format("a,b,c").unwrap();
 //! assert_eq!(result, "a,b,c");
+//! ```
+//!
+//! ## Multi-Template Support
+//!
+//! Beyond simple templates, the library supports **multi-templates** that combine literal text
+//! with multiple template sections, featuring automatic caching for performance:
+//!
+//! ```rust
+//! use string_pipeline::MultiTemplate;
+//!
+//! // Combine literal text with template operations
+//! let template = MultiTemplate::parse("Name: {split: :0} Age: {split: :1}").unwrap();
+//! let result = template.format("John 25").unwrap();
+//! assert_eq!(result, "Name: John Age: 25");
+//!
+//! // Automatic caching: split operation performed only once
+//! let template = MultiTemplate::parse("First: {split:,:0} Second: {split:,:1}").unwrap();
+//! let result = template.format("apple,banana").unwrap();
+//! assert_eq!(result, "First: apple Second: banana");
 //! ```
 //!
 //! ## Common Use Cases
@@ -179,7 +198,7 @@
 //! let template = Template::parse("{sort}").unwrap();
 //! let result = template.format("not_a_list");
 //! assert!(result.is_err());
-//! // Error: "sort operation can only be applied to lists. Use split first."
+//! // Error: "Sort operation can only be applied to lists"
 //! ```
 //!
 //! ## Performance Notes
@@ -206,7 +225,7 @@
 //! ```
 //!
 //! For complete documentation including all operations, advanced features, and debugging techniques,
-//! see the [`Template`] documentation and the comprehensive guides in the `docs/` directory.
+//! see the [`Template`] and [`MultiTemplate`] documentation and the comprehensive guides in the `docs/` directory.
 
 mod pipeline;
 

@@ -880,7 +880,7 @@ fn apply_range<T: Clone>(items: &[T], range: &RangeSpec) -> Vec<T> {
 ///
 /// * `input` - The input string to transform
 /// * `ops` - Slice of operations to apply in sequence
-/// * `debug` - Whether to output debug information to stderr
+/// * `debug` - Whether to output detailed debug information with hierarchical tracing to stderr
 ///
 /// # Returns
 ///
@@ -1114,8 +1114,9 @@ where
         Ok(Value::Str(transform(s)))
     } else {
         Err(format!(
-            "{} operation can only be applied to strings. Use map to apply to lists.",
-            op_name
+            "{} operation can only be applied to strings. Use map:{{{}}} for lists.",
+            op_name,
+            op_name.to_lowercase()
         ))
     }
 }
@@ -1246,7 +1247,7 @@ fn apply_single_operation(
                     Ok(Value::Str(result))
                 }
             } else {
-                Err("Substring operation can only be applied to strings. Use map to apply to lists.".to_string())
+                Err("Substring operation can only be applied to strings. Use map:{substring:...} for lists.".to_string())
             }
         }
         StringOp::Replace {
@@ -1290,7 +1291,7 @@ fn apply_single_operation(
                 Ok(Value::Str(result))
             } else {
                 Err(
-                    "Replace operation can only be applied to strings. Use map to apply to lists."
+                    "Replace operation can only be applied to strings. Use map:{replace:...} for lists."
                         .to_string(),
                 )
             }
@@ -1330,7 +1331,7 @@ fn apply_single_operation(
                 Ok(Value::Str(result))
             } else {
                 Err(
-                    "Trim operation can only be applied to strings. Use map to apply to lists."
+                    "Trim operation can only be applied to strings. Use map:{trim} for lists."
                         .to_string(),
                 )
             }
@@ -1348,7 +1349,7 @@ fn apply_single_operation(
                     .map_err(|_| "Failed to convert stripped bytes to UTF-8".to_string())?;
                 Ok(Value::Str(result))
             } else {
-                Err("StripAnsi operation can only be applied to strings. Use map to apply to lists.".to_string())
+                Err("StripAnsi operation can only be applied to strings. Use map:{strip_ansi} for lists.".to_string())
             }
         }
         StringOp::Pad {
@@ -1384,7 +1385,7 @@ fn apply_single_operation(
                 Ok(Value::Str(result))
             } else {
                 Err(
-                    "Pad operation can only be applied to strings. Use map to apply to lists."
+                    "Pad operation can only be applied to strings. Use map:{pad:...} for lists."
                         .to_string(),
                 )
             }
@@ -1404,7 +1405,7 @@ fn apply_single_operation(
                 };
                 Ok(Value::Str(result))
             } else {
-                Err("RegexExtract operation can only be applied to strings. Use map to apply to lists.".to_string())
+                Err("RegexExtract operation can only be applied to strings. Use map:{regex_extract:...} for lists.".to_string())
             }
         }
         StringOp::Map { .. } => Err("Map operations should be handled separately".to_string()),
