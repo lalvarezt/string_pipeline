@@ -158,6 +158,32 @@ https://github.com/lalvarezt/string_pipeline/blob/main/docs/template-system.md
     );
 }
 
+fn remove_debug_markers(template: &str) -> String {
+    let mut result = String::new();
+    let mut chars = template.chars().peekable();
+    let mut depth: usize = 0;
+
+    while let Some(ch) = chars.next() {
+        if ch == '{' {
+            if depth == 0 && chars.peek() == Some(&'!') {
+                // Skip the '!' debug marker at top-level
+                result.push(ch);
+                chars.next(); // consume the '!'
+                depth += 1;
+            } else {
+                result.push(ch);
+                depth += 1;
+            }
+        } else if ch == '}' {
+            result.push(ch);
+            depth = depth.saturating_sub(1);
+        } else {
+            result.push(ch);
+        }
+    }
+    result
+}
+
 fn main() {
     let cli = Cli::parse();
 
@@ -226,13 +252,24 @@ fn main() {
             };
 
         if is_multi_template_debug {
-            // Multi-template: add debug to each individual template section
+            // Multi-template: add debug to each individual template section (top-level only)
             let mut result = String::new();
             let mut chars = template_str.chars().peekable();
+            let mut depth: usize = 0;
 
             while let Some(ch) = chars.next() {
-                if ch == '{' && chars.peek() != Some(&'!') {
-                    result.push_str("{!");
+                if ch == '{' {
+                    if depth == 0 && chars.peek() != Some(&'!') {
+                        // Only add debug flag to top-level braces
+                        result.push_str("{!");
+                        depth += 1;
+                    } else {
+                        result.push(ch);
+                        depth += 1;
+                    }
+                } else if ch == '}' {
+                    result.push(ch);
+                    depth = depth.saturating_sub(1);
                 } else {
                     result.push(ch);
                 }
@@ -321,13 +358,8 @@ fn main() {
 
     // For quiet mode, disable debug output by removing debug markers
     let final_template_for_processing = if cli.quiet {
-        // Remove debug markers from template to suppress debug output
-        if let Some(stripped) = final_template.strip_prefix("{!") {
-            // Convert {!...} to {...}
-            format!("{{{}", stripped)
-        } else {
-            final_template.clone()
-        }
+        // Remove all debug markers from template to suppress debug output
+        remove_debug_markers(&final_template)
     } else {
         final_template.clone()
     };
