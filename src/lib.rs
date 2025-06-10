@@ -12,7 +12,7 @@
 //! - **🔍 Regex Support**: sed-like patterns for complex transformations
 //! - **🐛 Debug Mode**: Hierarchical operation visualization with detailed tracing
 //! - **📥 Flexible I/O**: CLI tool + embeddable Rust library
-//! - **🦀 Performance optimized**: Zero-copy operations where possible, efficient memory usage
+//! - **🦀 High performance**: Zero-copy operations where possible, efficient memory usage
 //! - **🌍 Unicode support**: Full UTF-8 and Unicode character handling
 //! - **🛡️ Error handling**: Comprehensive error reporting for invalid operations
 //!
@@ -205,7 +205,7 @@
 //!
 //! - Templates are compiled once and can be reused efficiently
 //! - Operations use zero-copy techniques where possible
-//! - Large datasets are processed with optimized algorithms
+//! - Large datasets are processed with efficient algorithms
 //! - Regex patterns are compiled and cached internally
 //! - Memory allocation is minimized for common operations
 //!

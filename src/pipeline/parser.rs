@@ -620,7 +620,7 @@ fn process_arg(s: &str) -> String {
         return s.to_string();
     }
 
-    // Optimized path: pre-allocate with exact capacity and use efficient iteration
+    // Pre-allocate with exact capacity for efficient parsing
     let mut result = String::with_capacity(s.len());
     let bytes = s.as_bytes();
     let mut i = 0;

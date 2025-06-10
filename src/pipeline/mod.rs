@@ -13,11 +13,11 @@ mod parser;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::Mutex;
-use std::time::Instant;
+
 use strip_ansi_escapes::strip;
 
 pub use crate::pipeline::template::{MultiTemplate, Template};
-pub use debug::DebugContext;
+pub use debug::{DebugContext, DebugSession};
 mod template;
 
 // Global regex cache to avoid recompiling patterns
@@ -346,7 +346,7 @@ pub enum StringOp {
     /// **Whitespace Characters:** When no characters are specified, removes standard
     /// whitespace: spaces, tabs (`\t`), newlines (`\n`), and carriage returns (`\r`).
     ///
-    /// **Performance Optimization:** ASCII-only strings use optimized whitespace detection.
+    /// **Performance Note:** ASCII-only strings use fast whitespace detection.
     ///
     /// # Fields
     ///
@@ -594,7 +594,7 @@ pub enum StringOp {
     /// For strings, reverses the character order. For lists, reverses the item order.
     /// Properly handles Unicode characters and grapheme clusters.
     ///
-    /// **Performance Optimization:** ASCII-only strings use optimized byte-level reversal.
+    /// **Performance Note:** ASCII-only strings use fast byte-level reversal.
     ///
     /// # Examples
     ///
@@ -863,7 +863,7 @@ fn apply_range<T: Clone>(items: &[T], range: &RangeSpec) -> Vec<T> {
             if s_idx >= e_idx {
                 Vec::new()
             } else {
-                // Use slice.to_vec() which is optimized for copying contiguous memory
+                // Use slice.to_vec() for efficient contiguous memory copying
                 items[s_idx..e_idx].to_vec()
             }
         }
@@ -881,6 +881,8 @@ fn apply_range<T: Clone>(items: &[T], range: &RangeSpec) -> Vec<T> {
 /// * `input` - The input string to transform
 /// * `ops` - Slice of operations to apply in sequence
 /// * `debug` - Whether to output detailed debug information with hierarchical tracing to stderr
+/// * `context` - The debug context (template, multi-template, or sub-pipeline)
+/// * `template_raw` - Optional template string for debug display
 ///
 /// # Returns
 ///
@@ -909,190 +911,135 @@ pub fn apply_ops_internal(
     input: &str,
     ops: &[StringOp],
     debug: bool,
-    debug_context: Option<DebugContext>,
+    context: DebugContext,
+    template_raw: Option<&str>,
 ) -> Result<String, String> {
+    if debug {
+        apply_ops_with_debug(input, ops, context, template_raw)
+    } else {
+        apply_ops_without_debug(input, ops)
+    }
+}
+
+/// Execute operations without debug tracing
+fn apply_ops_without_debug(input: &str, ops: &[StringOp]) -> Result<String, String> {
     let mut val = Value::Str(input.to_string());
     let mut default_sep = " ".to_string();
-    let start_time = if debug { Some(Instant::now()) } else { None };
 
-    if debug {
-        if let Some(ref ctx) = debug_context {
-            ctx.print("═══════════════════════════════════════════════");
-            if ctx.is_sub_pipeline() {
-                ctx.print(&format!(
-                    "🔧 SUB-PIPELINE START: {} operations to apply",
-                    ops.len()
-                ));
-            } else {
-                ctx.print(&format!(
-                    "🚀 PIPELINE START: {} operations to apply",
-                    ops.len()
-                ));
-            }
-            ctx.print(&format!("Initial input: {}", ctx.format_value(&val)));
-
-            if ops.len() > 1 {
-                ctx.print("Operations to apply:");
-                for (i, op) in ops.iter().enumerate() {
-                    ctx.print_operation(op, i + 1);
-                }
-            }
-            ctx.print("───────────────────────────────────────────────");
-        }
-    }
-
-    for (i, op) in ops.iter().enumerate() {
-        let step_start = if debug { Some(Instant::now()) } else { None };
-
-        if debug {
-            if let Some(ref ctx) = debug_context {
-                // Get operation name for the step header
-                let op_name = match op {
-                    StringOp::Map { operations } => {
-                        if operations.len() <= 3 {
-                            let ops_str: Vec<String> =
-                                operations.iter().map(|op| format!("{:?}", op)).collect();
-                            format!("Map {{ operations: [{}] }}", ops_str.join(", "))
-                        } else {
-                            format!("Map (with {} operations)", operations.len())
-                        }
-                    }
-                    _ => format!("{:?}", op),
-                };
-
-                ctx.print(&format!(
-                    "STEP {}/{}: Applying {}",
-                    i + 1,
-                    ops.len(),
-                    op_name
-                ));
-
-                // For Map with many operations, show the detailed breakdown
-                if let StringOp::Map { operations } = op {
-                    if operations.len() > 3 {
-                        ctx.print("Map { operations: [");
-                        for (i, map_op) in operations.iter().enumerate() {
-                            ctx.print(&format!("    {}: {:?}", i + 1, map_op));
-                        }
-                        ctx.print("  ] }");
-                    }
-                }
-                ctx.print(&format!("Input: {}", ctx.format_value(&val)));
-            }
-        }
-
+    for op in ops {
         match op {
             StringOp::Map { operations } => {
-                // Nested map operations are not supported (simplified check)
-                // This could be enhanced with proper tracking if needed
-
                 if let Value::List(list) = val {
                     let mapped = list
                         .iter()
-                        .enumerate()
-                        .map(|(item_idx, item)| {
-                            if debug {
-                                if let Some(ref parent_ctx) = debug_context {
-                                    parent_ctx.print_map_item_start(item_idx + 1, list.len());
-                                    parent_ctx.print_map_item_input(item);
-                                }
-                            }
-
-                            let ctx = DebugContext::new_map_item(debug, item_idx + 1, list.len())
-                                .with_depth(0)
-                                .with_operation("map");
-
-                            let result = apply_ops_internal(item, operations, debug, Some(ctx));
-
-                            // Print map item output IMMEDIATELY after getting the result
-                            if debug {
-                                if let Some(ref parent_ctx) = debug_context {
-                                    match &result {
-                                        Ok(output) => parent_ctx.print_map_item_output(output),
-                                        Err(e) => parent_ctx.print_map_item_error(e),
-                                    }
-                                }
-                            }
-
-                            result
-                        })
+                        .map(|item| apply_ops_without_debug(item, operations))
                         .collect::<Result<Vec<_>, _>>()?;
-
-                    if debug {
-                        if let Some(ref ctx) = debug_context {
-                            ctx.print(&format!(
-                                "MAP COMPLETED: {} → {} items",
-                                list.len(),
-                                mapped.len()
-                            ));
-                        }
-                    }
 
                     val = Value::List(mapped);
                 } else {
                     return Err("Map operation can only be applied to lists".to_string());
                 }
             }
+            _ => {
+                val = apply_single_operation(op, val, &mut default_sep)?;
+            }
+        }
+    }
 
-            // All other operations use the shared implementation
+    Ok(match val {
+        Value::Str(s) => s,
+        Value::List(list) => {
+            if list.is_empty() {
+                String::new()
+            } else {
+                list.join(&default_sep)
+            }
+        }
+    })
+}
+
+/// Execute operations with debug tracing enabled
+fn apply_ops_with_debug(
+    input: &str,
+    ops: &[StringOp],
+    context: DebugContext,
+    template_raw: Option<&str>,
+) -> Result<String, String> {
+    let mut val = Value::Str(input.to_string());
+    let mut default_sep = " ".to_string();
+
+    // Create appropriate debug session
+    let mut debug_session = match context {
+        DebugContext::SingleTemplate => {
+            DebugSession::new_single_template(true, template_raw.unwrap_or("").to_string())
+        }
+        DebugContext::SubPipeline {
+            item_num,
+            total_items,
+        } => DebugSession::new_sub_pipeline(true, item_num, total_items),
+    };
+
+    // Start the debug session
+    let pipeline_debugger = debug_session.start(input, ops);
+
+    for (i, op) in ops.iter().enumerate() {
+        let step_debugger = if let Some(ref debugger) = pipeline_debugger {
+            debugger.start_step(i + 1, ops.len(), op, &val, i == ops.len() - 1)
+        } else {
+            None
+        };
+
+        match op {
+            StringOp::Map { operations } => {
+                if let Value::List(list) = val {
+                    let mapped = list
+                        .iter()
+                        .enumerate()
+                        .map(|(item_idx, item)| {
+                            // Debug map item start within the pipeline debugger scope
+                            if let Some(ref debugger) = pipeline_debugger {
+                                debugger.debug_map_item_start(item_idx + 1, list.len(), item);
+                            }
+
+                            let result = apply_ops_internal(
+                                item,
+                                operations,
+                                true,
+                                DebugContext::SubPipeline {
+                                    item_num: item_idx + 1,
+                                    total_items: list.len(),
+                                },
+                                None, // Sub-pipelines don't have template strings
+                            );
+
+                            // Debug map item result within the pipeline debugger scope
+                            if let Some(ref debugger) = pipeline_debugger {
+                                debugger.debug_map_item_end(item_idx + 1, list.len(), &result);
+                            }
+
+                            result
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+
+                    val = Value::List(mapped);
+                } else {
+                    return Err("Map operation can only be applied to lists".to_string());
+                }
+            }
             _ => {
                 val = apply_single_operation(op, val, &mut default_sep)?;
             }
         }
 
-        if debug {
-            if let Some(ref ctx) = debug_context {
-                let elapsed = step_start.unwrap().elapsed();
-
-                ctx.print_value(&val, "🎯 Result: ");
-                ctx.print(&format!("Step completed in {:?}", elapsed));
-
-                // Add memory usage info for large datasets
-                match &val {
-                    Value::List(list) if list.len() > 1000 => {
-                        let total_chars: usize = list.iter().map(|s| s.len()).sum();
-                        ctx.print(&format!(
-                            "Memory: ~{} chars across {} items",
-                            total_chars,
-                            list.len()
-                        ));
-                    }
-                    Value::Str(s) if s.len() > 10000 => {
-                        ctx.print(&format!("Memory: ~{} chars in string", s.len()));
-                    }
-                    _ => {}
-                }
-
-                ctx.print("───────────────────────────────────────────────");
-            }
+        // Complete step debugging and record timing
+        if let Some(step_debugger) = step_debugger {
+            let duration = step_debugger.complete(&val);
+            debug_session.record_step_timing(i + 1, op, duration);
         }
     }
 
-    if debug {
-        if let Some(ref ctx) = debug_context {
-            let total_elapsed = start_time.unwrap().elapsed();
-            if ctx.is_sub_pipeline() {
-                ctx.print("✅ SUB-PIPELINE COMPLETE");
-            } else {
-                ctx.print("✅ PIPELINE COMPLETE");
-            }
-            ctx.print(&format!("Total execution time: {:?}", total_elapsed));
-            ctx.print_value(&val, "🎯 Final result: ");
-
-            // Show cache statistics only for main pipelines to avoid repetition
-            if !ctx.is_sub_pipeline() {
-                let regex_cache = REGEX_CACHE.lock().unwrap();
-                let split_cache = SPLIT_CACHE.lock().unwrap();
-                ctx.print(&format!(
-                    "Cache stats: {} regex patterns, {} split operations cached",
-                    regex_cache.len(),
-                    split_cache.len()
-                ));
-            }
-
-            ctx.print("═══════════════════════════════════════════════");
-        }
-    }
+    // End the debug session
+    debug_session.end(&val);
 
     Ok(match val {
         Value::Str(s) => s,
@@ -1234,7 +1181,7 @@ fn apply_single_operation(
         StringOp::Substring { range } => {
             if let Value::Str(s) = val {
                 if s.is_ascii() {
-                    // Optimized ASCII path - work directly with bytes
+                    // Fast ASCII path - work directly with bytes
                     let bytes = s.as_bytes();
                     let result_bytes = apply_range(bytes, range);
                     // Safety: ASCII input guarantees valid UTF-8 output
@@ -1314,7 +1261,7 @@ fn apply_single_operation(
                         TrimDirection::Right => s.trim_end().to_string(),
                     }
                 } else {
-                    // Custom character trimming with optimized character set
+                    // Custom character trimming
                     let chars_to_trim: Vec<char> = chars.chars().collect();
                     match direction {
                         TrimDirection::Both => {

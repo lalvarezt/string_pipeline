@@ -2,7 +2,10 @@ use std::collections::{HashMap, hash_map::DefaultHasher};
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 
-use crate::pipeline::{DebugContext, RangeSpec, StringOp, apply_ops_internal, apply_range, parser};
+use crate::pipeline::debug::{
+    DebugContext, DebugSession, MultiTemplateDebugger, OperationDisplayMode, OperationFormatter,
+};
+use crate::pipeline::{RangeSpec, StringOp, apply_ops_internal, apply_range, parser};
 
 /// A compiled string transformation template with chainable operations.
 ///
@@ -186,7 +189,7 @@ use crate::pipeline::{DebugContext, RangeSpec, StringOp, apply_ops_internal, app
 ///
 /// - Templates are compiled once and can be reused efficiently
 /// - Operations use zero-copy techniques where possible
-/// - Large datasets are processed with optimized algorithms
+/// - Large datasets are processed with efficient algorithms
 /// - Regex patterns are compiled and cached internally
 /// - Memory allocation is minimized for common operations
 ///
@@ -367,27 +370,13 @@ impl Template {
     /// assert_eq!(template.format("a,b").unwrap(), "b"); // Clamps to last item
     /// ```
     pub fn format(&self, input: &str) -> Result<String, String> {
-        if self.debug {
-            let debug_context = DebugContext::new_template(true, self.raw.clone());
-            debug_context.print_template_header("SINGLE TEMPLATE", input, None);
-
-            let result =
-                apply_ops_internal(input, &self.ops, self.debug, Some(debug_context.clone()))?;
-
-            // Show consistent cache statistics format
-            use crate::pipeline::{REGEX_CACHE, SPLIT_CACHE};
-            let regex_cache = REGEX_CACHE.lock().unwrap();
-            let split_cache = SPLIT_CACHE.lock().unwrap();
-            let cache_info = format!(
-                "Cache stats: {} regex patterns, {} split operations cached",
-                regex_cache.len(),
-                split_cache.len()
-            );
-            debug_context.print_template_footer("SINGLE TEMPLATE", &result, Some(&cache_info));
-            Ok(result)
-        } else {
-            apply_ops_internal(input, &self.ops, false, None)
-        }
+        apply_ops_internal(
+            input,
+            &self.ops,
+            self.debug,
+            DebugContext::SingleTemplate,
+            Some(&self.raw),
+        )
     }
 
     /// Returns the original template string.
@@ -405,25 +394,6 @@ impl Template {
     /// ```
     pub fn template_string(&self) -> &str {
         &self.raw
-    }
-
-    /// Returns whether debug mode is enabled for this template.
-    ///
-    /// Debug mode can be enabled by adding `!` after the opening brace in the template.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use string_pipeline::Template;
-    ///
-    /// let normal = Template::parse("{upper}").unwrap();
-    /// assert!(!normal.is_debug_enabled());
-    ///
-    /// let debug = Template::parse("{!upper}").unwrap();
-    /// assert!(debug.is_debug_enabled());
-    /// ```
-    pub fn is_debug_enabled(&self) -> bool {
-        self.debug
     }
 
     /// Returns the number of operations in this template.
@@ -584,45 +554,7 @@ impl MultiTemplate {
 
     /// Format operations summary for debug output
     fn format_operations_summary(ops: &[StringOp]) -> String {
-        ops.iter()
-            .map(|op| match op {
-                StringOp::Split { sep, range } => format!(
-                    "split('{}',{})",
-                    sep,
-                    match range {
-                        RangeSpec::Index(i) => format!("{}", i),
-                        RangeSpec::Range(start, end, inclusive) => {
-                            match (start, end) {
-                                (None, None) => "..".to_string(),
-                                (Some(s), None) => format!("{}...", s),
-                                (None, Some(e)) => {
-                                    if *inclusive {
-                                        format!("..={}", e)
-                                    } else {
-                                        format!("..{}", e)
-                                    }
-                                }
-                                (Some(s), Some(e)) => {
-                                    let op = if *inclusive { "..=" } else { ".." };
-                                    format!("{}{}{}", s, op, e)
-                                }
-                            }
-                        }
-                    }
-                ),
-                StringOp::Upper => "upper".to_string(),
-                StringOp::Lower => "lower".to_string(),
-                StringOp::Append { suffix } => format!("append('{}')", suffix),
-                StringOp::Prepend { prefix } => format!("prepend('{}')", prefix),
-                StringOp::Replace {
-                    pattern,
-                    replacement,
-                    ..
-                } => format!("replace('{}' -> '{}')", pattern, replacement),
-                _ => format!("{:?}", op).to_lowercase(),
-            })
-            .collect::<Vec<_>>()
-            .join(" | ")
+        OperationFormatter::format_operations_summary(ops, OperationDisplayMode::Template)
     }
 
     /// Parses a multi-template string into a reusable MultiTemplate.
@@ -656,7 +588,7 @@ impl MultiTemplate {
         Ok(Self::new(template.to_string(), sections, debug))
     }
 
-    /// Applies the multi-template to an input string with optimized caching.
+    /// Applies the multi-template to an input string with caching.
     ///
     /// This implementation caches split operations separately from index selection
     /// to avoid redundant splitting when accessing different indices from the same split.
@@ -680,8 +612,6 @@ impl MultiTemplate {
     /// assert_eq!(result, "Start HELLO End");
     /// ```
     pub fn format(&self, input: &str) -> Result<String, String> {
-        use std::time::Instant;
-
         let mut cache = TemplateCache::new();
         let mut result = String::new();
 
@@ -689,107 +619,121 @@ impl MultiTemplate {
         input.hash(&mut hasher);
         let input_hash = hasher.finish();
 
-        let start_time = if self.debug {
-            Some(Instant::now())
-        } else {
-            None
-        };
-
         if self.debug {
-            let debug_context = DebugContext::new_template(true, self.raw.clone());
-            let additional_info = format!(
-                "{} sections to process (literal: {}, template: {})",
-                self.sections.len(),
-                self.sections.len() - self.template_section_count(),
-                self.template_section_count()
-            );
-            debug_context.print_template_header("MULTI-TEMPLATE", input, Some(&additional_info));
+            self.format_with_debug(input, input_hash, &mut cache, &mut result)
+        } else {
+            self.format_without_debug(input, input_hash, &mut cache, &mut result)
+        }
+    }
 
-            for (i, section) in self.sections.iter().enumerate() {
-                match section {
-                    TemplateSection::Literal(text) => {
-                        let content = if text.trim().is_empty() && text.len() <= 2 {
-                            "whitespace".to_string()
-                        } else if text.len() <= 20 {
-                            format!("'{}'", text)
-                        } else {
-                            format!("'{}...' ({} chars)", &text[..15], text.len())
-                        };
-                        debug_context.print_section(
+    /// Format with debug output enabled
+    fn format_with_debug(
+        &self,
+        input: &str,
+        input_hash: u64,
+        cache: &mut TemplateCache,
+        result: &mut String,
+    ) -> Result<String, String> {
+        use std::time::Instant;
+
+        let mut debugger = MultiTemplateDebugger::new(true, self.raw.clone(), self.sections.len());
+        let debug_session = debugger.start(input);
+
+        let start_time = Instant::now();
+
+        for (i, section) in self.sections.iter().enumerate() {
+            match section {
+                TemplateSection::Literal(text) => {
+                    if let Some(ref session) = debug_session {
+                        let content = DebugSession::format_literal_content(text);
+                        session.print_section(
                             i + 1,
                             self.sections.len(),
                             "literal",
                             &content,
+                            i == self.sections.len() - 1,
                         );
-                        result.push_str(text);
+                        session.print_literal_boundaries(&content);
                     }
-                    TemplateSection::Template(ops) => {
-                        let ops_summary = Self::format_operations_summary(ops);
-                        debug_context.print_section(
+                    result.push_str(text);
+                }
+                TemplateSection::Template(ops) => {
+                    let ops_summary = Self::format_operations_summary(ops);
+
+                    if let Some(ref session) = debug_session {
+                        session.print_section(
                             i + 1,
                             self.sections.len(),
                             "template",
                             &ops_summary,
+                            i == self.sections.len() - 1,
                         );
+                    }
 
-                        let section_result = self.apply_template_section_optimized(
-                            input,
-                            ops,
-                            input_hash,
-                            &mut cache,
-                            &Some(&debug_context),
-                        )?;
-                        result.push_str(&section_result);
-                        debug_context.print_result("", &section_result);
-                    }
-                }
-            }
-
-            let total_elapsed = start_time.unwrap().elapsed();
-            let cache_info = format!(
-                "Total execution time: {:?}, Cache stats - {}",
-                total_elapsed,
-                cache.stats()
-            );
-            debug_context.print_template_footer("MULTI-TEMPLATE", &result, Some(&cache_info));
-        } else {
-            for section in &self.sections {
-                match section {
-                    TemplateSection::Literal(text) => {
-                        result.push_str(text);
-                    }
-                    TemplateSection::Template(ops) => {
-                        let section_result = self.apply_template_section_optimized(
-                            input, ops, input_hash, &mut cache, &None,
-                        )?;
-                        result.push_str(&section_result);
-                    }
+                    let section_result = self.apply_template_section(
+                        input,
+                        ops,
+                        input_hash,
+                        cache,
+                        debug_session.as_deref(),
+                    )?;
+                    result.push_str(&section_result);
                 }
             }
         }
 
-        Ok(result)
+        let total_elapsed = start_time.elapsed();
+        let cache_info = format!(
+            "Total execution time: {:?}, Cache stats - {}",
+            total_elapsed,
+            cache.stats()
+        );
+        debugger.end(result, &cache_info);
+        Ok(result.clone())
     }
 
-    /// Apply a template section with optimized caching for split operations.
-    fn apply_template_section_optimized(
+    /// Format without debug output
+    fn format_without_debug(
+        &self,
+        input: &str,
+        input_hash: u64,
+        cache: &mut TemplateCache,
+        result: &mut String,
+    ) -> Result<String, String> {
+        for section in &self.sections {
+            match section {
+                TemplateSection::Literal(text) => {
+                    result.push_str(text);
+                }
+                TemplateSection::Template(ops) => {
+                    let section_result =
+                        self.apply_template_section(input, ops, input_hash, cache, None)?;
+                    result.push_str(&section_result);
+                }
+            }
+        }
+        Ok(result.clone())
+    }
+
+    /// Apply a template section with caching for split operations.
+    fn apply_template_section(
         &self,
         input: &str,
         ops: &[StringOp],
         input_hash: u64,
         cache: &mut TemplateCache,
-        debug_context: &Option<&DebugContext>,
+        debug_session: Option<&DebugSession>,
     ) -> Result<String, String> {
-        // Check if this is a simple split+index operation that can be optimized
+        // Check if this is a simple split+index operation for direct caching
         if ops.len() == 1 {
             if let StringOp::Split { sep, range } = &ops[0] {
-                return self.apply_optimized_split(
+                return self.apply_split_with_cache(
                     input,
                     sep,
                     range,
                     input_hash,
                     &mut cache.splits,
-                    debug_context,
+                    debug_session,
                 );
             }
         }
@@ -802,89 +746,85 @@ impl MultiTemplate {
         };
 
         if let Some(cached) = cache.operations.get(&cache_key) {
-            if let Some(ctx) = debug_context {
-                ctx.print_cache_operation("CACHE HIT", "Reusing previous result");
+            if let Some(session) = debug_session {
+                session.print_cache_operation("CACHE HIT", "Reusing previous result");
             }
             Ok(cached.clone())
         } else {
-            if let Some(ctx) = debug_context {
-                ctx.print_cache_operation("CACHE MISS", "Computing and storing result");
+            if let Some(session) = debug_session {
+                session.print_cache_operation("CACHE MISS", "Computing and storing result");
             }
-            // Keep verbose debug for apply_ops_internal to show detailed pipeline execution
+            // Execute pipeline with debug system - create a template string for this section only
+            let section_template = format!("{{{}}}", Self::format_operations_summary(ops));
             let section_result = apply_ops_internal(
                 input,
                 ops,
                 self.debug,
-                debug_context.as_ref().map(|ctx| (*ctx).clone()),
+                DebugContext::SingleTemplate,
+                Some(&section_template),
             )?;
             cache.operations.insert(cache_key, section_result.clone());
             Ok(section_result)
         }
     }
 
-    /// Apply an optimized split operation with separate caching for split results.
-    fn apply_optimized_split(
+    /// Apply a split operation with separate caching for split results.
+    fn apply_split_with_cache(
         &self,
         input: &str,
         separator: &str,
         range: &RangeSpec,
         input_hash: u64,
         split_cache: &mut HashMap<SplitCacheKey, Vec<String>>,
-        debug_context: &Option<&DebugContext>,
+        _debug_session: Option<&DebugSession>,
     ) -> Result<String, String> {
         let split_key = SplitCacheKey {
             input_hash,
             separator: separator.to_string(),
         };
 
-        // Get or compute the split result
+        // For split operations in multi-templates, we should also show single template boundaries if debug is enabled
+        if self.debug {
+            // Create a template string for this split operation only
+            let split_op = StringOp::Split {
+                sep: separator.to_string(),
+                range: *range,
+            };
+            let section_template = format!(
+                "{{{}}}",
+                OperationFormatter::format_operation(&split_op, OperationDisplayMode::Template)
+            );
+
+            // Use apply_ops_internal to get proper single template debug boundaries
+            let split_op = StringOp::Split {
+                sep: separator.to_string(),
+                range: *range,
+            };
+            return apply_ops_internal(
+                input,
+                &[split_op],
+                true,
+                DebugContext::SingleTemplate,
+                Some(&section_template),
+            );
+        }
+
+        // Non-debug path - use the original caching logic
         let split_result = if let Some(cached_split) = split_cache.get(&split_key) {
-            if let Some(ctx) = debug_context {
-                ctx.print_cache_operation(
-                    "SPLIT CACHE HIT",
-                    &format!("Reusing split by '{}'", separator),
-                );
-            }
             cached_split.clone()
         } else {
-            if let Some(ctx) = debug_context {
-                ctx.print_cache_operation(
-                    "SPLIT CACHE MISS",
-                    &format!("Computing split by '{}'", separator),
-                );
-            }
             let parts: Vec<String> = if separator.is_empty() {
                 input.chars().map(|c| c.to_string()).collect()
             } else {
                 input.split(separator).map(|s| s.to_string()).collect()
             };
+
             split_cache.insert(split_key, parts.clone());
             parts
         };
 
         // Apply the range selection to the cached split result
         let selected = apply_range(&split_result, range);
-
-        if let Some(ctx) = debug_context {
-            let range_desc = match range {
-                RangeSpec::Index(i) => format!("item[{}]", i),
-                RangeSpec::Range(start, end, inclusive) => {
-                    let start_str = start
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| "start".to_string());
-                    let end_str = end
-                        .map(|e| e.to_string())
-                        .unwrap_or_else(|| "end".to_string());
-                    let op = if *inclusive { "..=" } else { ".." };
-                    format!("range[{}{}{}]", start_str, op, end_str)
-                }
-            };
-            ctx.print_step(&format!(
-                "Selecting {} from {} parts",
-                range_desc,
-                split_result.len()
-            ));
-        }
 
         // Convert back to the expected format (join with same separator if multiple items)
         match selected.len() {
@@ -901,11 +841,6 @@ impl MultiTemplate {
     /// Returns the original multi-template string.
     pub fn template_string(&self) -> &str {
         &self.raw
-    }
-
-    /// Returns whether debug mode is enabled.
-    pub fn is_debug_enabled(&self) -> bool {
-        self.debug
     }
 
     /// Returns the number of sections in this multi-template.

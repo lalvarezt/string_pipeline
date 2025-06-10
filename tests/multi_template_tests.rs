@@ -79,15 +79,6 @@ fn test_multi_template_empty_sections() {
 }
 
 #[test]
-fn test_multi_template_debug_mode() {
-    // Test debug mode functionality in multi-templates
-    let template = MultiTemplate::parse("Debug: {!upper} Normal: {lower}").unwrap();
-    assert!(template.is_debug_enabled());
-    let result = template.format("TeSt").unwrap();
-    assert_eq!(result, "Debug: TEST Normal: test");
-}
-
-#[test]
 fn test_multi_template_try_from_trait() {
     // Test TryFrom implementation
     let template: Result<MultiTemplate, _> = "Hello {upper} World!".try_into();
