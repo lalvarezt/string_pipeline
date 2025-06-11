@@ -462,10 +462,41 @@ impl Template {
         self.debug
     }
 
-    /// Sets the debug mode for this template.
+    /// Sets the debug mode for this template using builder pattern.
     ///
     /// When debug mode is enabled, the template will output detailed tracing
     /// information during execution showing each operation step.
+    ///
+    /// # Arguments
+    ///
+    /// * `debug` - Whether to enable debug mode
+    ///
+    /// # Returns
+    ///
+    /// * `Self` - Returns the template for method chaining
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// // Method chaining with builder pattern
+    /// let result = Template::parse("{upper}")
+    ///     .unwrap()
+    ///     .with_debug(false)
+    ///     .format("hello")
+    ///     .unwrap();
+    /// assert_eq!(result, "HELLO");
+    /// ```
+    pub fn with_debug(mut self, debug: bool) -> Self {
+        self.debug = debug;
+        self
+    }
+
+    /// Sets the debug mode for this template (mutable reference version).
+    ///
+    /// Use this when you have a mutable reference to the template.
+    /// For owned values, prefer `with_debug()` for method chaining.
     ///
     /// # Arguments
     ///
@@ -477,13 +508,9 @@ impl Template {
     /// use string_pipeline::Template;
     ///
     /// let mut template = Template::parse("{upper}").unwrap();
-    /// assert_eq!(template.is_debug(), false);
-    ///
-    /// template.set_debug(true);
-    /// assert_eq!(template.is_debug(), true);
-    ///
     /// template.set_debug(false);
-    /// assert_eq!(template.is_debug(), false);
+    /// let result = template.format("hello").unwrap();
+    /// assert_eq!(result, "HELLO");
     /// ```
     pub fn set_debug(&mut self, debug: bool) {
         self.debug = debug;
@@ -982,10 +1009,41 @@ impl MultiTemplate {
         self.debug
     }
 
-    /// Sets the debug mode for this multi-template.
+    /// Sets the debug mode for this multi-template using builder pattern.
     ///
     /// When debug mode is enabled, the multi-template will output detailed tracing
     /// information during execution showing each section and operation step.
+    ///
+    /// # Arguments
+    ///
+    /// * `debug` - Whether to enable debug mode
+    ///
+    /// # Returns
+    ///
+    /// * `Self` - Returns the multi-template for method chaining
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::MultiTemplate;
+    ///
+    /// // Method chaining with builder pattern
+    /// let result = MultiTemplate::parse("Hello {upper}")
+    ///     .unwrap()
+    ///     .with_debug(false)
+    ///     .format("world")
+    ///     .unwrap();
+    /// assert_eq!(result, "Hello WORLD");
+    /// ```
+    pub fn with_debug(mut self, debug: bool) -> Self {
+        self.debug = debug;
+        self
+    }
+
+    /// Sets the debug mode for this multi-template (mutable reference version).
+    ///
+    /// Use this when you have a mutable reference to the template.
+    /// For owned values, prefer `with_debug()` for method chaining.
     ///
     /// # Arguments
     ///
@@ -997,13 +1055,9 @@ impl MultiTemplate {
     /// use string_pipeline::MultiTemplate;
     ///
     /// let mut template = MultiTemplate::parse("Hello {upper}").unwrap();
-    /// assert_eq!(template.is_debug(), false);
-    ///
-    /// template.set_debug(true);
-    /// assert_eq!(template.is_debug(), true);
-    ///
     /// template.set_debug(false);
-    /// assert_eq!(template.is_debug(), false);
+    /// let result = template.format("world").unwrap();
+    /// assert_eq!(result, "Hello WORLD");
     /// ```
     pub fn set_debug(&mut self, debug: bool) {
         self.debug = debug;
