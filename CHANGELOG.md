@@ -3,6 +3,24 @@
 All notable changes to this project will be documented in this file.
 <!-- ignore lint rules that are often triggered by content generated from commits / git-cliff -->
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style -->
+## [0.11.2](https://github.com/lalvarezt/string_pipeline/compare/0.11.1..0.11.2) - 2025-06-11
+
+### ⛰️  Features
+
+- *(template)* Add getter/setter for debug, gives option to override - ([504aa63](https://github.com/lalvarezt/string_pipeline/commit/504aa636fb82ec7d783cfd23be263050faf5124c))
+
+### 🐛 Bug Fixes
+
+- *(cli)* Fix logic that added/removed debug capabilities - ([57f07c2](https://github.com/lalvarezt/string_pipeline/commit/57f07c2c9cbc797ed2e032bfec14695b785f3a7a))
+
+### 🚜 Refactor
+
+- *(tests)* Refactor tests inside the code into their own file - ([257b0e7](https://github.com/lalvarezt/string_pipeline/commit/257b0e7dd0145a45b33a1f3cc6adece9645716ff))
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump to 0.11.2 - ([f4a9f6e](https://github.com/lalvarezt/string_pipeline/commit/f4a9f6e90f5f41123eb54f65ec6523e4d0b22c96))
+
 ## [0.11.1](https://github.com/lalvarezt/string_pipeline/compare/0.11.0..0.11.1) - 2025-06-08
 
 ### 🐛 Bug Fixes
@@ -16,6 +34,7 @@ All notable changes to this project will be documented in this file.
 
 ### ⚙️ Miscellaneous Tasks
 
+- *(changelog)* Update changelog - ([17ddf37](https://github.com/lalvarezt/string_pipeline/commit/17ddf372370239392075d3c6e0133dc164e05941))
 - Bump to 0.11.1 - ([463360b](https://github.com/lalvarezt/string_pipeline/commit/463360bf77cd3d063c79bdf462d48f28c0aef837))
 
 ## [0.11.0](https://github.com/lalvarezt/string_pipeline/compare/0.10.0..0.11.0) - 2025-06-08
