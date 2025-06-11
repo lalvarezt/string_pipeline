@@ -2,7 +2,7 @@ use clap::{CommandFactory, Parser};
 use std::fs;
 use std::io::{self, Read};
 use std::path::PathBuf;
-use string_pipeline::{MultiTemplate, Template};
+use string_pipeline::MultiTemplate;
 
 #[derive(Parser)]
 #[command(
@@ -11,8 +11,8 @@ use string_pipeline::{MultiTemplate, Template};
     about = "Powerful CLI tool and Rust library for chainable string transformations using intuitive template syntax",
     long_about = "A powerful string transformation CLI tool and Rust library that makes complex text processing \
         simple. Transform data using intuitive template syntax — chain operations like split, join, replace, filter, \
-        and others in a single readable expression. Supports both single templates (e.g., '{upper}') and multi-templates \
-        with mixed text and operations (e.g., 'Name: {split: :0} Age: {split: :1}') with intelligent caching."
+        and others in a single readable expression. Supports templates with mixed text and operations \
+        (e.g., 'Name: {split: :0} Age: {split: :1}') with intelligent caching for efficiency."
 )]
 struct Cli {
     /// The template string to apply
@@ -59,34 +59,6 @@ struct Config {
     validate: bool,
     quiet: bool,
     debug: bool,
-}
-
-/// Template type and processing wrapper
-enum TemplateProcessor {
-    Single(Template),
-    Multi(MultiTemplate),
-}
-
-impl TemplateProcessor {
-    /// Create a template processor from a template string, trying multi-template first
-    fn from_template(template: &str, debug: bool) -> Result<Self, String> {
-        // Try parsing as multi-template first, then fall back to single template
-        match MultiTemplate::parse(template) {
-            Ok(multi) => Ok(Self::Multi(multi.with_debug(debug))),
-            Err(_) => {
-                // If multi-template parsing fails, try single template
-                Template::parse(template).map(|t| Self::Single(t.with_debug(debug)))
-            }
-        }
-    }
-
-    /// Format input using the appropriate template type
-    fn format(&self, input: &str) -> Result<String, String> {
-        match self {
-            Self::Single(template) => template.format(input),
-            Self::Multi(template) => template.format(input),
-        }
-    }
 }
 
 /// Read content from a file with proper error handling
@@ -189,7 +161,7 @@ fn show_syntax_help() {
 BASIC SYNTAX:
   {{operation1|operation2|operation3}}
 
-MULTI-TEMPLATE SYNTAX:
+MIXED TEXT SYNTAX:
   literal text {{operation}} more text {{operation}}
 
 RANGE SYNTAX:
@@ -200,18 +172,18 @@ RANGE SYNTAX:
   ..M      - From start to M-1 (..3 = first 3 items)
   ..       - All items
 
-SINGLE TEMPLATE EXAMPLES:
+OPERATION-ONLY EXAMPLES:
   {{split:,:..|map:{{upper}}|join:-}}
   {{trim|split: :..|filter:^[A-Z]|sort}}
   {{!split:,:..|slice:1..3}}  (debug mode)
 
-MULTI-TEMPLATE EXAMPLES:
+MIXED TEXT EXAMPLES:
   'Name: {{split: :0}} Age: {{split: :1}}'
   'First: {{split:,:0}} Second: {{split:,:1}}'
   'some string {{split:,:1}} some string {{split:,:2}}'
 
 CACHING:
-  Multi-templates automatically cache split results for efficiency.
+  Templates automatically cache split results for efficiency.
   In 'A: {{split:,:0}} B: {{split:,:1}} C: {{split:,:0}}', the input is
   split only once, with subsequent operations reusing the cached split result.
 
@@ -254,13 +226,16 @@ fn main() {
         std::process::exit(1);
     });
 
-    // Parse and validate template with proper debug handling
-    let effective_debug = config.debug && !config.quiet;
-    let processor = TemplateProcessor::from_template(&config.template, effective_debug)
-        .unwrap_or_else(|e| {
-            eprintln!("Error parsing template: {}", e);
-            std::process::exit(1);
-        });
+    // Parse template and handle debug mode from both template prefix and CLI flag
+    let template = MultiTemplate::parse(&config.template).unwrap_or_else(|e| {
+        eprintln!("Error parsing template: {}", e);
+        std::process::exit(1);
+    });
+
+    // Enable debug if either the template has ! prefix OR the CLI debug flag is set
+    // Disable debug only if quiet mode is enabled
+    let should_debug = (template.is_debug() || config.debug) && !config.quiet;
+    let template = template.with_debug(should_debug);
 
     // If just validating, exit here
     if config.validate {
@@ -271,7 +246,7 @@ fn main() {
     }
 
     // Process input with template
-    let result = processor.format(&config.input).unwrap_or_else(|e| {
+    let result = template.format(&config.input).unwrap_or_else(|e| {
         eprintln!("Error formatting input: {}", e);
         std::process::exit(1);
     });
@@ -279,4 +254,3 @@ fn main() {
     // Output result as string
     print!("{}", result);
 }
-

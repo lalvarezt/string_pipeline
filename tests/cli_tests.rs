@@ -292,13 +292,59 @@ fn test_debug_without_quiet_shows_stderr() {
 }
 
 #[test]
-fn test_inline_debug_markers() {
+fn test_inline_debug_markers_show_debug() {
     let output = run_cli(&["{!upper}", "hello"]);
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
-    // Inline debug markers don't output to stderr in current implementation
-    // Just verify the result is correct
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // Should have the correct result
     assert_eq!(stdout.trim(), "HELLO");
+    // Should have DEBUG messages on stderr due to ! prefix
+    assert!(stderr.contains("DEBUG:"));
+    assert!(stderr.contains("MULTI-TEMPLATE START"));
+}
+
+#[test]
+fn test_inline_debug_markers_complex_template() {
+    let output = run_cli(&["{!split:,:..|map:{upper}}", "hello,world"]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // Should have the correct result
+    assert_eq!(stdout.trim(), "HELLO,WORLD");
+    // Should have detailed DEBUG messages on stderr
+    assert!(stderr.contains("DEBUG:"));
+    assert!(stderr.contains("MULTI-TEMPLATE START"));
+}
+
+#[test]
+fn test_cli_debug_flag_shows_debug() {
+    let output = run_cli(&["--debug", "{split:,:..|map:{upper}}", "hello,world"]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // Should have the correct result
+    assert_eq!(stdout.trim(), "HELLO,WORLD");
+    // Should have DEBUG messages on stderr due to --debug flag
+    assert!(stderr.contains("DEBUG:"));
+    assert!(stderr.contains("MULTI-TEMPLATE START"));
+}
+
+#[test]
+fn test_both_inline_and_cli_debug() {
+    let output = run_cli(&["--debug", "{!split:,:..|map:{upper}}", "hello,world"]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // Should have the correct result
+    assert_eq!(stdout.trim(), "HELLO,WORLD");
+    // Should have DEBUG messages (both sources enable debug)
+    assert!(stderr.contains("DEBUG:"));
+    assert!(stderr.contains("MULTI-TEMPLATE START"));
 }
 
 // ============================================================================
