@@ -1,6 +1,4 @@
-use chrono::Utc;
 use clap::{Arg, Command};
-use serde_json::json;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use string_pipeline::Template;
@@ -9,9 +7,7 @@ use string_pipeline::Template;
 struct BenchmarkResult {
     name: String,
     iterations: usize,
-    raw_times: Vec<Duration>,
     average_time: Duration,
-    outliers_removed: usize,
     min_time: Duration,
     max_time: Duration,
 }
@@ -19,7 +15,7 @@ struct BenchmarkResult {
 impl BenchmarkResult {
     fn new(name: String, times: Vec<Duration>) -> Self {
         let iterations = times.len();
-        let (filtered_times, outliers_removed) = remove_outliers(times.clone());
+        let filtered_times = remove_outliers(times.clone());
 
         let average_time = if filtered_times.is_empty() {
             Duration::from_nanos(0)
@@ -43,18 +39,16 @@ impl BenchmarkResult {
         BenchmarkResult {
             name,
             iterations,
-            raw_times: times,
             average_time,
-            outliers_removed,
             min_time,
             max_time,
         }
     }
 }
 
-fn remove_outliers(mut times: Vec<Duration>) -> (Vec<Duration>, usize) {
+fn remove_outliers(mut times: Vec<Duration>) -> Vec<Duration> {
     if times.len() < 4 {
-        return (times, 0);
+        return times;
     }
 
     times.sort();
@@ -66,9 +60,8 @@ fn remove_outliers(mut times: Vec<Duration>) -> (Vec<Duration>, usize) {
     let end_idx = len - outlier_count;
 
     let filtered: Vec<Duration> = times[start_idx..end_idx].to_vec();
-    let outliers_removed = times.len() - filtered.len();
 
-    (filtered, outliers_removed)
+    filtered
 }
 
 struct BenchmarkSuite {
@@ -432,57 +425,6 @@ fn print_text_report(results: &[BenchmarkResult], total_time: Duration, warmup_i
     }
 }
 
-fn print_json_report(results: &[BenchmarkResult], total_time: Duration) {
-    let mut categories: HashMap<String, Vec<serde_json::Value>> = HashMap::new();
-
-    for result in results {
-        let category = if result.name.starts_with("Single:") {
-            "single_operations"
-        } else if result.name.starts_with("Multi:") {
-            "multiple_simple_operations"
-        } else if result.name.starts_with("Map:") {
-            "map_operations"
-        } else if result.name.starts_with("Complex:") {
-            "complex_operations"
-        } else {
-            "other"
-        }
-        .to_string();
-
-        let benchmark_data = json!({
-            "name": result.name,
-            "iterations": result.iterations,
-            "average_time_ns": result.average_time.as_nanos(),
-            "average_time_formatted": format_duration(result.average_time),
-            "min_time_ns": result.min_time.as_nanos(),
-            "min_time_formatted": format_duration(result.min_time),
-            "max_time_ns": result.max_time.as_nanos(),
-            "max_time_formatted": format_duration(result.max_time),
-            "outliers_removed": result.outliers_removed,
-            "total_raw_measurements": result.raw_times.len()
-        });
-
-        categories.entry(category).or_default().push(benchmark_data);
-    }
-
-    let summary = json!({
-        "total_benchmarks": results.len(),
-        "total_execution_time_ns": total_time.as_nanos(),
-        "total_execution_time_formatted": format_duration(total_time),
-        "iterations_per_benchmark": results.first().map(|r| r.iterations).unwrap_or(0),
-        "outlier_removal_method": "Top and bottom 5% removed"
-    });
-
-    let report = json!({
-        "summary": summary,
-        "categories": categories,
-        "timestamp": Utc::now().to_rfc3339(),
-        "version": env!("CARGO_PKG_VERSION")
-    });
-
-    println!("{}", serde_json::to_string_pretty(&report).unwrap());
-}
-
 fn main() {
     let matches = Command::new("String Pipeline Benchmark")
         .version(env!("CARGO_PKG_VERSION"))
@@ -495,15 +437,6 @@ fn main() {
                 .help("Number of iterations to run for each benchmark")
                 .default_value("1000"),
         )
-        .arg(
-            Arg::new("format")
-                .short('f')
-                .long("format")
-                .value_name("FORMAT")
-                .help("Output format: text or json")
-                .default_value("text")
-                .value_parser(["text", "json"]),
-        )
         .get_matches();
 
     let iterations: usize = matches
@@ -512,21 +445,15 @@ fn main() {
         .parse()
         .expect("Invalid number of iterations");
 
-    let format = matches.get_one::<String>("format").unwrap();
-
     if iterations < 10 {
         eprintln!("Warning: Running with less than 10 iterations may produce unreliable results");
     }
 
-    let quiet = format == "json";
-    let suite = BenchmarkSuite::new(iterations, quiet);
+    let suite = BenchmarkSuite::new(iterations, false);
     let start_time = Instant::now();
     let results = suite.run_all_benchmarks();
     let total_time = start_time.elapsed();
 
-    match format.as_str() {
-        "json" => print_json_report(&results, total_time),
-        "text" => print_text_report(&results, total_time, suite.warmup_iterations),
-        _ => print_text_report(&results, total_time, suite.warmup_iterations),
-    }
+    print_text_report(&results, total_time, suite.warmup_iterations);
 }
+

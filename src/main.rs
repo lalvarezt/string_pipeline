@@ -39,10 +39,6 @@ struct Cli {
     #[arg(long = "validate")]
     validate: bool,
 
-    /// Output format for results
-    #[arg(short = 'o', long = "output", value_enum, default_value = "raw")]
-    output_format: OutputFormat,
-
     /// Suppress all output except the final result
     #[arg(short = 'q', long = "quiet")]
     quiet: bool,
@@ -56,16 +52,49 @@ struct Cli {
     syntax_help: bool,
 }
 
-#[derive(clap::ValueEnum, Clone, Debug)]
-enum OutputFormat {
-    /// Output as raw string (default behavior)
-    Raw,
-    /// Output each item on separate lines
-    Lines,
-    /// Output as JSON array/string
-    Json,
+/// Processed configuration from CLI arguments
+struct Config {
+    template: String,
+    input: String,
+    validate: bool,
+    quiet: bool,
+    debug: bool,
 }
 
+/// Template type and processing wrapper
+enum TemplateProcessor {
+    Single(Template),
+    Multi(MultiTemplate),
+}
+
+impl TemplateProcessor {
+    /// Create a template processor from a template string, trying multi-template first
+    fn from_template(template: &str, debug: bool) -> Result<Self, String> {
+        // Try parsing as multi-template first, then fall back to single template
+        match MultiTemplate::parse(template) {
+            Ok(multi) => Ok(Self::Multi(multi.with_debug(debug))),
+            Err(_) => {
+                // If multi-template parsing fails, try single template
+                Template::parse(template).map(|t| Self::Single(t.with_debug(debug)))
+            }
+        }
+    }
+
+    /// Format input using the appropriate template type
+    fn format(&self, input: &str) -> Result<String, String> {
+        match self {
+            Self::Single(template) => template.format(input),
+            Self::Multi(template) => template.format(input),
+        }
+    }
+}
+
+/// Read content from a file with proper error handling
+fn read_file(path: &PathBuf) -> Result<String, String> {
+    fs::read_to_string(path).map_err(|e| format!("Failed to read file '{}': {}", path.display(), e))
+}
+
+/// Read from stdin with proper error handling
 fn read_stdin() -> Result<String, String> {
     let mut buffer = String::new();
     io::stdin()
@@ -74,13 +103,54 @@ fn read_stdin() -> Result<String, String> {
     Ok(buffer)
 }
 
+/// Check if stdin is available (not a terminal)
 fn is_stdin_available() -> bool {
     use std::io::IsTerminal;
     !io::stdin().is_terminal()
 }
 
-fn read_file(path: &PathBuf) -> Result<String, String> {
-    fs::read_to_string(path).map_err(|e| format!("Failed to read file '{}': {}", path.display(), e))
+/// Get template string from CLI arguments
+fn get_template(cli: &Cli) -> Result<String, String> {
+    match (&cli.template, &cli.template_file) {
+        (Some(template), None) => Ok(template.clone()),
+        (None, Some(file)) => read_file(file)
+            .map(|content| content.trim().to_string())
+            .map_err(|e| format!("Error reading template file: {}", e)),
+        (Some(_), Some(_)) => {
+            Err("Error: Cannot specify both template argument and template file".to_string())
+        }
+        (None, None) => {
+            Err("Error: Must provide either template argument or --template-file".to_string())
+        }
+    }
+}
+
+/// Get input string from CLI arguments
+fn get_input(cli: &Cli) -> Result<String, String> {
+    match (&cli.input, &cli.input_file) {
+        (Some(input), None) => Ok(input.clone()),
+        (None, Some(file)) => read_file(file)
+            .map(|content| content.trim_end().to_string())
+            .map_err(|e| format!("Error reading input file: {}", e)),
+        (None, None) => read_stdin().map(|input| input.trim_end().to_string()),
+        (Some(_), Some(_)) => {
+            Err("Error: Cannot specify both input argument and input file".to_string())
+        }
+    }
+}
+
+/// Build configuration from CLI arguments
+fn build_config(cli: Cli) -> Result<Config, String> {
+    let template = get_template(&cli)?;
+    let input = get_input(&cli)?;
+
+    Ok(Config {
+        template,
+        input,
+        validate: cli.validate,
+        quiet: cli.quiet,
+        debug: cli.debug,
+    })
 }
 
 fn show_operations_help() {
@@ -141,9 +211,9 @@ MULTI-TEMPLATE EXAMPLES:
   'some string {{split:,:1}} some string {{split:,:2}}'
 
 CACHING:
-  Multi-templates automatically cache repeated operations for efficiency.
-  In 'A: {{split:,:0}} B: {{split:,:1}} C: {{split:,:0}}', split is
-  calculated only once, with subsequent operations reusing the cached result.
+  Multi-templates automatically cache split results for efficiency.
+  In 'A: {{split:,:0}} B: {{split:,:1}} C: {{split:,:0}}', the input is
+  split only once, with subsequent operations reusing the cached split result.
 
 ESCAPING:
   \\:  - Literal colon
@@ -158,36 +228,10 @@ https://github.com/lalvarezt/string_pipeline/blob/main/docs/template-system.md
     );
 }
 
-fn remove_debug_markers(template: &str) -> String {
-    let mut result = String::new();
-    let mut chars = template.chars().peekable();
-    let mut depth: usize = 0;
-
-    while let Some(ch) = chars.next() {
-        if ch == '{' {
-            if depth == 0 && chars.peek() == Some(&'!') {
-                // Skip the '!' debug marker at top-level
-                result.push(ch);
-                chars.next(); // consume the '!'
-                depth += 1;
-            } else {
-                result.push(ch);
-                depth += 1;
-            }
-        } else if ch == '}' {
-            result.push(ch);
-            depth = depth.saturating_sub(1);
-        } else {
-            result.push(ch);
-        }
-    }
-    result
-}
-
 fn main() {
     let cli = Cli::parse();
 
-    // Handle help commands
+    // Handle help commands first
     if cli.list_operations {
         show_operations_help();
         return;
@@ -204,224 +248,35 @@ fn main() {
         return;
     }
 
-    // Get template from argument or file
-    let template_str = match (&cli.template, &cli.template_file) {
-        (Some(template), None) => template.clone(),
-        (None, Some(file)) => match read_file(file) {
-            Ok(content) => content.trim().to_string(),
-            Err(e) => {
-                eprintln!("Error reading template file: {}", e);
-                std::process::exit(1);
-            }
-        },
-        (Some(_), Some(_)) => {
-            eprintln!("Error: Cannot specify both template argument and template file");
-            std::process::exit(1);
-        }
-        (None, None) => {
-            eprintln!("Error: Must provide either template argument or --template-file");
-            std::process::exit(1);
-        }
-    };
+    // Build configuration from CLI arguments
+    let config = build_config(cli).unwrap_or_else(|e| {
+        eprintln!("{}", e);
+        std::process::exit(1);
+    });
 
-    // Apply debug flags to template
-    let final_template = if cli.debug && !template_str.contains("{!") {
-        // Check if this will be a multi-template
-        let is_multi_template_debug =
-            if template_str.starts_with('{') && template_str.ends_with('}') {
-                // Count top-level braces (not nested ones)
-                let mut brace_count = 0;
-                let mut depth = 0;
-                let chars = template_str.chars();
-
-                for ch in chars {
-                    if ch == '{' {
-                        depth += 1;
-                        if depth == 1 {
-                            brace_count += 1;
-                        }
-                    } else if ch == '}' {
-                        depth -= 1;
-                    }
-                }
-
-                brace_count > 1
-            } else {
-                // Has text outside of braces, definitely multi-template
-                true
-            };
-
-        if is_multi_template_debug {
-            // Multi-template: add debug to each individual template section (top-level only)
-            let mut result = String::new();
-            let mut chars = template_str.chars().peekable();
-            let mut depth: usize = 0;
-
-            while let Some(ch) = chars.next() {
-                if ch == '{' {
-                    if depth == 0 && chars.peek() != Some(&'!') {
-                        // Only add debug flag to top-level braces
-                        result.push_str("{!");
-                        depth += 1;
-                    } else {
-                        result.push(ch);
-                        depth += 1;
-                    }
-                } else if ch == '}' {
-                    result.push(ch);
-                    depth = depth.saturating_sub(1);
-                } else {
-                    result.push(ch);
-                }
-            }
-            result
-        } else {
-            // Single template: wrap with {!...}
-            if let Some(stripped) = template_str.strip_prefix('{') {
-                format!("{{!{}", stripped)
-            } else {
-                format!("{{!{}}}", template_str)
-            }
-        }
-    } else {
-        template_str
-    };
-
-    // Detect if this is a multi-template or single template
-    // Multi-template: has literal text outside of braces OR multiple top-level template sections
-    let is_multi_template = if final_template.starts_with('{') && final_template.ends_with('}') {
-        // Count top-level braces (not nested ones)
-        let mut brace_count = 0;
-        let mut depth = 0;
-        let chars = final_template.chars();
-
-        for ch in chars {
-            if ch == '{' {
-                depth += 1;
-                if depth == 1 {
-                    brace_count += 1;
-                }
-            } else if ch == '}' {
-                depth -= 1;
-            }
-        }
-
-        brace_count > 1
-    } else {
-        // Has text outside of braces, definitely multi-template
-        true
-    };
-
-    // Parse and validate template
-    if is_multi_template {
-        let _multi_template = MultiTemplate::parse(&final_template).unwrap_or_else(|e| {
+    // Parse and validate template with proper debug handling
+    let effective_debug = config.debug && !config.quiet;
+    let processor = TemplateProcessor::from_template(&config.template, effective_debug)
+        .unwrap_or_else(|e| {
             eprintln!("Error parsing template: {}", e);
             std::process::exit(1);
         });
-    } else {
-        let _template = Template::parse(&final_template).unwrap_or_else(|e| {
-            eprintln!("Error parsing template: {}", e);
-            std::process::exit(1);
-        });
-    }
 
     // If just validating, exit here
-    if cli.validate {
-        if !cli.quiet {
+    if config.validate {
+        if !config.quiet {
             println!("Template syntax is valid");
         }
         return;
     }
 
-    // Get input from argument, file, or stdin
-    let input = match (&cli.input, &cli.input_file) {
-        (Some(input), None) => input.clone(),
-        (None, Some(file)) => match read_file(file) {
-            Ok(content) => content.trim_end().to_string(),
-            Err(e) => {
-                eprintln!("Error reading input file: {}", e);
-                std::process::exit(1);
-            }
-        },
-        (None, None) => match read_stdin() {
-            Ok(input) => input.trim_end().to_string(),
-            Err(e) => {
-                eprintln!("Error: {}", e);
-                std::process::exit(1);
-            }
-        },
-        (Some(_), Some(_)) => {
-            eprintln!("Error: Cannot specify both input argument and input file");
-            std::process::exit(1);
-        }
-    };
+    // Process input with template
+    let result = processor.format(&config.input).unwrap_or_else(|e| {
+        eprintln!("Error formatting input: {}", e);
+        std::process::exit(1);
+    });
 
-    // For quiet mode, disable debug output by removing debug markers
-    let final_template_for_processing = if cli.quiet {
-        // Remove all debug markers from template to suppress debug output
-        remove_debug_markers(&final_template)
-    } else {
-        final_template.clone()
-    };
-
-    // Process input with appropriate template type
-    let result = if is_multi_template {
-        // Parse and process with MultiTemplate
-        let multi_template =
-            MultiTemplate::parse(&final_template_for_processing).unwrap_or_else(|e| {
-                eprintln!("Error parsing template: {}", e);
-                std::process::exit(1);
-            });
-
-        match multi_template.format(&input) {
-            Ok(result) => result,
-            Err(e) => {
-                eprintln!("Error formatting input: {}", e);
-                std::process::exit(1);
-            }
-        }
-    } else {
-        // Parse and process with single Template
-        let processing_template =
-            Template::parse(&final_template_for_processing).unwrap_or_else(|e| {
-                eprintln!("Error parsing template: {}", e);
-                std::process::exit(1);
-            });
-
-        match processing_template.format(&input) {
-            Ok(result) => result,
-            Err(e) => {
-                eprintln!("Error formatting input: {}", e);
-                std::process::exit(1);
-            }
-        }
-    };
-
-    // Output result based on format
-    match cli.output_format {
-        OutputFormat::Raw => {
-            print!("{}", result);
-        }
-        OutputFormat::Lines => {
-            for line in result.split(',') {
-                println!("{}", line);
-            }
-        }
-        OutputFormat::Json => {
-            if result.contains(',') && !result.starts_with('"') {
-                let items: Vec<&str> = result.split(',').collect();
-                println!(
-                    "{}",
-                    serde_json::to_string(&items)
-                        .unwrap_or_else(|_| format!("[\"{}\"]", result.replace('"', "\\\"")))
-                );
-            } else {
-                println!(
-                    "{}",
-                    serde_json::to_string(&result)
-                        .unwrap_or_else(|_| format!("\"{}\"", result.replace('"', "\\\"")))
-                );
-            }
-        }
-    }
+    // Output result as string
+    print!("{}", result);
 }
+
