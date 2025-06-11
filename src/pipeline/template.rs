@@ -444,6 +444,50 @@ impl Template {
     pub fn operation_count(&self) -> usize {
         self.ops.len()
     }
+
+    /// Returns whether debug mode is enabled for this template.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// let normal = Template::parse("{upper}").unwrap();
+    /// assert_eq!(normal.is_debug(), false);
+    ///
+    /// let debug = Template::parse("{!upper}").unwrap();
+    /// assert_eq!(debug.is_debug(), true);
+    /// ```
+    pub fn is_debug(&self) -> bool {
+        self.debug
+    }
+
+    /// Sets the debug mode for this template.
+    ///
+    /// When debug mode is enabled, the template will output detailed tracing
+    /// information during execution showing each operation step.
+    ///
+    /// # Arguments
+    ///
+    /// * `debug` - Whether to enable debug mode
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// let mut template = Template::parse("{upper}").unwrap();
+    /// assert_eq!(template.is_debug(), false);
+    ///
+    /// template.set_debug(true);
+    /// assert_eq!(template.is_debug(), true);
+    ///
+    /// template.set_debug(false);
+    /// assert_eq!(template.is_debug(), false);
+    /// ```
+    pub fn set_debug(&mut self, debug: bool) {
+        self.debug = debug;
+    }
 }
 
 impl TryFrom<&str> for Template {
@@ -919,6 +963,50 @@ impl MultiTemplate {
             .iter()
             .filter(|s| matches!(s, TemplateSection::Template(_)))
             .count()
+    }
+
+    /// Returns whether debug mode is enabled for this multi-template.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::MultiTemplate;
+    ///
+    /// let normal = MultiTemplate::parse("Hello {upper}").unwrap();
+    /// assert_eq!(normal.is_debug(), false);
+    ///
+    /// let debug = MultiTemplate::parse("Hello {!upper}").unwrap();
+    /// assert_eq!(debug.is_debug(), true);
+    /// ```
+    pub fn is_debug(&self) -> bool {
+        self.debug
+    }
+
+    /// Sets the debug mode for this multi-template.
+    ///
+    /// When debug mode is enabled, the multi-template will output detailed tracing
+    /// information during execution showing each section and operation step.
+    ///
+    /// # Arguments
+    ///
+    /// * `debug` - Whether to enable debug mode
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::MultiTemplate;
+    ///
+    /// let mut template = MultiTemplate::parse("Hello {upper}").unwrap();
+    /// assert_eq!(template.is_debug(), false);
+    ///
+    /// template.set_debug(true);
+    /// assert_eq!(template.is_debug(), true);
+    ///
+    /// template.set_debug(false);
+    /// assert_eq!(template.is_debug(), false);
+    /// ```
+    pub fn set_debug(&mut self, debug: bool) {
+        self.debug = debug;
     }
 }
 
