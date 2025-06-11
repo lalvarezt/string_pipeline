@@ -2,7 +2,7 @@ use std::collections::{HashMap, hash_map::DefaultHasher};
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 
-use crate::pipeline::{DebugContext, RangeSpec, StringOp, apply_ops_internal, apply_range, parser};
+use crate::pipeline::{DebugTracer, RangeSpec, StringOp, apply_ops_internal, apply_range, parser};
 
 /// A compiled string transformation template with chainable operations.
 ///
@@ -368,22 +368,14 @@ impl Template {
     /// ```
     pub fn format(&self, input: &str) -> Result<String, String> {
         if self.debug {
-            let debug_context = DebugContext::new_template(true, self.raw.clone());
-            debug_context.print_template_header("SINGLE TEMPLATE", input, None);
+            use std::time::Instant;
+            let start_time = Instant::now();
+            let tracer = DebugTracer::new(true);
 
-            let result =
-                apply_ops_internal(input, &self.ops, self.debug, Some(debug_context.clone()))?;
+            tracer.session_start("SINGLE TEMPLATE", &self.raw, input, None);
+            let result = apply_ops_internal(input, &self.ops, self.debug, Some(tracer.clone()))?;
+            tracer.session_end("SINGLE TEMPLATE", &result, start_time.elapsed());
 
-            // Show consistent cache statistics format
-            use crate::pipeline::{REGEX_CACHE, SPLIT_CACHE};
-            let regex_cache = REGEX_CACHE.lock().unwrap();
-            let split_cache = SPLIT_CACHE.lock().unwrap();
-            let cache_info = format!(
-                "Cache stats: {} regex patterns, {} split operations cached",
-                regex_cache.len(),
-                split_cache.len()
-            );
-            debug_context.print_template_footer("SINGLE TEMPLATE", &result, Some(&cache_info));
             Ok(result)
         } else {
             apply_ops_internal(input, &self.ops, false, None)
@@ -619,14 +611,6 @@ impl TemplateCache {
             splits: HashMap::new(),
         }
     }
-
-    fn stats(&self) -> String {
-        format!(
-            "Operations: {}, Splits: {}",
-            self.operations.len(),
-            self.splits.len()
-        )
-    }
 }
 
 /// Cache key for memoizing split operation results.
@@ -767,14 +751,14 @@ impl MultiTemplate {
         };
 
         if self.debug {
-            let debug_context = DebugContext::new_template(true, self.raw.clone());
+            let tracer = DebugTracer::new(true);
             let additional_info = format!(
                 "{} sections to process (literal: {}, template: {})",
                 self.sections.len(),
                 self.sections.len() - self.template_section_count(),
                 self.template_section_count()
             );
-            debug_context.print_template_header("MULTI-TEMPLATE", input, Some(&additional_info));
+            tracer.session_start("MULTI-TEMPLATE", &self.raw, input, Some(&additional_info));
 
             for (i, section) in self.sections.iter().enumerate() {
                 match section {
@@ -786,43 +770,32 @@ impl MultiTemplate {
                         } else {
                             format!("'{}...' ({} chars)", &text[..15], text.len())
                         };
-                        debug_context.print_section(
-                            i + 1,
-                            self.sections.len(),
-                            "literal",
-                            &content,
-                        );
+                        tracer.section(i + 1, self.sections.len(), "literal", &content);
                         result.push_str(text);
+
+                        if i + 1 < self.sections.len() {
+                            tracer.separator();
+                        }
                     }
                     TemplateSection::Template(ops) => {
                         let ops_summary = Self::format_operations_summary(ops);
-                        debug_context.print_section(
-                            i + 1,
-                            self.sections.len(),
-                            "template",
-                            &ops_summary,
-                        );
+                        tracer.section(i + 1, self.sections.len(), "template", &ops_summary);
 
                         let section_result = self.apply_template_section_optimized(
                             input,
                             ops,
                             input_hash,
                             &mut cache,
-                            &Some(&debug_context),
+                            &Some(&tracer),
                         )?;
                         result.push_str(&section_result);
-                        debug_context.print_result("", &section_result);
                     }
                 }
             }
 
             let total_elapsed = start_time.unwrap().elapsed();
-            let cache_info = format!(
-                "Total execution time: {:?}, Cache stats - {}",
-                total_elapsed,
-                cache.stats()
-            );
-            debug_context.print_template_footer("MULTI-TEMPLATE", &result, Some(&cache_info));
+
+            tracer.session_end("MULTI-TEMPLATE", &result, total_elapsed);
         } else {
             for section in &self.sections {
                 match section {
@@ -849,7 +822,7 @@ impl MultiTemplate {
         ops: &[StringOp],
         input_hash: u64,
         cache: &mut TemplateCache,
-        debug_context: &Option<&DebugContext>,
+        debug_tracer: &Option<&DebugTracer>,
     ) -> Result<String, String> {
         // Check if this is a simple split+index operation that can be optimized
         if ops.len() == 1 {
@@ -860,7 +833,7 @@ impl MultiTemplate {
                     range,
                     input_hash,
                     &mut cache.splits,
-                    debug_context,
+                    debug_tracer,
                 );
             }
         }
@@ -873,21 +846,20 @@ impl MultiTemplate {
         };
 
         if let Some(cached) = cache.operations.get(&cache_key) {
-            if let Some(ctx) = debug_context {
-                ctx.print_cache_operation("CACHE HIT", "Reusing previous result");
+            if let Some(tracer) = debug_tracer {
+                tracer.cache_operation("CACHE HIT", "Reusing previous result");
             }
             Ok(cached.clone())
         } else {
-            if let Some(ctx) = debug_context {
-                ctx.print_cache_operation("CACHE MISS", "Computing and storing result");
+            if let Some(tracer) = debug_tracer {
+                tracer.cache_operation("CACHE MISS", "Computing and storing result");
             }
-            // Keep verbose debug for apply_ops_internal to show detailed pipeline execution
-            let section_result = apply_ops_internal(
-                input,
-                ops,
-                self.debug,
-                debug_context.as_ref().map(|ctx| (*ctx).clone()),
-            )?;
+            let nested_tracer = if self.debug {
+                Some(DebugTracer::new(true))
+            } else {
+                None
+            };
+            let section_result = apply_ops_internal(input, ops, self.debug, nested_tracer)?;
             cache.operations.insert(cache_key, section_result.clone());
             Ok(section_result)
         }
@@ -901,7 +873,7 @@ impl MultiTemplate {
         range: &RangeSpec,
         input_hash: u64,
         split_cache: &mut HashMap<SplitCacheKey, Vec<String>>,
-        debug_context: &Option<&DebugContext>,
+        debug_tracer: &Option<&DebugTracer>,
     ) -> Result<String, String> {
         let split_key = SplitCacheKey {
             input_hash,
@@ -910,16 +882,16 @@ impl MultiTemplate {
 
         // Get or compute the split result
         let split_result = if let Some(cached_split) = split_cache.get(&split_key) {
-            if let Some(ctx) = debug_context {
-                ctx.print_cache_operation(
+            if let Some(tracer) = debug_tracer {
+                tracer.cache_operation(
                     "SPLIT CACHE HIT",
                     &format!("Reusing split by '{}'", separator),
                 );
             }
             cached_split.clone()
         } else {
-            if let Some(ctx) = debug_context {
-                ctx.print_cache_operation(
+            if let Some(tracer) = debug_tracer {
+                tracer.cache_operation(
                     "SPLIT CACHE MISS",
                     &format!("Computing split by '{}'", separator),
                 );
@@ -935,27 +907,6 @@ impl MultiTemplate {
 
         // Apply the range selection to the cached split result
         let selected = apply_range(&split_result, range);
-
-        if let Some(ctx) = debug_context {
-            let range_desc = match range {
-                RangeSpec::Index(i) => format!("item[{}]", i),
-                RangeSpec::Range(start, end, inclusive) => {
-                    let start_str = start
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| "start".to_string());
-                    let end_str = end
-                        .map(|e| e.to_string())
-                        .unwrap_or_else(|| "end".to_string());
-                    let op = if *inclusive { "..=" } else { ".." };
-                    format!("range[{}{}{}]", start_str, op, end_str)
-                }
-            };
-            ctx.print_step(&format!(
-                "Selecting {} from {} parts",
-                range_desc,
-                split_result.len()
-            ));
-        }
 
         // Convert back to the expected format (join with same separator if multiple items)
         match selected.len() {

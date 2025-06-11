@@ -3,104 +3,327 @@
 //! This module contains the debug context implementation that provides
 //! detailed logging and tracing capabilities for pipeline execution.
 
-use crate::pipeline::Value;
+use crate::pipeline::{REGEX_CACHE, SPLIT_CACHE, StringOp, Value};
+use std::time::Duration;
 
-/// Debug context for tracking pipeline execution.
+/// Debug tracer that provides hierarchical execution logging for pipeline operations.
 ///
-/// Provides detailed logging and tracing capabilities when debug mode is enabled,
-/// including operation tracking, timing information, and data flow visualization.
-#[derive(Debug, Clone)]
-pub struct DebugContext {
+/// The `DebugTracer` outputs detailed information about pipeline execution including
+/// operation timing, input/output values, cache statistics, and hierarchical structure
+/// visualization. It supports both main pipeline and sub-pipeline tracing with
+/// appropriate indentation levels.
+#[derive(Clone)]
+pub struct DebugTracer {
     enabled: bool,
-    template_raw: Option<String>,
     is_sub_pipeline: bool,
 }
 
-impl DebugContext {
-    /// Create a new debug context for a template
-    pub fn new_template(enabled: bool, template_raw: String) -> Self {
+impl DebugTracer {
+    /// Creates a new debug tracer.
+    ///
+    /// # Arguments
+    ///
+    /// * `enabled` - Whether debug output should be generated
+    pub fn new(enabled: bool) -> Self {
         Self {
             enabled,
-            template_raw: Some(template_raw),
             is_sub_pipeline: false,
         }
     }
 
-    /// Create a new debug context for map item processing
-    pub fn new_map_item(enabled: bool, _item_num: usize, _total_items: usize) -> Self {
+    /// Creates a debug tracer for sub-pipeline operations.
+    ///
+    /// Sub-pipeline tracers use deeper indentation levels and different
+    /// visual markers to distinguish nested operations from main pipeline operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `enabled` - Whether debug output should be generated
+    pub fn sub_pipeline(enabled: bool) -> Self {
         Self {
             enabled,
-            template_raw: None,
             is_sub_pipeline: true,
         }
     }
 
-    /// Create a context with a specific depth
-    pub fn with_depth(&self, _depth: usize) -> Self {
-        Self {
-            enabled: self.enabled,
-            template_raw: self.template_raw.clone(),
-            is_sub_pipeline: self.is_sub_pipeline,
-        }
-    }
-
-    /// Create a context with an operation added to the path
-    pub fn with_operation(&self, _op_name: &str) -> Self {
-        Self {
-            enabled: self.enabled,
-            template_raw: self.template_raw.clone(),
-            is_sub_pipeline: self.is_sub_pipeline,
-        }
-    }
-
-    /// Check if this context is for a sub-pipeline
-    pub fn is_sub_pipeline(&self) -> bool {
-        self.is_sub_pipeline
-    }
-
-    /// Print template start header
-    pub fn print_template_header(&self, title: &str, input: &str, additional_info: Option<&str>) {
+    /// Logs the start of a session (template or multi-template processing).
+    ///
+    /// This marks the beginning of a complete processing session, showing
+    /// the session type, template string, input data, and optional additional information.
+    ///
+    /// # Arguments
+    ///
+    /// * `session_type` - Type of session (e.g., "SINGLE TEMPLATE", "MULTI TEMPLATE")
+    /// * `template` - The template string being processed
+    /// * `input` - The input data to be processed
+    /// * `info` - Optional additional information to display
+    pub fn session_start(
+        &self,
+        session_type: &str,
+        template: &str,
+        input: &str,
+        info: Option<&str>,
+    ) {
         if !self.enabled {
             return;
         }
 
-        eprintln!("DEBUG: ═══════════════════════════════════════════════");
-        eprintln!("DEBUG: {} START", title);
-        if let Some(template) = &self.template_raw {
-            eprintln!("DEBUG: Template: {:?}", template);
+        self.line(format!("📂 {}", session_type));
+        self.line_with_prefix(format!("🏁 {} START", session_type), 1);
+        self.line_with_prefix(format!("Template: {:?}", template), 1);
+        self.line_with_prefix(format!("➡️ Input: {:?}", input), 1);
+        if let Some(info) = info {
+            self.line_with_prefix(info.to_string(), 1);
         }
-        eprintln!("DEBUG: Input: {:?}", input);
-        if let Some(info) = additional_info {
-            eprintln!("DEBUG: {}", info);
-        }
-        eprintln!("DEBUG: ───────────────────────────────────────────────");
+        self.separator();
     }
 
-    /// Print template completion footer
-    pub fn print_template_footer(&self, title: &str, result: &str, cache_info: Option<&str>) {
+    /// Logs the end of a session with results and timing information.
+    ///
+    /// This marks the completion of a processing session, showing the final result,
+    /// execution time, and cache statistics.
+    ///
+    /// # Arguments
+    ///
+    /// * `session_type` - Type of session that completed
+    /// * `result` - The final processed result
+    /// * `elapsed` - Total execution time for the session
+    pub fn session_end(&self, session_type: &str, result: &str, elapsed: Duration) {
         if !self.enabled {
             return;
         }
 
-        eprintln!("DEBUG: ✅ {} COMPLETE", title);
-        eprintln!("DEBUG: 🎯 Final result: {:?}", result);
-        if let Some(info) = cache_info {
-            eprintln!("DEBUG: {}", info);
-        }
-        eprintln!("DEBUG: ═══════════════════════════════════════════════");
+        self.line_with_prefix(format!("🏁 ✅ {} COMPLETE", session_type), 1);
+        self.line_with_prefix(format!("🎯 Final result: {:?}", result), 1);
+        self.line_with_prefix(format!("Total execution time: {:?}", elapsed), 1);
+
+        let regex_cache = REGEX_CACHE.lock().unwrap();
+        let split_cache = SPLIT_CACHE.lock().unwrap();
+        self.line_with_ending_prefix(
+            format!(
+                "Cache stats: {} regex patterns, {} split operations cached",
+                regex_cache.len(),
+                split_cache.len()
+            ),
+            1,
+        );
     }
 
-    /// Print a debug message with simple formatting
-    pub fn print(&self, message: &str) {
+    /// Logs the start of pipeline execution.
+    ///
+    /// This shows the beginning of a pipeline (main or sub-pipeline) with the
+    /// operations to be executed and the initial input value.
+    ///
+    /// # Arguments
+    ///
+    /// * `ops` - The sequence of operations to be executed
+    /// * `input` - The initial input value for the pipeline
+    pub fn pipeline_start(&self, ops: &[StringOp], input: &Value) {
         if !self.enabled {
             return;
         }
 
-        eprintln!("DEBUG: {}", message);
+        let depth = if self.is_sub_pipeline { 4 } else { 1 };
+        let icon = if self.is_sub_pipeline { "🔧" } else { "🚀" };
+        let label = if self.is_sub_pipeline {
+            "SUB-PIPELINE"
+        } else {
+            "PIPELINE"
+        };
+
+        self.line_with_prefix(
+            format!(
+                "📂 {}",
+                if self.is_sub_pipeline {
+                    "Sub-Pipeline"
+                } else {
+                    "Main Pipeline"
+                }
+            ),
+            depth,
+        );
+        self.line_with_prefix(
+            format!("{} {} START: {} operations", icon, label, ops.len()),
+            depth + 1,
+        );
+        self.line_with_prefix(
+            format!("➡️ Input: {}", Self::format_value(input)),
+            depth + 1,
+        );
+
+        if ops.len() > 1 {
+            for (i, op) in ops.iter().enumerate() {
+                self.line_with_prefix(
+                    format!("{}. {}", i + 1, Self::format_operation(op)),
+                    depth + 1,
+                );
+            }
+        }
     }
 
-    /// Print section information
-    pub fn print_section(
+    /// Logs the end of pipeline execution with results and timing.
+    ///
+    /// This shows the completion of a pipeline with the final result and execution time.
+    ///
+    /// # Arguments
+    ///
+    /// * `result` - The final result value from the pipeline
+    /// * `elapsed` - Total execution time for the pipeline
+    pub fn pipeline_end(&self, result: &Value, elapsed: Duration) {
+        if !self.enabled {
+            return;
+        }
+
+        let depth = if self.is_sub_pipeline { 4 } else { 1 };
+        let label = if self.is_sub_pipeline {
+            "SUB-PIPELINE"
+        } else {
+            "PIPELINE"
+        };
+
+        self.line_with_prefix(format!("✅ {} COMPLETE", label), depth + 1);
+        self.line_with_prefix(
+            format!("🎯 Result: {}", Self::format_value(result)),
+            depth + 1,
+        );
+        self.line_with_ending_prefix(format!("Time: {:?}", elapsed), depth + 1);
+
+        if !self.is_sub_pipeline {
+            self.separator();
+        }
+    }
+
+    /// Logs an individual operation step with input, output, and timing.
+    ///
+    /// This provides detailed information about each operation in the pipeline,
+    /// including the operation type, input value, result value, and execution time.
+    ///
+    /// # Arguments
+    ///
+    /// * `step` - The current step number (1-based)
+    /// * `_total` - The total number of steps (currently unused)
+    /// * `op` - The operation being executed
+    /// * `input` - The input value for this operation
+    /// * `result` - The result value from this operation
+    /// * `elapsed` - Execution time for this operation
+    pub fn operation_step(
+        &self,
+        step: usize,
+        _total: usize,
+        op: &StringOp,
+        input: &Value,
+        result: &Value,
+        elapsed: Duration,
+    ) {
+        if !self.enabled {
+            return;
+        }
+
+        let depth = if self.is_sub_pipeline { 5 } else { 2 };
+
+        self.line_with_prefix(
+            format!("⚙️ Step {}: {}", step, Self::format_operation_name(op)),
+            depth,
+        );
+        self.line_with_prefix(
+            format!("➡️ Input: {}", Self::format_value(input)),
+            depth + 1,
+        );
+        self.line_with_prefix(
+            format!("🎯 Result: {}", Self::format_value(result)),
+            depth + 1,
+        );
+        self.line_with_ending_prefix(format!("Time: {:?}", elapsed), depth + 1);
+    }
+
+    /// Logs the start of processing a map operation item.
+    ///
+    /// This shows when a map operation begins processing an individual item,
+    /// including the item index and input value.
+    ///
+    /// # Arguments
+    ///
+    /// * `item_idx` - The current item index (1-based)
+    /// * `total_items` - The total number of items being processed
+    /// * `input` - The input string for this item
+    pub fn map_item_start(&self, item_idx: usize, total_items: usize, input: &str) {
+        if !self.enabled {
+            return;
+        }
+
+        self.line_with_prefix(format!("🗂️ Item {}/{}", item_idx, total_items), 3);
+        self.line_with_prefix(format!("➡️ Input: {:?}", input), 4);
+    }
+
+    /// Logs the end of processing a map operation item.
+    ///
+    /// This shows the completion of processing an individual item in a map operation,
+    /// with either the successful result or error information.
+    ///
+    /// # Arguments
+    ///
+    /// * `output` - The result of processing the item, either success or error
+    pub fn map_item_end(&self, output: Result<&str, &str>) {
+        if !self.enabled {
+            return;
+        }
+
+        match output {
+            Ok(result) => self.line_with_ending_prefix(format!("Output: {:?}", result), 4),
+            Err(error) => self.line_with_ending_prefix(format!("❌ ERROR: {}", error), 4),
+        }
+    }
+
+    /// Logs the completion of a map operation with item counts.
+    ///
+    /// This shows the final statistics for a map operation, including how many
+    /// items were processed and how many results were produced.
+    ///
+    /// # Arguments
+    ///
+    /// * `input_count` - Number of input items processed
+    /// * `output_count` - Number of output items produced
+    pub fn map_complete(&self, input_count: usize, output_count: usize) {
+        if !self.enabled {
+            return;
+        }
+
+        self.line_with_ending_prefix(
+            format!("📦 MAP COMPLETED: {} → {} items", input_count, output_count),
+            3,
+        );
+    }
+
+    /// Logs cache-related operations.
+    ///
+    /// This provides information about cache hits, misses, and other cache-related
+    /// operations that occur during pipeline execution.
+    ///
+    /// # Arguments
+    ///
+    /// * `operation` - The type of cache operation (e.g., "HIT", "MISS", "STORE")
+    /// * `details` - Additional details about the cache operation
+    pub fn cache_operation(&self, operation: &str, details: &str) {
+        if !self.enabled {
+            return;
+        }
+
+        self.line_with_prefix(format!("💾 {} {}", operation, details), 1);
+        self.separator();
+    }
+
+    /// Logs section processing information for multi-template operations.
+    ///
+    /// This shows progress through different sections of a multi-template,
+    /// including section type and content information.
+    ///
+    /// # Arguments
+    ///
+    /// * `section_num` - Current section number (1-based)
+    /// * `total_sections` - Total number of sections
+    /// * `section_type` - Type of section ("LITERAL" or "TEMPLATE")
+    /// * `content` - Content or description of the section
+    pub fn section(
         &self,
         section_num: usize,
         total_sections: usize,
@@ -111,181 +334,162 @@ impl DebugContext {
             return;
         }
 
-        eprintln!(
-            "DEBUG: SECTION {}/{}: [{}{}]",
-            section_num,
-            total_sections,
-            section_type,
-            if content.is_empty() {
-                String::new()
-            } else {
-                format!(": {}", content)
-            }
+        self.line_with_prefix(
+            format!(
+                "📊 SECTION {}/{}: [{}{}]",
+                section_num,
+                total_sections,
+                section_type,
+                if content.is_empty() {
+                    String::new()
+                } else {
+                    format!(": {}", content)
+                }
+            ),
+            1,
         );
     }
 
-    /// Print operation result
-    pub fn print_result(&self, _prefix: &str, result: &str) {
-        if !self.enabled {
-            return;
-        }
+    // PRIVATE HELPERS
 
-        eprintln!("DEBUG: 🎯 Result: {:?}", result);
+    /// Outputs a debug line without indentation prefix.
+    fn line(&self, msg: String) {
+        eprintln!("DEBUG: {}", msg);
     }
 
-    /// Print cache operation
-    pub fn print_cache_operation(&self, operation_type: &str, details: &str) {
-        if !self.enabled {
-            return;
-        }
-
-        eprintln!("DEBUG: {} {}", operation_type, details);
+    /// Outputs a debug line with hierarchical indentation prefix.
+    ///
+    /// Uses tree-like prefixes to show the hierarchical structure of operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `msg` - The message to output
+    /// * `depth` - The indentation depth level
+    fn line_with_prefix(&self, msg: String, depth: usize) {
+        let prefix = match depth {
+            1 => "├── ".to_string(),
+            2 => "│   ├── ".to_string(),
+            3 => "│   │   ├── ".to_string(),
+            4 => "│   │   │   ├── ".to_string(),
+            5 => "│   │   │   │   ├── ".to_string(),
+            6 => "│   │   │   │   │   ├── ".to_string(),
+            _ => "│   ".repeat(depth.saturating_sub(1)) + "├── ",
+        };
+        eprintln!("DEBUG: {}{}", prefix, msg);
     }
 
-    /// Print step information
-    pub fn print_step(&self, step_info: &str) {
-        if !self.enabled {
-            return;
-        }
-
-        eprintln!("DEBUG: {}", step_info);
+    /// Outputs a debug line with ending hierarchical prefix.
+    ///
+    /// Uses terminal tree prefixes (`└──`) to indicate the end of a section.
+    ///
+    /// # Arguments
+    ///
+    /// * `msg` - The message to output
+    /// * `depth` - The indentation depth level
+    fn line_with_ending_prefix(&self, msg: String, depth: usize) {
+        let prefix = match depth {
+            1 => "└── ".to_string(),
+            2 => "│   └── ".to_string(),
+            3 => "│   │   └── ".to_string(),
+            4 => "│   │   │   └── ".to_string(),
+            5 => "│   │   │   │   └── ".to_string(),
+            6 => "│   │   │   │   │   └── ".to_string(),
+            _ => "│   ".repeat(depth.saturating_sub(1)) + "└── ",
+        };
+        eprintln!("DEBUG: {}{}", prefix, msg);
     }
 
-    /// Print operation details for pipeline steps
-    pub fn print_operation(&self, op: &crate::pipeline::StringOp, step_num: usize) {
-        if !self.enabled {
-            return;
-        }
-
-        match op {
-            crate::pipeline::StringOp::Map { operations } => {
-                if operations.len() <= 3 {
-                    let ops_str: Vec<String> =
-                        operations.iter().map(|op| format!("{:?}", op)).collect();
-                    eprintln!(
-                        "DEBUG:   {}. Map {{ operations: [{}] }}",
-                        step_num,
-                        ops_str.join(", ")
-                    );
-                } else {
-                    eprintln!("DEBUG:   {}. Map {{ operations: [", step_num);
-                    for (i, map_op) in operations.iter().enumerate() {
-                        eprintln!("DEBUG:       {}: {:?}", i + 1, map_op);
-                    }
-                    eprintln!("DEBUG:     ] }}");
-                }
-            }
-            _ => eprintln!("DEBUG:   {}. {:?}", step_num, op),
-        }
+    /// Outputs a visual separator line.
+    pub fn separator(&self) {
+        eprintln!("DEBUG: │");
     }
 
-    /// Format and print values with simple output
-    pub fn print_value(&self, val: &Value, prefix_text: &str) {
-        if !self.enabled {
-            return;
-        }
-
+    /// Formats a value for display in debug output.
+    ///
+    /// Provides compact, readable representations of values with length limits
+    /// for large strings and lists.
+    ///
+    /// # Arguments
+    ///
+    /// * `val` - The value to format
+    ///
+    /// # Returns
+    ///
+    /// A formatted string representation of the value
+    fn format_value(val: &Value) -> String {
         match val {
             Value::Str(s) => {
-                if s.len() > 100 {
-                    eprintln!(
-                        "DEBUG: {}String(len={}, preview={:?}...)",
-                        prefix_text,
-                        s.len(),
-                        &s[..50]
-                    );
+                if s.len() > 40 {
+                    format!("String({}..)", &s[..40])
                 } else {
-                    eprintln!("DEBUG: {}String({:?})", prefix_text, s);
-                }
-            }
-            Value::List(list) => {
-                if list.is_empty() {
-                    eprintln!("DEBUG: {}List(empty)", prefix_text);
-                } else if list.len() == 1 {
-                    eprintln!("DEBUG: {}List(1 item: {:?})", prefix_text, list[0]);
-                } else if list.len() <= 5 {
-                    eprintln!("DEBUG: {}List({} items: [", prefix_text, list.len());
-                    for item in list {
-                        eprintln!("DEBUG:   {:?}", item);
-                    }
-                    eprintln!("DEBUG: ])");
-                } else {
-                    eprintln!("DEBUG: {}List({} items: [", prefix_text, list.len());
-                    for item in &list[..3] {
-                        eprintln!("DEBUG:   {:?}", item);
-                    }
-                    eprintln!("DEBUG:   ...");
-                    for item in &list[list.len() - 2..] {
-                        eprintln!("DEBUG:   {:?}", item);
-                    }
-                    eprintln!("DEBUG: ])");
-                }
-            }
-        }
-    }
-
-    /// Format value as string (for inline display)
-    pub fn format_value(&self, val: &Value) -> String {
-        match val {
-            Value::Str(s) => {
-                if s.len() > 100 {
-                    format!("String(len={}, preview={:?}...)", s.len(), &s[..50])
-                } else {
-                    format!("String({:?})", s)
+                    format!("String({})", s)
                 }
             }
             Value::List(list) => {
                 if list.is_empty() {
                     "List(empty)".to_string()
-                } else if list.len() == 1 {
-                    format!("List(1 item: {:?})", list[0])
-                } else if list.len() <= 5 {
-                    format!("List({} items: {:?})", list.len(), list)
+                } else if list.len() <= 3 {
+                    format!("List{:?}", list)
                 } else {
-                    format!(
-                        "List({} items: {:?}...{:?})",
-                        list.len(),
-                        &list[..3],
-                        &list[list.len() - 2..]
-                    )
+                    format!("List[{}, {}, ...+{}]", list[0], list[1], list.len() - 2)
                 }
             }
         }
     }
 
-    /// Print map item processing start header
-    pub fn print_map_item_start(&self, item_idx: usize, total_items: usize) {
-        if !self.enabled {
-            return;
+    /// Formats a string operation for display with key parameters.
+    ///
+    /// Provides informative representations of operations including
+    /// important parameters like separators and operation counts.
+    ///
+    /// # Arguments
+    ///
+    /// * `op` - The operation to format
+    ///
+    /// # Returns
+    ///
+    /// A formatted string representation of the operation
+    fn format_operation(op: &StringOp) -> String {
+        match op {
+            StringOp::Split { sep, .. } => format!("Split('{}')", sep),
+            StringOp::Join { sep } => format!("Join('{}')", sep),
+            StringOp::Map { operations } => format!("Map({})", operations.len()),
+            _ => Self::format_operation_name(op),
         }
-
-        eprintln!("DEBUG: Processing item {} of {}", item_idx, total_items);
     }
 
-    /// Print map item input
-    pub fn print_map_item_input(&self, input: &str) {
-        if !self.enabled {
-            return;
+    /// Returns the simple name of a string operation.
+    ///
+    /// Provides basic operation names without parameters for compact display.
+    ///
+    /// # Arguments
+    ///
+    /// * `op` - The operation to name
+    ///
+    /// # Returns
+    ///
+    /// The operation name as a string
+    fn format_operation_name(op: &StringOp) -> String {
+        match op {
+            StringOp::Split { .. } => "Split".to_string(),
+            StringOp::Join { .. } => "Join".to_string(),
+            StringOp::Map { .. } => "Map".to_string(),
+            StringOp::Upper => "Upper".to_string(),
+            StringOp::Lower => "Lower".to_string(),
+            StringOp::Trim { .. } => "Trim".to_string(),
+            StringOp::Replace { .. } => "Replace".to_string(),
+            StringOp::Filter { .. } => "Filter".to_string(),
+            StringOp::FilterNot { .. } => "FilterNot".to_string(),
+            StringOp::Sort { .. } => "Sort".to_string(),
+            StringOp::Reverse => "Reverse".to_string(),
+            StringOp::Unique => "Unique".to_string(),
+            StringOp::Substring { .. } => "Substring".to_string(),
+            StringOp::Append { .. } => "Append".to_string(),
+            StringOp::Prepend { .. } => "Prepend".to_string(),
+            StringOp::Pad { .. } => "Pad".to_string(),
+            StringOp::RegexExtract { .. } => "RegexExtract".to_string(),
+            StringOp::Slice { .. } => "Slice".to_string(),
+            StringOp::StripAnsi => "StripAnsi".to_string(),
         }
-
-        eprintln!("DEBUG: Map item input: {:?}", input);
-    }
-
-    /// Print map item output
-    pub fn print_map_item_output(&self, output: &str) {
-        if !self.enabled {
-            return;
-        }
-
-        eprintln!("DEBUG: Map item output: {:?}", output);
-    }
-
-    /// Print map item error
-    pub fn print_map_item_error(&self, error: &str) {
-        if !self.enabled {
-            return;
-        }
-
-        eprintln!("DEBUG: ❌ Map item ERROR: {}", error);
     }
 }

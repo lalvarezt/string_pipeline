@@ -13,11 +13,11 @@ mod parser;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::Mutex;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use strip_ansi_escapes::strip;
 
 pub use crate::pipeline::template::{MultiTemplate, Template};
-pub use debug::DebugContext;
+pub use debug::DebugTracer;
 mod template;
 
 // Global regex cache to avoid recompiling patterns
@@ -909,82 +909,36 @@ pub fn apply_ops_internal(
     input: &str,
     ops: &[StringOp],
     debug: bool,
-    debug_context: Option<DebugContext>,
+    debug_tracer: Option<DebugTracer>,
 ) -> Result<String, String> {
     let mut val = Value::Str(input.to_string());
     let mut default_sep = " ".to_string();
     let start_time = if debug { Some(Instant::now()) } else { None };
 
     if debug {
-        if let Some(ref ctx) = debug_context {
-            ctx.print("═══════════════════════════════════════════════");
-            if ctx.is_sub_pipeline() {
-                ctx.print(&format!(
-                    "🔧 SUB-PIPELINE START: {} operations to apply",
-                    ops.len()
-                ));
-            } else {
-                ctx.print(&format!(
-                    "🚀 PIPELINE START: {} operations to apply",
-                    ops.len()
-                ));
-            }
-            ctx.print(&format!("Initial input: {}", ctx.format_value(&val)));
-
-            if ops.len() > 1 {
-                ctx.print("Operations to apply:");
-                for (i, op) in ops.iter().enumerate() {
-                    ctx.print_operation(op, i + 1);
-                }
-            }
-            ctx.print("───────────────────────────────────────────────");
+        if let Some(ref tracer) = debug_tracer {
+            tracer.pipeline_start(ops, &val);
         }
     }
 
     for (i, op) in ops.iter().enumerate() {
         let step_start = if debug { Some(Instant::now()) } else { None };
-
-        if debug {
-            if let Some(ref ctx) = debug_context {
-                // Get operation name for the step header
-                let op_name = match op {
-                    StringOp::Map { operations } => {
-                        if operations.len() <= 3 {
-                            let ops_str: Vec<String> =
-                                operations.iter().map(|op| format!("{:?}", op)).collect();
-                            format!("Map {{ operations: [{}] }}", ops_str.join(", "))
-                        } else {
-                            format!("Map (with {} operations)", operations.len())
-                        }
-                    }
-                    _ => format!("{:?}", op),
-                };
-
-                ctx.print(&format!(
-                    "STEP {}/{}: Applying {}",
-                    i + 1,
-                    ops.len(),
-                    op_name
-                ));
-
-                // For Map with many operations, show the detailed breakdown
-                if let StringOp::Map { operations } = op {
-                    if operations.len() > 3 {
-                        ctx.print("Map { operations: [");
-                        for (i, map_op) in operations.iter().enumerate() {
-                            ctx.print(&format!("    {}: {:?}", i + 1, map_op));
-                        }
-                        ctx.print("  ] }");
-                    }
-                }
-                ctx.print(&format!("Input: {}", ctx.format_value(&val)));
-            }
-        }
+        let input_val = val.clone();
 
         match op {
             StringOp::Map { operations } => {
-                // Nested map operations are not supported (simplified check)
-                // This could be enhanced with proper tracking if needed
+                if debug {
+                    if let Some(ref tracer) = debug_tracer {
+                        tracer.operation_step(
+                            i + 1,
+                            ops.len(),
+                            op,
+                            &input_val,
+                            &Value::Str("processing...".to_string()),
+                            Duration::from_nanos(0),
+                        );
+                    }
+                }
 
                 if let Value::List(list) = val {
                     let mapped = list
@@ -992,24 +946,20 @@ pub fn apply_ops_internal(
                         .enumerate()
                         .map(|(item_idx, item)| {
                             if debug {
-                                if let Some(ref parent_ctx) = debug_context {
-                                    parent_ctx.print_map_item_start(item_idx + 1, list.len());
-                                    parent_ctx.print_map_item_input(item);
+                                if let Some(ref tracer) = debug_tracer {
+                                    tracer.map_item_start(item_idx + 1, list.len(), item);
                                 }
                             }
 
-                            let ctx = DebugContext::new_map_item(debug, item_idx + 1, list.len())
-                                .with_depth(0)
-                                .with_operation("map");
+                            let sub_tracer = DebugTracer::sub_pipeline(debug);
+                            let result =
+                                apply_ops_internal(item, operations, debug, Some(sub_tracer));
 
-                            let result = apply_ops_internal(item, operations, debug, Some(ctx));
-
-                            // Print map item output IMMEDIATELY after getting the result
                             if debug {
-                                if let Some(ref parent_ctx) = debug_context {
+                                if let Some(ref tracer) = debug_tracer {
                                     match &result {
-                                        Ok(output) => parent_ctx.print_map_item_output(output),
-                                        Err(e) => parent_ctx.print_map_item_error(e),
+                                        Ok(output) => tracer.map_item_end(Ok(output)),
+                                        Err(e) => tracer.map_item_end(Err(e)),
                                     }
                                 }
                             }
@@ -1019,12 +969,8 @@ pub fn apply_ops_internal(
                         .collect::<Result<Vec<_>, _>>()?;
 
                     if debug {
-                        if let Some(ref ctx) = debug_context {
-                            ctx.print(&format!(
-                                "MAP COMPLETED: {} → {} items",
-                                list.len(),
-                                mapped.len()
-                            ));
+                        if let Some(ref tracer) = debug_tracer {
+                            tracer.map_complete(list.len(), mapped.len());
                         }
                     }
 
@@ -1040,57 +986,18 @@ pub fn apply_ops_internal(
             }
         }
 
-        if debug {
-            if let Some(ref ctx) = debug_context {
+        if debug && !matches!(op, StringOp::Map { .. }) {
+            if let Some(ref tracer) = debug_tracer {
                 let elapsed = step_start.unwrap().elapsed();
-
-                ctx.print_value(&val, "🎯 Result: ");
-                ctx.print(&format!("Step completed in {:?}", elapsed));
-
-                // Add memory usage info for large datasets
-                match &val {
-                    Value::List(list) if list.len() > 1000 => {
-                        let total_chars: usize = list.iter().map(|s| s.len()).sum();
-                        ctx.print(&format!(
-                            "Memory: ~{} chars across {} items",
-                            total_chars,
-                            list.len()
-                        ));
-                    }
-                    Value::Str(s) if s.len() > 10000 => {
-                        ctx.print(&format!("Memory: ~{} chars in string", s.len()));
-                    }
-                    _ => {}
-                }
-
-                ctx.print("───────────────────────────────────────────────");
+                tracer.operation_step(i + 1, ops.len(), op, &input_val, &val, elapsed);
             }
         }
     }
 
     if debug {
-        if let Some(ref ctx) = debug_context {
+        if let Some(ref tracer) = debug_tracer {
             let total_elapsed = start_time.unwrap().elapsed();
-            if ctx.is_sub_pipeline() {
-                ctx.print("✅ SUB-PIPELINE COMPLETE");
-            } else {
-                ctx.print("✅ PIPELINE COMPLETE");
-            }
-            ctx.print(&format!("Total execution time: {:?}", total_elapsed));
-            ctx.print_value(&val, "🎯 Final result: ");
-
-            // Show cache statistics only for main pipelines to avoid repetition
-            if !ctx.is_sub_pipeline() {
-                let regex_cache = REGEX_CACHE.lock().unwrap();
-                let split_cache = SPLIT_CACHE.lock().unwrap();
-                ctx.print(&format!(
-                    "Cache stats: {} regex patterns, {} split operations cached",
-                    regex_cache.len(),
-                    split_cache.len()
-                ));
-            }
-
-            ctx.print("═══════════════════════════════════════════════");
+            tracer.pipeline_end(&val, total_elapsed);
         }
     }
 
