@@ -11,6 +11,7 @@ documentation = "https://docs.rs/string_pipeline"
 readme = "README.md"
 keywords = ["string", "pipeline", "template", "text", "transformation"]
 categories = ["text-processing", "command-line-utilities"]
+default-run = "string-pipeline"
 
 [dependencies]
 regex = "1.11.1"
@@ -30,7 +31,7 @@ name = "string-pipeline"
 path = "src/main.rs"
 
 [[bin]]
-name = "bench"
+name = "string-pipeline-bench"
 path = "src/bin/bench.rs"
 
 [profile.staging]

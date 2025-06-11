@@ -456,4 +456,3 @@ fn main() {
 
     print_text_report(&results, total_time, suite.warmup_iterations);
 }
-

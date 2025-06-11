@@ -8,10 +8,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Build benchmark tool
-        run: cargo build --release --bin bench
+        run: cargo build --release --bin string-pipeline-bench
       - name: Run benchmarks
         run: |
-          ./target/release/bench --iterations 5000 --format json > benchmark_results.json
+          ./target/release/string-pipeline-bench --iterations 5000 > benchmark_results.txt
       - name: Upload results
         uses: actions/upload-artifact@v4
         with:
