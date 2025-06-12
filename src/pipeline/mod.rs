@@ -6,10 +6,44 @@
 //! The pipeline system processes strings through a sequence of operations,
 //! supporting both individual string transformations and list-based operations
 //! with efficient memory management and comprehensive error handling.
+//!
+//! # Architecture
+//!
+//! The pipeline system consists of several key components:
+//!
+//! - **Operations**: The [`StringOp`] enum defines all available transformations
+//! - **Templates**: The [`MultiTemplate`] type provides template-based processing
+//! - **Execution Engine**: The [`apply_ops_internal`] function processes operation sequences
+//! - **Caching**: Global caches for regex compilation and string splitting
+//! - **Debug Support**: Comprehensive tracing via [`DebugTracer`]
+//!
+//! # Performance Optimizations
+//!
+//! The implementation includes several performance optimizations:
+//!
+//! - **Regex Caching**: Compiled regex patterns are cached globally
+//! - **Split Caching**: String splitting results are cached for common operations
+//! - **String Interning**: Common separators are interned to reduce allocations
+//! - **ASCII Fast Paths**: ASCII-only operations use optimized algorithms
+//! - **Memory Reuse**: Efficient memory management throughout the pipeline
+//!
+//! # Example Usage
+//!
+//! ```rust
+//! use string_pipeline::Template;
+//!
+//! // Create a template with mixed literal and operation sections
+//! let template = Template::parse("Files: {split:,:..|filter:\\.txt$|sort|join: \\| }", None).unwrap();
+//! let result = template.format("doc.pdf,file1.txt,readme.md,file2.txt").unwrap();
+//! assert_eq!(result, "Files: file1.txt | file2.txt");
+//! ```
 
 use regex::Regex;
+
 mod debug;
 mod parser;
+mod template;
+
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -18,18 +52,35 @@ use strip_ansi_escapes::strip;
 
 pub use crate::pipeline::template::{MultiTemplate, Template};
 pub use debug::DebugTracer;
-mod template;
 
-// Global regex cache to avoid recompiling patterns
+/* ------------------------------------------------------------------------ */
+/*  Global regex / split caches                                             */
+/* ------------------------------------------------------------------------ */
+
+/// Global cache for compiled regex patterns.
+///
+/// This cache stores compiled regex patterns to avoid recompilation overhead
+/// when the same patterns are used repeatedly across operations.
 static REGEX_CACHE: Lazy<Mutex<HashMap<String, Regex>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
-// Split operation cache to avoid re-splitting the same input with same separator
+/// Type alias for split cache keys combining input hash and separator.
 type SplitCacheKey = (u64, String);
+/// Type alias for split cache values containing the split result.
 type SplitCacheValue = Vec<String>;
+/// Type alias for the complete split cache map.
 type SplitCacheMap = HashMap<SplitCacheKey, SplitCacheValue>;
+
+/// Global cache for string splitting operations.
+///
+/// This cache stores the results of string splitting operations to avoid
+/// redundant splitting when the same input and separator are used repeatedly.
+/// Cache entries are limited by input size to prevent unbounded memory growth.
 static SPLIT_CACHE: Lazy<Mutex<SplitCacheMap>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
-// String interning for common separators to reduce allocations
+/// Interned strings for common separators to reduce memory allocations.
+///
+/// Common separators like space, comma, newline are pre-allocated and reused
+/// to avoid repeated string allocations during pipeline operations.
 static COMMON_SEPARATORS: Lazy<HashMap<&'static str, String>> = Lazy::new(|| {
     let mut map = HashMap::new();
     map.insert(" ", " ".to_string());
@@ -45,7 +96,23 @@ static COMMON_SEPARATORS: Lazy<HashMap<&'static str, String>> = Lazy::new(|| {
     map
 });
 
-/// Get an interned string for common separators, or clone for uncommon ones.
+/* ------------------------------------------------------------------------ */
+/*  Small fast helpers                                                      */
+/* ------------------------------------------------------------------------ */
+
+/// Get an interned separator string to reduce allocations.
+///
+/// Returns a cached string for common separators, or creates a new string
+/// for uncommon separators. This optimization reduces memory allocations
+/// for frequently used separators.
+///
+/// # Arguments
+///
+/// * `sep` - The separator string to intern
+///
+/// # Returns
+///
+/// An owned string that is either cached or newly allocated.
 fn get_interned_separator(sep: &str) -> String {
     COMMON_SEPARATORS
         .get(sep)
@@ -53,7 +120,24 @@ fn get_interned_separator(sep: &str) -> String {
         .unwrap_or_else(|| sep.to_string())
 }
 
-/// Fast ASCII-only whitespace trimming
+/// Fast ASCII-only whitespace trimming optimization.
+///
+/// Provides optimized whitespace trimming for ASCII-only strings by using
+/// faster ASCII character class checks instead of full Unicode processing.
+///
+/// # Arguments
+///
+/// * `s` - The string to trim
+///
+/// # Returns
+///
+/// * `Some(&str)` - Trimmed string slice if input is ASCII-only
+/// * `None` - If input contains non-ASCII characters, requiring Unicode-aware trimming
+///
+/// # Performance
+///
+/// This function provides significant performance benefits for ASCII-only inputs
+/// by avoiding Unicode character classification overhead.
 fn ascii_trim(s: &str) -> Option<&str> {
     if s.is_ascii() {
         Some(s.trim_matches(|c: char| c.is_ascii_whitespace()))
@@ -62,7 +146,29 @@ fn ascii_trim(s: &str) -> Option<&str> {
     }
 }
 
-/// Fast ASCII-only string reversal
+/// Fast ASCII-only string reversal optimization.
+///
+/// Provides optimized string reversal for ASCII-only strings by working directly
+/// with bytes instead of Unicode character boundaries.
+///
+/// # Arguments
+///
+/// * `s` - The string to reverse
+///
+/// # Returns
+///
+/// * `Some(String)` - Reversed string if input is ASCII-only
+/// * `None` - If input contains non-ASCII characters, requiring Unicode-aware reversal
+///
+/// # Safety
+///
+/// This function uses unsafe code to construct a string from reversed bytes,
+/// but this is safe because ASCII input guarantees valid UTF-8 output.
+///
+/// # Performance
+///
+/// This function provides significant performance benefits for ASCII-only inputs
+/// by avoiding Unicode grapheme cluster boundary detection.
 fn ascii_reverse(s: &str) -> Option<String> {
     if s.is_ascii() {
         // For ASCII, we can safely reverse bytes
@@ -75,7 +181,99 @@ fn ascii_reverse(s: &str) -> Option<String> {
     }
 }
 
+/* ------------------------------------------------------------------------ */
+/*  PUBLIC – split cache helper                                             */
+/* ------------------------------------------------------------------------ */
+
+/// Get cached string splitting results or compute and cache them.
+///
+/// This function provides cached string splitting to optimize repeated split
+/// operations on the same input with the same separator. Results are cached
+/// using a hash of the input string combined with the separator.
+///
+/// # Caching Strategy
+///
+/// - Cache key combines input hash and separator string
+/// - Cache entries are limited by input size (≤10,000 chars) and part count (≤1,000 items)
+/// - Thread-safe access using mutex protection
+/// - Automatic cache miss handling with immediate caching
+///
+/// # Arguments
+///
+/// * `input` - The string to split
+/// * `separator` - The separator to split on
+///
+/// # Returns
+///
+/// A vector of string parts from the split operation.
+///
+/// # Performance
+///
+/// This function provides significant performance benefits for:
+/// - Templates with multiple split operations on the same input
+/// - Repeated template applications with identical inputs
+/// - Pipeline operations that split the same data multiple times
+pub(crate) fn get_cached_split(input: &str, separator: &str) -> Vec<String> {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    // Create a hash of the input for cache key
+    let mut hasher = DefaultHasher::new();
+    input.hash(&mut hasher);
+    let input_hash = hasher.finish();
+    let cache_key = (input_hash, separator.to_string());
+
+    // Try to get from cache first
+    {
+        let cache = SPLIT_CACHE.lock().unwrap();
+        if let Some(cached_split) = cache.get(&cache_key) {
+            return cached_split.clone();
+        }
+    }
+
+    // Not in cache, compute it
+    let parts: Vec<String> = input.split(separator).map(str::to_string).collect();
+
+    // Add to cache
+    {
+        let mut cache = SPLIT_CACHE.lock().unwrap();
+        /* Do not grow indefinitely for huge data */
+        if input.len() <= 10_000 && parts.len() <= 1_000 {
+            cache.insert(cache_key, parts.clone());
+        }
+    }
+
+    parts
+}
+
 /// Get a compiled regex from cache or compile and cache it.
+///
+/// This function provides cached regex compilation to avoid the overhead of
+/// recompiling identical patterns. Regex compilation can be expensive, so
+/// caching provides significant performance benefits for repeated operations.
+///
+/// # Caching Strategy
+///
+/// - Thread-safe access using mutex protection
+/// - Double-checked locking to prevent race conditions
+/// - Unbounded cache size (patterns are typically small and finite)
+/// - Global cache shared across all pipeline operations
+///
+/// # Arguments
+///
+/// * `pattern` - The regex pattern string to compile
+///
+/// # Returns
+///
+/// * `Ok(Regex)` - Successfully compiled regex (cached or fresh)
+/// * `Err(String)` - Compilation error with descriptive message
+///
+/// # Performance
+///
+/// This function provides significant performance benefits for:
+/// - Templates with multiple regex operations using the same patterns
+/// - Repeated template applications with identical regex patterns
+/// - Filter operations that repeatedly use the same matching logic
 fn get_cached_regex(pattern: &str) -> Result<Regex, String> {
     // Try to get from cache first
     {
@@ -98,41 +296,6 @@ fn get_cached_regex(pattern: &str) -> Result<Regex, String> {
     }
 
     Ok(regex)
-}
-
-/// Get split result from cache or compute and cache it.
-fn get_cached_split(input: &str, separator: &str) -> Vec<String> {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-
-    // Create a hash of the input for cache key
-    let mut hasher = DefaultHasher::new();
-    input.hash(&mut hasher);
-    let input_hash = hasher.finish();
-
-    let cache_key = (input_hash, separator.to_string());
-
-    // Try to get from cache first
-    {
-        let cache = SPLIT_CACHE.lock().unwrap();
-        if let Some(cached_split) = cache.get(&cache_key) {
-            return cached_split.clone();
-        }
-    }
-
-    // Not in cache, compute it
-    let parts: Vec<String> = input.split(separator).map(str::to_string).collect();
-
-    // Add to cache
-    {
-        let mut cache = SPLIT_CACHE.lock().unwrap();
-        // Only cache if input is reasonably sized to avoid memory bloat
-        if input.len() <= 10000 && parts.len() <= 1000 {
-            cache.insert(cache_key, parts.clone());
-        }
-    }
-
-    parts
 }
 
 /// Internal representation of values during pipeline processing.
@@ -1013,6 +1176,27 @@ pub fn apply_ops_internal(
     })
 }
 
+/// Apply a transformation function to a string value with type checking.
+///
+/// This helper function ensures that string-only operations are only applied to
+/// string values, providing clear error messages when operations are applied to
+/// incompatible types.
+///
+/// # Arguments
+///
+/// * `val` - The value to transform (must be a string)
+/// * `transform` - The transformation function to apply
+/// * `op_name` - The operation name for error messages
+///
+/// # Returns
+///
+/// * `Ok(Value::Str)` - Transformed string value
+/// * `Err(String)` - Type mismatch error with helpful message
+///
+/// # Type Safety
+///
+/// This function enforces type safety by rejecting list inputs for string-only
+/// operations, guiding users to use `map:{{operation}}` syntax for list processing.
 fn apply_string_operation<F>(val: Value, transform: F, op_name: &str) -> Result<Value, String>
 where
     F: FnOnce(String) -> String,
@@ -1028,6 +1212,27 @@ where
     }
 }
 
+/// Apply a transformation function to a list value with type checking.
+///
+/// This helper function ensures that list-only operations are only applied to
+/// list values, providing clear error messages when operations are applied to
+/// incompatible types.
+///
+/// # Arguments
+///
+/// * `val` - The value to transform (must be a list)
+/// * `transform` - The transformation function to apply
+/// * `op_name` - The operation name for error messages
+///
+/// # Returns
+///
+/// * `Ok(Value::List)` - Transformed list value
+/// * `Err(String)` - Type mismatch error with descriptive message
+///
+/// # Type Safety
+///
+/// This function enforces type safety by rejecting string inputs for list-only
+/// operations, ensuring operations are applied to the correct data types.
 fn apply_list_operation<F>(val: Value, transform: F, op_name: &str) -> Result<Value, String>
 where
     F: FnOnce(Vec<String>) -> Vec<String>,
@@ -1042,6 +1247,43 @@ where
     }
 }
 
+/// Apply a single string operation to a value with comprehensive error handling.
+///
+/// This is the core operation dispatcher that handles all string transformation
+/// operations except for `Map`, which requires special handling in the main
+/// pipeline execution loop.
+///
+/// # Operation Categories
+///
+/// - **Type-converting**: `Split` (String→List), `Join` (List→String)
+/// - **List operations**: `Slice`, `Sort`, `Unique`, `Filter`, `FilterNot`
+/// - **String operations**: `Upper`, `Lower`, `Trim`, `Replace`, `Append`, etc.
+/// - **Type-preserving**: `Reverse` (works on both strings and lists)
+///
+/// # Arguments
+///
+/// * `op` - The operation to apply
+/// * `val` - The input value (string or list)
+/// * `default_sep` - Mutable reference to the default separator for join operations
+///
+/// # Returns
+///
+/// * `Ok(Value)` - Transformed value (type may change based on operation)
+/// * `Err(String)` - Operation error with descriptive message
+///
+/// # Performance Optimizations
+///
+/// - Uses cached regex compilation for pattern-based operations
+/// - Uses cached string splitting for improved performance
+/// - Employs ASCII fast paths for compatible operations
+/// - Manages separator interning for memory efficiency
+///
+/// # Error Handling
+///
+/// Provides detailed error messages for:
+/// - Type mismatches (applying string ops to lists, etc.)
+/// - Invalid regex patterns
+/// - Out-of-bounds access attempts
 fn apply_single_operation(
     op: &StringOp,
     val: Value,

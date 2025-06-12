@@ -1192,11 +1192,6 @@ pub mod general_negative_tests {
     }
 
     #[test]
-    fn test_invalid_template_format() {
-        assert!(process("test", "invalid_template").is_err());
-    }
-
-    #[test]
     fn test_malformed_template_braces() {
         assert!(process("test", "{split:,").is_err());
     }

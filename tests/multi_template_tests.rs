@@ -88,7 +88,7 @@ fn test_multi_template_empty_sections() {
 fn test_multi_template_debug_mode() {
     // Test debug mode functionality in multi-templates
     let template = MultiTemplate::parse("Debug: {!upper} Normal: {lower}", None).unwrap();
-    assert!(template.is_debug_enabled());
+    assert!(template.is_debug());
     let result = template.format("TeSt").unwrap();
     assert_eq!(result, "Debug: TEST Normal: test");
 }
