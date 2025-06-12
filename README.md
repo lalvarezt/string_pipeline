@@ -120,79 +120,63 @@ echo "input" | string-pipeline '{template}'
 
 # Debug mode (shows each step)
 string-pipeline "{!split:,:..|map:{upper}}" "hello,world"
-# DEBUG: ═══════════════════════════════════════════════
-# DEBUG: SINGLE TEMPLATE START
-# DEBUG: Template: "{!split:,:..|map:{upper}}"
-# DEBUG: Input: "hello,world"
-# DEBUG: ───────────────────────────────────────────────
-# DEBUG: ═══════════════════════════════════════════════
-# DEBUG: 🚀 PIPELINE START: 2 operations to apply
-# DEBUG: Initial input: String("hello,world")
-# DEBUG: Operations to apply:
-# DEBUG:   1. Split { sep: ",", range: Range(None, None, false) }
-# DEBUG:   2. Map { operations: [Upper] }
-# DEBUG: ───────────────────────────────────────────────
-# DEBUG: STEP 1/2: Applying Split { sep: ",", range: Range(None, None, false) }
-# DEBUG: Input: String("hello,world")
-# DEBUG: 🎯 Result: List(2 items: [
-# DEBUG:   "hello"
-# DEBUG:   "world"
-# DEBUG: ])
-# DEBUG: Step completed in 1.09718ms
-# DEBUG: ───────────────────────────────────────────────
-# DEBUG: STEP 2/2: Applying Map { operations: [Upper] }
-# DEBUG: Input: List(2 items: ["hello", "world"])
-# DEBUG: Processing item 1 of 2
-# DEBUG: Map item input: "hello"
-# DEBUG: ═══════════════════════════════════════════════
-# DEBUG: 🔧 SUB-PIPELINE START: 1 operations to apply
-# DEBUG: Initial input: String("hello")
-# DEBUG: ───────────────────────────────────────────────
-# DEBUG: STEP 1/1: Applying Upper
-# DEBUG: Input: String("hello")
-# DEBUG: 🎯 Result: String("HELLO")
-# DEBUG: Step completed in 35.612µs
-# DEBUG: ───────────────────────────────────────────────
-# DEBUG: ✅ SUB-PIPELINE COMPLETE
-# DEBUG: Total execution time: 103.315µs
-# DEBUG: 🎯 Final result: String("HELLO")
-# DEBUG: ═══════════════════════════════════════════════
-# DEBUG: Map item output: "HELLO"
-# DEBUG: Processing item 2 of 2
-# DEBUG: Map item input: "world"
-# DEBUG: ═══════════════════════════════════════════════
-# DEBUG: 🔧 SUB-PIPELINE START: 1 operations to apply
-# DEBUG: Initial input: String("world")
-# DEBUG: ───────────────────────────────────────────────
-# DEBUG: STEP 1/1: Applying Upper
-# DEBUG: Input: String("world")
-# DEBUG: 🎯 Result: String("WORLD")
-# DEBUG: Step completed in 3.825µs
-# DEBUG: ───────────────────────────────────────────────
-# DEBUG: ✅ SUB-PIPELINE COMPLETE
-# DEBUG: Total execution time: 23.916µs
-# DEBUG: 🎯 Final result: String("WORLD")
-# DEBUG: ═══════════════════════════════════════════════
-# DEBUG: Map item output: "WORLD"
-# DEBUG: MAP COMPLETED: 2 → 2 items
-# DEBUG: 🎯 Result: List(2 items: [
-# DEBUG:   "HELLO"
-# DEBUG:   "WORLD"
-# DEBUG: ])
-# DEBUG: Step completed in 223.781µs
-# DEBUG: ───────────────────────────────────────────────
-# DEBUG: ✅ PIPELINE COMPLETE
-# DEBUG: Total execution time: 1.763036ms
-# DEBUG: 🎯 Final result: List(2 items: [
-# DEBUG:   "HELLO"
-# DEBUG:   "WORLD"
-# DEBUG: ])
-# DEBUG: Cache stats: 0 regex patterns, 1 split operations cached
-# DEBUG: ═══════════════════════════════════════════════
-# DEBUG: ✅ SINGLE TEMPLATE COMPLETE
-# DEBUG: 🎯 Final result: "HELLO,WORLD"
-# DEBUG: Cache stats: 0 regex patterns, 1 split operations cached
-# DEBUG: ═══════════════════════════════════════════════
+# DEBUG: 📂 MULTI-TEMPLATE
+# DEBUG: ├── 🏁 MULTI-TEMPLATE START
+# DEBUG: ├── Template: "{!split:,:..|map:{upper}}"
+# DEBUG: ├── ➡️ Input: "hello,world"
+# DEBUG: ├── 1 sections to process (literal: 0, template: 1)
+# DEBUG: │
+# DEBUG: ├── 📊 SECTION 1/1: [template: split(',',..) | map { operations: [upper] }]
+# DEBUG: ├── 💾 CACHE MISS Computing and storing result
+# DEBUG: │
+# DEBUG: ├── 📂 Main Pipeline
+# DEBUG: │   ├── 🚀 PIPELINE START: 2 operations
+# DEBUG: │   ├── ➡️ Input: String(hello,world)
+# DEBUG: │   ├── 1. Split(',')
+# DEBUG: │   ├── 2. Map(1)
+# DEBUG: │   ├── ⚙️ Step 1: Split
+# DEBUG: │   │   ├── ➡️ Input: String(hello,world)
+# DEBUG: │   │   ├── 🎯 Result: List["hello", "world"]
+# DEBUG: │   │   └── Time: 332.41µs
+# DEBUG: │   ├── ⚙️ Step 2: Map
+# DEBUG: │   │   ├── ➡️ Input: List["hello", "world"]
+# DEBUG: │   │   ├── 🎯 Result: String(processing...)
+# DEBUG: │   │   └── Time: 0ns
+# DEBUG: │   │   ├── 🗂️ Item 1/2
+# DEBUG: │   │   │   ├── ➡️ Input: "hello"
+# DEBUG: │   │   │   ├── 📂 Sub-Pipeline
+# DEBUG: │   │   │   │   ├── 🔧 SUB-PIPELINE START: 1 operations
+# DEBUG: │   │   │   │   ├── ➡️ Input: String(hello)
+# DEBUG: │   │   │   │   ├── ⚙️ Step 1: Upper
+# DEBUG: │   │   │   │   │   ├── ➡️ Input: String(hello)
+# DEBUG: │   │   │   │   │   ├── 🎯 Result: String(HELLO)
+# DEBUG: │   │   │   │   │   └── Time: 875ns
+# DEBUG: │   │   │   │   ├── ✅ SUB-PIPELINE COMPLETE
+# DEBUG: │   │   │   │   ├── 🎯 Result: String(HELLO)
+# DEBUG: │   │   │   │   └── Time: 16.37µs
+# DEBUG: │   │   │   └── Output: "HELLO"
+# DEBUG: │   │   ├── 🗂️ Item 2/2
+# DEBUG: │   │   │   ├── ➡️ Input: "world"
+# DEBUG: │   │   │   ├── 📂 Sub-Pipeline
+# DEBUG: │   │   │   │   ├── 🔧 SUB-PIPELINE START: 1 operations
+# DEBUG: │   │   │   │   ├── ➡️ Input: String(world)
+# DEBUG: │   │   │   │   ├── ⚙️ Step 1: Upper
+# DEBUG: │   │   │   │   │   ├── ➡️ Input: String(world)
+# DEBUG: │   │   │   │   │   ├── 🎯 Result: String(WORLD)
+# DEBUG: │   │   │   │   │   └── Time: 93ns
+# DEBUG: │   │   │   │   ├── ✅ SUB-PIPELINE COMPLETE
+# DEBUG: │   │   │   │   ├── 🎯 Result: String(WORLD)
+# DEBUG: │   │   │   │   └── Time: 15.749µs
+# DEBUG: │   │   │   └── Output: "WORLD"
+# DEBUG: │   │   └── 📦 MAP COMPLETED: 2 → 2 items
+# DEBUG: │   ├── ✅ PIPELINE COMPLETE
+# DEBUG: │   ├── 🎯 Result: List["HELLO", "WORLD"]
+# DEBUG: │   └── Time: 457.193µs
+# DEBUG: │
+# DEBUG: ├── 🏁 ✅ MULTI-TEMPLATE COMPLETE
+# DEBUG: ├── 🎯 Final result: "HELLO,WORLD"
+# DEBUG: ├── Total execution time: 568.533µs
+# DEBUG: └── Cache stats: 0 regex patterns, 1 split operations cached
 # HELLO,WORLD
 ```
 
