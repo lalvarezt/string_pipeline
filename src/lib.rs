@@ -22,7 +22,7 @@
 //! use string_pipeline::Template;
 //!
 //! // Split by comma, take first 2 items, join with " and "
-//! let template = Template::parse("{split:,:0..2|join: and }").unwrap();
+//! let template = Template::parse("{split:,:0..2|join: and }", None).unwrap();
 //! let result = template.format("apple,banana,cherry,date").unwrap();
 //! assert_eq!(result, "apple and banana");
 //! ```
@@ -84,7 +84,7 @@
 //! ```rust
 //! use string_pipeline::Template;
 //!
-//! let template = Template::parse("{!split:,:..}").unwrap();
+//! let template = Template::parse("{!split:,:..}", None).unwrap();
 //! // Outputs detailed debug information during processing
 //! let result = template.format("a,b,c").unwrap();
 //! assert_eq!(result, "a,b,c");
@@ -99,12 +99,12 @@
 //! use string_pipeline::MultiTemplate;
 //!
 //! // Combine literal text with template operations
-//! let template = MultiTemplate::parse("Name: {split: :0} Age: {split: :1}").unwrap();
+//! let template = MultiTemplate::parse("Name: {split: :0} Age: {split: :1}", None).unwrap();
 //! let result = template.format("John 25").unwrap();
 //! assert_eq!(result, "Name: John Age: 25");
 //!
 //! // Automatic caching: split operation performed only once
-//! let template = MultiTemplate::parse("First: {split:,:0} Second: {split:,:1}").unwrap();
+//! let template = MultiTemplate::parse("First: {split:,:0} Second: {split:,:1}", None).unwrap();
 //! let result = template.format("apple,banana").unwrap();
 //! assert_eq!(result, "First: apple Second: banana");
 //! ```
@@ -116,7 +116,7 @@
 //! use string_pipeline::Template;
 //!
 //! // Clean and normalize text
-//! let cleaner = Template::parse("{trim|replace:s/\\s+/ /g|lower}").unwrap();
+//! let cleaner = Template::parse("{trim|replace:s/\\s+/ /g|lower}", None).unwrap();
 //! let result = cleaner.format("  Hello    WORLD  ").unwrap();
 //! assert_eq!(result, "hello world");
 //! ```
@@ -126,7 +126,7 @@
 //! use string_pipeline::Template;
 //!
 //! // Extract second field from space-separated data
-//! let extractor = Template::parse("{split: :1}").unwrap();
+//! let extractor = Template::parse("{split: :1}", None).unwrap();
 //! let result = extractor.format("user 1234 active").unwrap();
 //! assert_eq!(result, "1234");
 //! ```
@@ -136,7 +136,7 @@
 //! use string_pipeline::Template;
 //!
 //! // Process each item in a list
-//! let processor = Template::parse("{split:,:..|map:{trim|upper}|join:\\|}").unwrap();
+//! let processor = Template::parse("{split:,:..|map:{trim|upper}|join:\\|}", None).unwrap();
 //! let result = processor.format(" apple, banana , cherry ").unwrap();
 //! assert_eq!(result, "APPLE|BANANA|CHERRY");
 //! ```
@@ -146,7 +146,7 @@
 //! use string_pipeline::Template;
 //!
 //! // Extract domains from URLs
-//! let domain_extractor = Template::parse("{split:,:..|map:{regex_extract://([^/]+):1|upper}}").unwrap();
+//! let domain_extractor = Template::parse("{split:,:..|map:{regex_extract://([^/]+):1|upper}}", None).unwrap();
 //! let result = domain_extractor.format("https://github.com,https://google.com").unwrap();
 //! assert_eq!(result, "GITHUB.COM,GOOGLE.COM");
 //! ```
@@ -156,7 +156,7 @@
 //! use string_pipeline::Template;
 //!
 //! // Extract timestamps from log entries
-//! let log_parser = Template::parse(r"{split:\n:..|map:{regex_extract:\d\d\d\d-\d\d-\d\d}|filter_not:^$|join:\n}").unwrap();
+//! let log_parser = Template::parse(r"{split:\n:..|map:{regex_extract:\d\d\d\d-\d\d-\d\d}|filter_not:^$|join:\n}", None).unwrap();
 //! let logs = "2023-12-01 ERROR: Failed\n2023-12-02 INFO: Success\nInvalid line";
 //! let result = log_parser.format(logs).unwrap();
 //! assert_eq!(result, "2023-12-01\n2023-12-02");
@@ -167,7 +167,7 @@
 //! use string_pipeline::Template;
 //!
 //! // Filter files by extension
-//! let py_filter = Template::parse("{split:,:..|filter:\\.py$|sort|join:\\n}").unwrap();
+//! let py_filter = Template::parse("{split:,:..|filter:\\.py$|sort|join:\\n}", None).unwrap();
 //! let files = "app.py,readme.md,test.py,data.json";
 //! let result = py_filter.format(files).unwrap();
 //! assert_eq!(result, "app.py\ntest.py");
@@ -191,11 +191,11 @@
 //! use string_pipeline::Template;
 //!
 //! // Invalid template syntax
-//! let result = Template::parse("{split:}");
+//! let result = Template::parse("{split:}", None);
 //! assert!(result.is_err());
 //!
 //! // Type mismatch errors are clear and helpful
-//! let template = Template::parse("{sort}").unwrap();
+//! let template = Template::parse("{sort}", None).unwrap();
 //! let result = template.format("not_a_list");
 //! assert!(result.is_err());
 //! // Error: "Sort operation can only be applied to lists"
@@ -215,7 +215,7 @@
 //! use string_pipeline::Template;
 //!
 //! // Compile once
-//! let template = Template::parse("{split:,:0}").unwrap();
+//! let template = Template::parse("{split:,:0}", None).unwrap();
 //!
 //! // Reuse many times
 //! for input in &["a,b,c", "x,y,z", "1,2,3"] {

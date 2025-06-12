@@ -5,7 +5,7 @@ use string_pipeline::Template;
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("process_simple", |b| {
         b.iter(|| {
-            Template::parse(black_box("{split:/:-1}"))
+            Template::parse(black_box("{split:/:-1}"), None)
                 .unwrap()
                 .format(black_box("/home/user/.cargo/bin"))
                 .unwrap()
@@ -14,9 +14,10 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     c.bench_function("process_complex", |b| {
         b.iter(|| {
-            Template::parse(black_box(
-                "{split:,:0..2|map:{trim|prepend:num\\: }|join: - |upper}",
-            ))
+            Template::parse(
+                black_box("{split:,:0..2|map:{trim|prepend:num\\: }|join: - |upper}"),
+                None,
+            )
             .unwrap()
             .format(black_box("18,   4.92, Unknown"))
             .unwrap()

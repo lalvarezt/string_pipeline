@@ -67,8 +67,8 @@ use crate::pipeline::{DebugTracer, RangeSpec, StringOp, apply_ops_internal, appl
 /// use string_pipeline::Template;
 ///
 /// // These are equivalent:
-/// let t1 = Template::parse("{split: :1}").unwrap();
-/// let t2 = Template::parse("{1}").unwrap();
+/// let t1 = Template::parse("{split: :1}", None).unwrap();
+/// let t2 = Template::parse("{1}", None).unwrap();
 ///
 /// let result = t1.format("a b c").unwrap();
 /// assert_eq!(result, "b");
@@ -95,7 +95,7 @@ use crate::pipeline::{DebugTracer, RangeSpec, StringOp, apply_ops_internal, appl
 /// use string_pipeline::Template;
 ///
 /// // Clean and normalize text
-/// let cleaner = Template::parse("{trim|replace:s/\\s+/ /g|lower}").unwrap();
+/// let cleaner = Template::parse("{trim|replace:s/\\s+/ /g|lower}", None).unwrap();
 /// let result = cleaner.format("  Hello    WORLD  ").unwrap();
 /// assert_eq!(result, "hello world");
 /// ```
@@ -106,7 +106,7 @@ use crate::pipeline::{DebugTracer, RangeSpec, StringOp, apply_ops_internal, appl
 /// use string_pipeline::Template;
 ///
 /// // Split, filter, and rejoin
-/// let filter_template = Template::parse("{split:,:..|filter:^[aeiou]|join:\\|}").unwrap();
+/// let filter_template = Template::parse("{split:,:..|filter:^[aeiou]|join:\\|}", None).unwrap();
 /// let result = filter_template.format("apple,banana,orange,grape").unwrap();
 /// assert_eq!(result, "apple|orange");
 /// ```
@@ -117,7 +117,7 @@ use crate::pipeline::{DebugTracer, RangeSpec, StringOp, apply_ops_internal, appl
 /// use string_pipeline::Template;
 ///
 /// // Extract usernames from process list
-/// let ps_parser = Template::parse("{split:\\n:1..|map:{split: :0}|unique|sort|join:\\n}").unwrap();
+/// let ps_parser = Template::parse("{split:\\n:1..|map:{split: :0}|unique|sort|join:\\n}", None).unwrap();
 /// let ps_output = "USER   PID\nroot   123\nalice  456\nroot   789";
 /// let result = ps_parser.format(ps_output).unwrap();
 /// assert_eq!(result, "alice\nroot");
@@ -130,7 +130,7 @@ use crate::pipeline::{DebugTracer, RangeSpec, StringOp, apply_ops_internal, appl
 ///
 /// // Process CSV-like data
 /// let csv_processor = Template::parse(
-///     "{split:\\n:1..|map:{split:,:0|trim|upper|prepend:USER_}|join:\\|}"
+///     "{split:\\n:1..|map:{split:,:0|trim|upper|prepend:USER_}|join:\\|}", None
 /// ).unwrap();
 ///
 /// let csv = "name,age\nAlice,25\nBob,30";
@@ -145,7 +145,7 @@ use crate::pipeline::{DebugTracer, RangeSpec, StringOp, apply_ops_internal, appl
 /// ```rust
 /// use string_pipeline::Template;
 ///
-/// let template = Template::parse("{!split:,:..}").unwrap();
+/// let template = Template::parse("{!split:,:..}", None).unwrap();
 /// // Outputs detailed operation traces with hierarchical structure to stderr
 /// let result = template.format("a,b,c").unwrap();
 /// assert_eq!(result, "a,b,c");
@@ -161,9 +161,9 @@ use crate::pipeline::{DebugTracer, RangeSpec, StringOp, apply_ops_internal, appl
 /// use string_pipeline::Template;
 ///
 /// // Invalid syntax
-/// assert!(Template::parse("{split:}").is_err());
-/// assert!(Template::parse("{unknown_op}").is_err());
-/// assert!(Template::parse("{split:,:|invalid_range}").is_err());
+/// assert!(Template::parse("{split:}", None).is_err());
+/// assert!(Template::parse("{unknown_op}", None).is_err());
+/// assert!(Template::parse("{split:,:|invalid_range}", None).is_err());
 /// ```
 ///
 /// ## Runtime Errors
@@ -172,12 +172,12 @@ use crate::pipeline::{DebugTracer, RangeSpec, StringOp, apply_ops_internal, appl
 /// use string_pipeline::Template;
 ///
 /// // Invalid regex patterns fail at runtime
-/// let template = Template::parse("{filter:[}").unwrap();
+/// let template = Template::parse("{filter:[}", None).unwrap();
 /// let result = template.format("test");
 /// assert!(result.is_err());
 ///
 /// // Operations on wrong data types
-/// let template = Template::parse("{sort}").unwrap();
+/// let template = Template::parse("{sort}", None).unwrap();
 /// let result = template.format("not_a_list");
 /// assert!(result.is_err());
 /// ```
@@ -196,7 +196,7 @@ use crate::pipeline::{DebugTracer, RangeSpec, StringOp, apply_ops_internal, appl
 /// use string_pipeline::Template;
 ///
 /// // Compile once
-/// let template = Template::parse("{split:,:0}").unwrap();
+/// let template = Template::parse("{split:,:0}", None).unwrap();
 ///
 /// // Reuse many times
 /// for input in &["a,b,c", "x,y,z", "1,2,3"] {
@@ -238,6 +238,7 @@ impl Template {
     /// # Arguments
     ///
     /// * `template` - A template string following the documented syntax
+    /// * `debug` - Optional debug mode override. If `None`, uses debug flag from template syntax (`{!...}`)
     ///
     /// # Returns
     ///
@@ -261,15 +262,15 @@ impl Template {
     /// use string_pipeline::Template;
     ///
     /// // Simple operations
-    /// assert!(Template::parse("{upper}").is_ok());
-    /// assert!(Template::parse("{split:,:..}").is_ok());
-    /// assert!(Template::parse("{trim|upper|append:!}").is_ok());
+    /// assert!(Template::parse("{upper}", None).is_ok());
+    /// assert!(Template::parse("{split:,:..}", None).is_ok());
+    /// assert!(Template::parse("{trim|upper|append:!}", None).is_ok());
     ///
     /// // Complex pipelines
-    /// assert!(Template::parse("{split:,:..|map:{trim|upper}|join:-}").is_ok());
+    /// assert!(Template::parse("{split:,:..|map:{trim|upper}|join:-}", None).is_ok());
     ///
     /// // Debug mode
-    /// assert!(Template::parse("{!split:,:..}").is_ok());
+    /// assert!(Template::parse("{!split:,:..}", None).is_ok());
     /// ```
     ///
     /// ## Parse Errors
@@ -278,24 +279,26 @@ impl Template {
     /// use string_pipeline::Template;
     ///
     /// // Missing arguments
-    /// assert!(Template::parse("{split:}").is_err());
+    /// assert!(Template::parse("{split:}", None).is_err());
     ///
     /// // Invalid syntax
-    /// assert!(Template::parse("{split:,||}").is_err());
-    /// assert!(Template::parse("no_braces").is_err());
+    /// assert!(Template::parse("{split:,||}", None).is_err());
+    /// assert!(Template::parse("no_braces", None).is_err());
     ///
     /// // Unknown operations
-    /// assert!(Template::parse("{unknown_operation}").is_err());
+    /// assert!(Template::parse("{unknown_operation}", None).is_err());
     ///
     /// // Invalid ranges
-    /// assert!(Template::parse("{split:,:abc}").is_err());
-    /// assert!(Template::parse("{1..abc}").is_err());
+    /// assert!(Template::parse("{split:,:abc}", None).is_err());
+    /// assert!(Template::parse("{1..abc}", None).is_err());
     /// ```
-    pub fn parse(template: &str) -> Result<Self, String> {
-        match parser::parse_template(template) {
-            Ok((ops, debug)) => Ok(Template::new(template.to_string(), ops, debug)),
-            Err(e) => Err(e),
-        }
+    pub fn parse(template: &str, debug: Option<bool>) -> Result<Self, String> {
+        let (operations, _debug) = parser::parse_template(template)?;
+        Ok(Self::new(
+            template.to_string(),
+            operations,
+            debug.unwrap_or(_debug),
+        ))
     }
 
     /// Applies the template operations to the input string.
@@ -328,7 +331,7 @@ impl Template {
     /// ```rust
     /// use string_pipeline::Template;
     ///
-    /// let template = Template::parse("{split:,:0..2|join: and }").unwrap();
+    /// let template = Template::parse("{split:,:0..2|join: and }", None).unwrap();
     /// let result = template.format("apple,banana,cherry,date").unwrap();
     /// assert_eq!(result, "apple and banana");
     /// ```
@@ -339,12 +342,12 @@ impl Template {
     /// use string_pipeline::Template;
     ///
     /// // Operations on wrong types
-    /// let template = Template::parse("{sort}").unwrap();
+    /// let template = Template::parse("{sort}", None).unwrap();
     /// let result = template.format("single_string");
     /// assert!(result.is_err());
     ///
     /// // Invalid regex (caught at runtime)
-    /// let template_with_bad_regex = Template::parse("{filter:[}").unwrap();
+    /// let template_with_bad_regex = Template::parse("{filter:[}", None).unwrap();
     /// let invalid_regex_result = template_with_bad_regex.format("test");
     /// assert!(invalid_regex_result.is_err());
     /// ```
@@ -354,7 +357,7 @@ impl Template {
     /// ```rust
     /// use string_pipeline::Template;
     ///
-    /// let template = Template::parse("{split:,:..}").unwrap();
+    /// let template = Template::parse("{split:,:..}", None).unwrap();
     ///
     /// // Empty input
     /// assert_eq!(template.format("").unwrap(), "");
@@ -363,7 +366,7 @@ impl Template {
     /// assert_eq!(template.format("single").unwrap(), "single");
     ///
     /// // Out of bounds access (handled gracefully)
-    /// let template = Template::parse("{split:,:10}").unwrap();
+    /// let template = Template::parse("{split:,:10}", None).unwrap();
     /// assert_eq!(template.format("a,b").unwrap(), "b"); // Clamps to last item
     /// ```
     pub fn format(&self, input: &str) -> Result<String, String> {
@@ -392,7 +395,7 @@ impl Template {
     /// ```rust
     /// use string_pipeline::Template;
     ///
-    /// let template = Template::parse("{upper|trim}").unwrap();
+    /// let template = Template::parse("{upper|trim}", None).unwrap();
     /// assert_eq!(template.template_string(), "{upper|trim}");
     /// ```
     pub fn template_string(&self) -> &str {
@@ -408,10 +411,10 @@ impl Template {
     /// ```rust
     /// use string_pipeline::Template;
     ///
-    /// let normal = Template::parse("{upper}").unwrap();
+    /// let normal = Template::parse("{upper}", None).unwrap();
     /// assert!(!normal.is_debug_enabled());
     ///
-    /// let debug = Template::parse("{!upper}").unwrap();
+    /// let debug = Template::parse("{!upper}", None).unwrap();
     /// assert!(debug.is_debug_enabled());
     /// ```
     pub fn is_debug_enabled(&self) -> bool {
@@ -427,10 +430,10 @@ impl Template {
     /// ```rust
     /// use string_pipeline::Template;
     ///
-    /// let simple = Template::parse("{upper}").unwrap();
+    /// let simple = Template::parse("{upper}", None).unwrap();
     /// assert_eq!(simple.operation_count(), 1);
     ///
-    /// let complex = Template::parse("{trim|upper|split:,:..}").unwrap();
+    /// let complex = Template::parse("{trim|upper|split:,:..}", None).unwrap();
     /// assert_eq!(complex.operation_count(), 3);
     /// ```
     pub fn operation_count(&self) -> usize {
@@ -444,10 +447,10 @@ impl Template {
     /// ```rust
     /// use string_pipeline::Template;
     ///
-    /// let normal = Template::parse("{upper}").unwrap();
+    /// let normal = Template::parse("{upper}", None).unwrap();
     /// assert_eq!(normal.is_debug(), false);
     ///
-    /// let debug = Template::parse("{!upper}").unwrap();
+    /// let debug = Template::parse("{!upper}", None).unwrap();
     /// assert_eq!(debug.is_debug(), true);
     /// ```
     pub fn is_debug(&self) -> bool {
@@ -473,7 +476,7 @@ impl Template {
     /// use string_pipeline::Template;
     ///
     /// // Method chaining with builder pattern
-    /// let result = Template::parse("{upper}")
+    /// let result = Template::parse("{upper}", None)
     ///     .unwrap()
     ///     .with_debug(false)
     ///     .format("hello")
@@ -499,7 +502,7 @@ impl Template {
     /// ```rust
     /// use string_pipeline::Template;
     ///
-    /// let mut template = Template::parse("{upper}").unwrap();
+    /// let mut template = Template::parse("{upper}", None).unwrap();
     /// template.set_debug(false);
     /// let result = template.format("hello").unwrap();
     /// assert_eq!(result, "HELLO");
@@ -531,7 +534,7 @@ impl TryFrom<&str> for Template {
     /// assert_eq!(template.format("HELLO").unwrap(), "hello");
     /// ```
     fn try_from(template: &str) -> Result<Self, Self::Error> {
-        Template::parse(template)
+        Template::parse(template, None)
     }
 }
 
@@ -545,7 +548,7 @@ impl Display for Template {
     /// ```rust
     /// use string_pipeline::Template;
     ///
-    /// let template = Template::parse("{upper|trim}").unwrap();
+    /// let template = Template::parse("{upper|trim}", None).unwrap();
     /// println!("Using template: {}", template); // Prints: Using template: {upper|trim}
     /// ```
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -575,7 +578,7 @@ impl Display for Template {
 /// use string_pipeline::MultiTemplate;
 ///
 /// // The split operation will only be performed once, cached for reuse
-/// let template = MultiTemplate::parse("First: {split:,:0} Second: {split:,:1}").unwrap();
+/// let template = MultiTemplate::parse("First: {split:,:0} Second: {split:,:1}", None).unwrap();
 /// let result = template.format("apple,banana,cherry").unwrap();
 /// assert_eq!(result, "First: apple Second: banana");
 /// ```
@@ -685,6 +688,7 @@ impl MultiTemplate {
     /// # Arguments
     ///
     /// * `template` - The multi-template string to parse
+    /// * `debug` - Optional debug mode override. If `None`, uses debug flag from template syntax (`{!...}`)
     ///
     /// # Returns
     ///
@@ -697,18 +701,22 @@ impl MultiTemplate {
     /// use string_pipeline::MultiTemplate;
     ///
     /// // Parse a multi-template with literal text and operations
-    /// let template = MultiTemplate::parse("Name: {split: :0} Age: {split: :1}").unwrap();
+    /// let template = MultiTemplate::parse("Name: {split: :0} Age: {split: :1}", None).unwrap();
     /// let result = template.format("John 25").unwrap();
     /// assert_eq!(result, "Name: John Age: 25");
     ///
     /// // Templates with the same operation will be cached
-    /// let template = MultiTemplate::parse("A: {split:,:0} B: {split:,:1} C: {split:,:0}").unwrap();
+    /// let template = MultiTemplate::parse("A: {split:,:0} B: {split:,:1} C: {split:,:0}", None).unwrap();
     /// let result = template.format("x,y,z").unwrap();
     /// assert_eq!(result, "A: x B: y C: x");
     /// ```
-    pub fn parse(template: &str) -> Result<Self, String> {
-        let (sections, debug) = parser::parse_multi_template(template)?;
-        Ok(Self::new(template.to_string(), sections, debug))
+    pub fn parse(template: &str, debug: Option<bool>) -> Result<Self, String> {
+        let (sections, _debug) = parser::parse_multi_template(template)?;
+        Ok(Self::new(
+            template.to_string(),
+            sections,
+            debug.unwrap_or(_debug),
+        ))
     }
 
     /// Applies the multi-template to an input string with optimized caching.
@@ -730,7 +738,7 @@ impl MultiTemplate {
     /// ```rust
     /// use string_pipeline::MultiTemplate;
     ///
-    /// let template = MultiTemplate::parse("Start {upper} End").unwrap();
+    /// let template = MultiTemplate::parse("Start {upper} End", None).unwrap();
     /// let result = template.format("hello").unwrap();
     /// assert_eq!(result, "Start HELLO End");
     /// ```
@@ -950,10 +958,10 @@ impl MultiTemplate {
     /// ```rust
     /// use string_pipeline::MultiTemplate;
     ///
-    /// let normal = MultiTemplate::parse("Hello {upper}").unwrap();
+    /// let normal = MultiTemplate::parse("Hello {upper}", None).unwrap();
     /// assert_eq!(normal.is_debug(), false);
     ///
-    /// let debug = MultiTemplate::parse("Hello {!upper}").unwrap();
+    /// let debug = MultiTemplate::parse("Hello {!upper}", None).unwrap();
     /// assert_eq!(debug.is_debug(), true);
     /// ```
     pub fn is_debug(&self) -> bool {
@@ -979,7 +987,7 @@ impl MultiTemplate {
     /// use string_pipeline::MultiTemplate;
     ///
     /// // Method chaining with builder pattern
-    /// let result = MultiTemplate::parse("Hello {upper}")
+    /// let result = MultiTemplate::parse("Hello {upper}", None)
     ///     .unwrap()
     ///     .with_debug(false)
     ///     .format("world")
@@ -1005,7 +1013,7 @@ impl MultiTemplate {
     /// ```rust
     /// use string_pipeline::MultiTemplate;
     ///
-    /// let mut template = MultiTemplate::parse("Hello {upper}").unwrap();
+    /// let mut template = MultiTemplate::parse("Hello {upper}", None).unwrap();
     /// template.set_debug(false);
     /// let result = template.format("world").unwrap();
     /// assert_eq!(result, "Hello WORLD");
@@ -1032,7 +1040,7 @@ impl TryFrom<&str> for MultiTemplate {
     /// assert_eq!(template.format("world").unwrap(), "Hello WORLD!");
     /// ```
     fn try_from(template: &str) -> Result<Self, Self::Error> {
-        Self::parse(template)
+        Self::parse(template, None)
     }
 }
 
@@ -1044,7 +1052,7 @@ impl Display for MultiTemplate {
     /// ```rust
     /// use string_pipeline::MultiTemplate;
     ///
-    /// let template = MultiTemplate::parse("Hello {upper}!").unwrap();
+    /// let template = MultiTemplate::parse("Hello {upper}!", None).unwrap();
     /// println!("{}", template); // Output: "Hello {upper}!"
     /// ```
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

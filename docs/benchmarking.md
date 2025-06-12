@@ -607,7 +607,7 @@ fi
 // Performance-critical path in benchmark execution
 fn benchmark_template(&self, name: &str, template_str: &str) -> BenchmarkResult {
     // 1. Template compilation (one-time cost)
-    let template = Template::parse(template_str).unwrap();
+    let template = Template::parse(template_str, None).unwrap();
 
     // 2. Hot loop (measured operations)
     for _ in 0..self.iterations {

@@ -4,7 +4,7 @@ use string_pipeline::MultiTemplate;
 #[test]
 fn test_multi_template_literal_text_only() {
     // Test with only literal text, no template sections
-    let template = MultiTemplate::parse("Just plain text without any templates").unwrap();
+    let template = MultiTemplate::parse("Just plain text without any templates", None).unwrap();
     let result = template.format("input_ignored").unwrap();
     assert_eq!(result, "Just plain text without any templates");
 }
@@ -12,7 +12,7 @@ fn test_multi_template_literal_text_only() {
 #[test]
 fn test_multi_template_single_template_section() {
     // Test with just one template section and literal text
-    let template = MultiTemplate::parse("Prefix {upper} Suffix").unwrap();
+    let template = MultiTemplate::parse("Prefix {upper} Suffix", None).unwrap();
     let result = template.format("hello").unwrap();
     assert_eq!(result, "Prefix HELLO Suffix");
 }
@@ -20,7 +20,7 @@ fn test_multi_template_single_template_section() {
 #[test]
 fn test_multi_template_multiple_template_sections() {
     // Test multiple template sections with different operations
-    let template = MultiTemplate::parse("A: {upper} B: {lower} C: {trim}").unwrap();
+    let template = MultiTemplate::parse("A: {upper} B: {lower} C: {trim}", None).unwrap();
     let result = template.format("  MiXeD  ").unwrap();
     assert_eq!(result, "A:   MIXED   B:   mixed   C: MiXeD");
 }
@@ -28,9 +28,11 @@ fn test_multi_template_multiple_template_sections() {
 #[test]
 fn test_multi_template_complex_operations() {
     // Test complex operations within multi-template sections
-    let template =
-        MultiTemplate::parse("Users: {split:,:1..3|join:;} Count: {split:,:..|map:{upper}|join:-}")
-            .unwrap();
+    let template = MultiTemplate::parse(
+        "Users: {split:,:1..3|join:;} Count: {split:,:..|map:{upper}|join:-}",
+        None,
+    )
+    .unwrap();
     let result = template.format("alice,bob,charlie,dave,eve").unwrap();
     assert_eq!(
         result,
@@ -43,6 +45,7 @@ fn test_multi_template_caching_optimization() {
     // Test that split operations are cached and reused efficiently
     let template = MultiTemplate::parse(
         "First: {split:,:0} Second: {split:,:1} Third: {split:,:0} Fourth: {split:,:2}",
+        None,
     )
     .unwrap();
     let result = template.format("apple,banana,cherry,date").unwrap();
@@ -55,8 +58,11 @@ fn test_multi_template_caching_optimization() {
 #[test]
 fn test_multi_template_different_separators() {
     // Test multiple template sections with different separators
-    let template =
-        MultiTemplate::parse("Comma: {split:,:0} Space: {split: :1} Pipe: {split:|:0}").unwrap();
+    let template = MultiTemplate::parse(
+        "Comma: {split:,:0} Space: {split: :1} Pipe: {split:|:0}",
+        None,
+    )
+    .unwrap();
     let result = template.format("a,b c|d").unwrap();
     assert_eq!(result, "Comma: a Space: c|d Pipe: a,b c");
 }
@@ -65,7 +71,7 @@ fn test_multi_template_different_separators() {
 fn test_multi_template_nested_braces() {
     // Test that nested braces are handled correctly in multi-templates
     let template =
-        MultiTemplate::parse("Result: {split:,:..|map:{upper|append:!}|join:-}").unwrap();
+        MultiTemplate::parse("Result: {split:,:..|map:{upper|append:!}|join:-}", None).unwrap();
     let result = template.format("hello,world,test").unwrap();
     assert_eq!(result, "Result: HELLO!-WORLD!-TEST!");
 }
@@ -73,7 +79,7 @@ fn test_multi_template_nested_braces() {
 #[test]
 fn test_multi_template_empty_sections() {
     // Test handling of empty template sections and adjacent braces
-    let template = MultiTemplate::parse("Start {upper} Middle {lower} End").unwrap();
+    let template = MultiTemplate::parse("Start {upper} Middle {lower} End", None).unwrap();
     let result = template.format("test").unwrap();
     assert_eq!(result, "Start TEST Middle test End");
 }
@@ -81,7 +87,7 @@ fn test_multi_template_empty_sections() {
 #[test]
 fn test_multi_template_debug_mode() {
     // Test debug mode functionality in multi-templates
-    let template = MultiTemplate::parse("Debug: {!upper} Normal: {lower}").unwrap();
+    let template = MultiTemplate::parse("Debug: {!upper} Normal: {lower}", None).unwrap();
     assert!(template.is_debug_enabled());
     let result = template.format("TeSt").unwrap();
     assert_eq!(result, "Debug: TEST Normal: test");
@@ -100,7 +106,7 @@ fn test_multi_template_try_from_trait() {
 #[test]
 fn test_multi_template_display_trait() {
     // Test Display implementation shows original template string
-    let template = MultiTemplate::parse("Hello {upper} World!").unwrap();
+    let template = MultiTemplate::parse("Hello {upper} World!", None).unwrap();
     assert_eq!(format!("{}", template), "Hello {upper} World!");
 }
 
@@ -108,14 +114,14 @@ fn test_multi_template_display_trait() {
 fn test_multi_template_template_string_method() {
     // Test template_string method returns original template
     let template_str = "Test {lower} Template";
-    let template = MultiTemplate::parse(template_str).unwrap();
+    let template = MultiTemplate::parse(template_str, None).unwrap();
     assert_eq!(template.template_string(), template_str);
 }
 
 #[test]
 fn test_multi_template_section_counts() {
     // Test section counting methods
-    let template = MultiTemplate::parse("A {upper} B {lower} C").unwrap();
+    let template = MultiTemplate::parse("A {upper} B {lower} C", None).unwrap();
     assert_eq!(template.section_count(), 5); // "A ", upper, " B ", lower, " C"
     assert_eq!(template.template_section_count(), 2); // upper and lower operations
 }
@@ -123,7 +129,7 @@ fn test_multi_template_section_counts() {
 #[test]
 fn test_multi_template_special_characters() {
     // Test multi-templates with special characters in literal text
-    let template = MultiTemplate::parse("Price: $100 {upper} & more!").unwrap();
+    let template = MultiTemplate::parse("Price: $100 {upper} & more!", None).unwrap();
     let result = template.format("discount").unwrap();
     assert_eq!(result, "Price: $100 DISCOUNT & more!");
 }
@@ -131,7 +137,7 @@ fn test_multi_template_special_characters() {
 #[test]
 fn test_multi_template_unicode_support() {
     // Test Unicode support in both literal text and operations
-    let template = MultiTemplate::parse("🎉 Result: {upper} 🎊").unwrap();
+    let template = MultiTemplate::parse("🎉 Result: {upper} 🎊", None).unwrap();
     let result = template.format("café").unwrap();
     assert_eq!(result, "🎉 Result: CAFÉ 🎊");
 }
@@ -139,7 +145,7 @@ fn test_multi_template_unicode_support() {
 #[test]
 fn test_multi_template_whitespace_preservation() {
     // Test that whitespace in literal sections is preserved
-    let template = MultiTemplate::parse("   Before   {trim}   After   ").unwrap();
+    let template = MultiTemplate::parse("   Before   {trim}   After   ", None).unwrap();
     let result = template.format("  test  ").unwrap();
     assert_eq!(result, "   Before   test   After   ");
 }
@@ -147,7 +153,7 @@ fn test_multi_template_whitespace_preservation() {
 #[test]
 fn test_multi_template_consecutive_templates() {
     // Test consecutive template sections without literal text between them
-    let template = MultiTemplate::parse("{upper}{lower}").unwrap();
+    let template = MultiTemplate::parse("{upper}{lower}", None).unwrap();
     let result = template.format("TeSt").unwrap();
     assert_eq!(result, "TESTtest");
 }
@@ -155,7 +161,7 @@ fn test_multi_template_consecutive_templates() {
 #[test]
 fn test_multi_template_shorthand_syntax() {
     // Test shorthand syntax within multi-templates
-    let template = MultiTemplate::parse("First: {0} Last: {-1}").unwrap();
+    let template = MultiTemplate::parse("First: {0} Last: {-1}", None).unwrap();
     let result = template.format("apple banana cherry").unwrap();
     assert_eq!(result, "First: apple Last: cherry");
 }
@@ -163,7 +169,7 @@ fn test_multi_template_shorthand_syntax() {
 #[test]
 fn test_multi_template_range_operations() {
     // Test range operations in multi-templates
-    let template = MultiTemplate::parse("Range: {1..3} Substring: {substring:2..5}").unwrap();
+    let template = MultiTemplate::parse("Range: {1..3} Substring: {substring:2..5}", None).unwrap();
     let result = template.format("one two three four five").unwrap();
     assert_eq!(result, "Range: two three Substring: e t");
 }
@@ -173,6 +179,7 @@ fn test_multi_template_filter_operations() {
     // Test filter operations in multi-templates
     let template = MultiTemplate::parse(
         "Original: {split:,:..|join:,} Filtered: {split:,:..|filter:test|join:,}",
+        None,
     )
     .unwrap();
     let result = template.format("apple,test1,banana,test2").unwrap();
@@ -185,9 +192,11 @@ fn test_multi_template_filter_operations() {
 #[test]
 fn test_multi_template_regex_operations() {
     // Test regex operations in multi-templates
-    let template =
-        MultiTemplate::parse("Numbers: {regex_extract:\\d+} Letters: {regex_extract:[a-z]+}")
-            .unwrap();
+    let template = MultiTemplate::parse(
+        "Numbers: {regex_extract:\\d+} Letters: {regex_extract:[a-z]+}",
+        None,
+    )
+    .unwrap();
     let result = template.format("abc123def456").unwrap();
     assert_eq!(result, "Numbers: 123 Letters: abc");
 }
@@ -197,7 +206,7 @@ fn test_multi_template_regex_operations() {
 #[test]
 fn test_multi_template_unclosed_brace_error() {
     // Test error when template section is not closed
-    let result = MultiTemplate::parse("Hello {upper world");
+    let result = MultiTemplate::parse("Hello {upper world", None);
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("Unclosed template brace"));
 }
@@ -205,21 +214,21 @@ fn test_multi_template_unclosed_brace_error() {
 #[test]
 fn test_multi_template_invalid_operation_error() {
     // Test error when template section contains invalid operation
-    let result = MultiTemplate::parse("Hello {invalid_operation} World");
+    let result = MultiTemplate::parse("Hello {invalid_operation} World", None);
     assert!(result.is_err());
 }
 
 #[test]
 fn test_multi_template_malformed_nested_braces() {
     // Test error handling for malformed nested braces
-    let result = MultiTemplate::parse("Test {split:,:0|map:{upper} incomplete");
+    let result = MultiTemplate::parse("Test {split:,:0|map:{upper} incomplete", None);
     assert!(result.is_err());
 }
 
 #[test]
 fn test_multi_template_format_error_propagation() {
     // Test that format errors from individual sections are properly propagated
-    let template = MultiTemplate::parse("Valid: {upper} Invalid: {regex_extract:[}").unwrap();
+    let template = MultiTemplate::parse("Valid: {upper} Invalid: {regex_extract:[}", None).unwrap();
     let result = template.format("test");
     assert!(result.is_err());
 }
@@ -229,8 +238,11 @@ fn test_multi_template_format_error_propagation() {
 #[test]
 fn test_multi_template_csv_processing() {
     // Test processing CSV-like data with multi-templates
-    let template =
-        MultiTemplate::parse("Name: {split:,:0} | Age: {split:,:1} | Email: {split:,:2}").unwrap();
+    let template = MultiTemplate::parse(
+        "Name: {split:,:0} | Age: {split:,:1} | Email: {split:,:2}",
+        None,
+    )
+    .unwrap();
     let result = template.format("John Doe,25,john@example.com").unwrap();
     assert_eq!(result, "Name: John Doe | Age: 25 | Email: john@example.com");
 }
@@ -238,8 +250,11 @@ fn test_multi_template_csv_processing() {
 #[test]
 fn test_multi_template_log_processing() {
     // Test log processing scenario
-    let template =
-        MultiTemplate::parse("[{split: :0}] Level: {split: :1} Message: {split: :2..}").unwrap();
+    let template = MultiTemplate::parse(
+        "[{split: :0}] Level: {split: :1} Message: {split: :2..}",
+        None,
+    )
+    .unwrap();
     let result = template
         .format("2023-01-01 ERROR Database connection failed")
         .unwrap();
@@ -252,7 +267,8 @@ fn test_multi_template_log_processing() {
 #[test]
 fn test_multi_template_path_processing() {
     // Test file path processing
-    let template = MultiTemplate::parse("Dir: {split:/:0..-1|join:/} File: {split:/:-1}").unwrap();
+    let template =
+        MultiTemplate::parse("Dir: {split:/:0..-1|join:/} File: {split:/:-1}", None).unwrap();
     let result = template.format("/home/user/documents/file.txt").unwrap();
     assert_eq!(result, "Dir: /home/user/documents File: file.txt");
 }
@@ -260,7 +276,7 @@ fn test_multi_template_path_processing() {
 #[test]
 fn test_multi_template_complex_formatting() {
     // Test complex formatting scenario combining multiple operations
-    let template = MultiTemplate::parse("Summary: {split:,:..|map:{trim|upper}|join:-} (Count: {split:,:..|map:{trim}|unique|join:,})").unwrap();
+    let template = MultiTemplate::parse("Summary: {split:,:..|map:{trim|upper}|join:-} (Count: {split:,:..|map:{trim}|unique|join:,})", None).unwrap();
     let result = template
         .format("  apple  , banana ,  apple  , cherry ")
         .unwrap();
@@ -278,7 +294,7 @@ fn test_multi_template_performance_with_many_sections() {
         .collect::<Vec<_>>()
         .join(" ");
 
-    let template = MultiTemplate::parse(&sections).unwrap();
+    let template = MultiTemplate::parse(&sections, None).unwrap();
     let result = template.format("a,b,c,d,e").unwrap();
 
     // Verify the template works and produces expected output
@@ -291,7 +307,7 @@ fn test_multi_template_performance_with_many_sections() {
 #[test]
 fn test_multi_template_empty_input() {
     // Test behavior with empty input
-    let template = MultiTemplate::parse("Before: {upper} After: {lower}").unwrap();
+    let template = MultiTemplate::parse("Before: {upper} After: {lower}", None).unwrap();
     let result = template.format("").unwrap();
     assert_eq!(result, "Before:  After: ");
 }
@@ -299,7 +315,7 @@ fn test_multi_template_empty_input() {
 #[test]
 fn test_multi_template_only_template_section() {
     // Test when entire string is just one template section
-    let template = MultiTemplate::parse("{split:,:..|map:{upper}|join:-}").unwrap();
+    let template = MultiTemplate::parse("{split:,:..|map:{upper}|join:-}", None).unwrap();
     let result = template.format("hello,world,test").unwrap();
     assert_eq!(result, "HELLO-WORLD-TEST");
 }
@@ -307,7 +323,7 @@ fn test_multi_template_only_template_section() {
 #[test]
 fn test_multi_template_mixed_operations() {
     // Test that split optimization doesn't interfere with other operations
-    let template = MultiTemplate::parse("First: {0} Upper: {upper} Last: {2}").unwrap();
+    let template = MultiTemplate::parse("First: {0} Upper: {upper} Last: {2}", None).unwrap();
     let result = template.format("hello world test").unwrap();
     assert_eq!(result, "First: hello Upper: HELLO WORLD TEST Last: test");
 }
