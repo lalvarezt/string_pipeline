@@ -3,6 +3,33 @@
 All notable changes to this project will be documented in this file.
 <!-- ignore lint rules that are often triggered by content generated from commits / git-cliff -->
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style -->
+## [0.12.0](https://github.com/lalvarezt/string_pipeline/compare/0.11.2..0.12.0) - 2025-06-13
+
+### ⛰️  Features
+
+- *(lib)* Rollback changes to parse and add a new parse_with_debug - ([cdf6bdf](https://github.com/lalvarezt/string_pipeline/commit/cdf6bdf6b08d561378e38685f31224fe7f69c1b1))
+- *(lib)* [**breaking**] Add debug parameter to parse function - ([bf551fb](https://github.com/lalvarezt/string_pipeline/commit/bf551fb68ddd9f94139179f15d75f306275e80d9))
+- *(template)* Remove logic for Template, now it's an alias to MultiTemplate - ([37f34c9](https://github.com/lalvarezt/string_pipeline/commit/37f34c90ad6717f39a4467f8258c33ab72c32219))
+
+### 🐛 Bug Fixes
+
+- *(template)* Rustier way - ([2bb3553](https://github.com/lalvarezt/string_pipeline/commit/2bb35536436665b8a2f6d81cf6a98655d3892208))
+
+### 🚜 Refactor
+
+- *(bench)* [**breaking**] Change bench name to string-pipeline-bench - ([199b5c1](https://github.com/lalvarezt/string_pipeline/commit/199b5c1a5979b204b70aff413f538ba2536e6712))
+- *(cli)* Remove template since multitemplate is a superset - ([974d985](https://github.com/lalvarezt/string_pipeline/commit/974d9859f4ac340da647239f1294c1fb308861c7))
+- *(cli)* [**breaking**] Remove json output, the tool only outputs a string - ([f06610a](https://github.com/lalvarezt/string_pipeline/commit/f06610aba75c23dfab0d0cd3af2325feb747259b))
+- *(debug)* [**breaking**] Refactor debug system - ([b3bf885](https://github.com/lalvarezt/string_pipeline/commit/b3bf885439839bb1634bc4527ba7d201ef7b63ab))
+
+### 📚 Documentation
+
+- *(debug)* Update to match the new system - ([f6309a0](https://github.com/lalvarezt/string_pipeline/commit/f6309a05bf2dc535d08af81cedbcffaaaa99eeda))
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump to 0.12.0 - ([8089c0b](https://github.com/lalvarezt/string_pipeline/commit/8089c0b23a9b2869b37d26db5901acfced336e22))
+
 ## [0.11.2](https://github.com/lalvarezt/string_pipeline/compare/0.11.1..0.11.2) - 2025-06-11
 
 ### ⛰️  Features
@@ -19,6 +46,7 @@ All notable changes to this project will be documented in this file.
 
 ### ⚙️ Miscellaneous Tasks
 
+- *(changelog)* Update changelog - ([c8edf97](https://github.com/lalvarezt/string_pipeline/commit/c8edf97459f3ba4b6bb08ee92888f44153d133f8))
 - Bump to 0.11.2 - ([f4a9f6e](https://github.com/lalvarezt/string_pipeline/commit/f4a9f6e90f5f41123eb54f65ec6523e4d0b22c96))
 
 ## [0.11.1](https://github.com/lalvarezt/string_pipeline/compare/0.11.0..0.11.1) - 2025-06-08
