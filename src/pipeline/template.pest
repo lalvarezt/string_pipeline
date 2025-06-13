@@ -1,6 +1,6 @@
 template = { "{" ~ debug_flag? ~ operation_list? ~ "}" }
 
-debug_flag = { "!" }
+debug_flag = @{ "!" }
 
 operation_list = { operation ~ ("|" ~ operation)* }
 
@@ -42,26 +42,26 @@ shorthand_range = {
 regex_extract = { "regex_extract" ~ ":" ~ regex_arg ~ (":" ~ number)? }
 filter_not    = { "filter_not" ~ ":" ~ regex_arg }
 filter        = { "filter" ~ ":" ~ regex_arg }
-strip_ansi    = { "strip_ansi" }
+strip_ansi    = @{ "strip_ansi" }
 map           = { "map" ~ ":" ~ map_operation }
 split         = { "split" ~ ":" ~ split_arg ~ ":" ~ range_spec? }
 substring     = { "substring" ~ ":" ~ range_spec }
 replace       = { "replace" ~ ":" ~ sed_string }
 append        = { "append" ~ ":" ~ simple_arg }
 prepend       = { "prepend" ~ ":" ~ simple_arg }
-upper         = { "upper" }
-lower         = { "lower" }
+upper         = @{ "upper" }
+lower         = @{ "lower" }
 trim          = { "trim" ~ (":" ~ simple_arg)? ~ (":" ~ direction)? }
 join          = { "join" ~ ":" ~ simple_arg }
 slice         = { "slice" ~ ":" ~ range_spec }
 sort          = { "sort" ~ (":" ~ sort_direction)? }
-reverse       = { "reverse" }
-unique        = { "unique" }
+reverse       = @{ "reverse" }
+unique        = @{ "unique" }
 pad           = { "pad" ~ ":" ~ number ~ (":" ~ pad_char)? ~ (":" ~ direction)? }
 
 // Direction specifiers
-direction      =  { "left" | "right" | "both" }
-sort_direction =  { "asc" | "desc" }
+direction      = @{ "left" | "right" | "both" }
+sort_direction = @{ "asc" | "desc" }
 pad_char       = @{ simple_arg_content+ }
 
 // Map operation
@@ -93,7 +93,7 @@ map_split      = { "split" ~ ":" ~ split_arg ~ (":" ~ range_spec)? }
 map_join       = { "join" ~ ":" ~ simple_arg }
 map_slice      = { "slice" ~ ":" ~ range_spec }
 map_sort       = { "sort" ~ (":" ~ sort_direction)? }
-map_unique     = { "unique" }
+map_unique     = @{ "unique" }
 map_filter     = { "filter" ~ ":" ~ map_regex_arg }
 map_filter_not = { "filter_not" ~ ":" ~ map_regex_arg }
 
@@ -125,7 +125,7 @@ map_regex_escaped_char =  { "\\" ~ ANY }
 escaped_char = { "\\" ~ ANY }
 
 // Operation keywords for lookahead (simplified list)
-operation_keyword = {
+operation_keyword = _{
     "split"
   | "upper"
   | "lower"
@@ -148,7 +148,7 @@ operation_keyword = {
 }
 
 // Range parts for lookahead
-range_part = { ".." | "..=" }
+range_part = _{ ".." | "..=" }
 
 // Sed strings
 sed_string       =  { "s/" ~ sed_pattern ~ "/" ~ sed_replacement ~ "/" ~ sed_flags? }
