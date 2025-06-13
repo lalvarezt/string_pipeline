@@ -97,13 +97,11 @@ impl DebugTracer {
         self.line_with_prefix(format!("🎯 Final result: {:?}", result), 1);
         self.line_with_prefix(format!("Total execution time: {:?}", elapsed), 1);
 
-        let regex_cache = REGEX_CACHE.lock().unwrap();
-        let split_cache = SPLIT_CACHE.lock().unwrap();
         self.line_with_ending_prefix(
             format!(
                 "Cache stats: {} regex patterns, {} split operations cached",
-                regex_cache.len(),
-                split_cache.len()
+                REGEX_CACHE.len(),
+                SPLIT_CACHE.len()
             ),
             1,
         );
@@ -439,16 +437,8 @@ impl DebugTracer {
 
     /// Formats a string operation for display with key parameters.
     ///
-    /// Provides informative representations of operations including
-    /// important parameters like separators and operation counts.
-    ///
-    /// # Arguments
-    ///
-    /// * `op` - The operation to format
-    ///
-    /// # Returns
-    ///
-    /// A formatted string representation of the operation
+    /// Provides informative representations of operations including important
+    /// parameters like separators and operation counts.
     fn format_operation(op: &StringOp) -> String {
         match op {
             StringOp::Split { sep, .. } => format!("Split('{}')", sep),
@@ -458,17 +448,7 @@ impl DebugTracer {
         }
     }
 
-    /// Returns the simple name of a string operation.
-    ///
-    /// Provides basic operation names without parameters for compact display.
-    ///
-    /// # Arguments
-    ///
-    /// * `op` - The operation to name
-    ///
-    /// # Returns
-    ///
-    /// The operation name as a string
+    /// Returns the simple name of a string operation without parameters.
     fn format_operation_name(op: &StringOp) -> String {
         match op {
             StringOp::Split { .. } => "Split".to_string(),

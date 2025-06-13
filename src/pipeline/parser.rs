@@ -9,8 +9,10 @@
 //! characters in different contexts.
 //!
 
+use once_cell::sync::OnceCell;
 use pest::Parser;
 use pest_derive::Parser;
+use smallvec::SmallVec;
 
 use super::{PadDirection, RangeSpec, SortDirection, StringOp, TrimDirection};
 
@@ -128,8 +130,9 @@ pub fn parse_multi_template(template: &str) -> Result<(Vec<TemplateSection>, boo
 
             // Save any accumulated literal text
             if !current_literal.is_empty() {
-                sections.push(TemplateSection::Literal(current_literal.clone()));
-                current_literal.clear();
+                sections.push(TemplateSection::Literal(std::mem::take(
+                    &mut current_literal,
+                )));
             }
 
             // Find the matching closing brace
@@ -172,7 +175,9 @@ pub fn parse_multi_template(template: &str) -> Result<(Vec<TemplateSection>, boo
 
     // Add any remaining literal text
     if !current_literal.is_empty() {
-        sections.push(TemplateSection::Literal(current_literal));
+        sections.push(TemplateSection::Literal(std::mem::take(
+            &mut current_literal,
+        )));
     }
 
     Ok((sections, debug))
@@ -256,9 +261,11 @@ fn parse_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String
         Rule::strip_ansi => Ok(StringOp::StripAnsi),
         Rule::filter => Ok(StringOp::Filter {
             pattern: extract_single_arg_raw(pair)?,
+            regex: OnceCell::new(),
         }),
         Rule::filter_not => Ok(StringOp::FilterNot {
             pattern: extract_single_arg_raw(pair)?,
+            regex: OnceCell::new(),
         }),
         Rule::slice => Ok(StringOp::Slice {
             range: extract_range_arg(pair)?,
@@ -336,6 +343,7 @@ fn extract_range_arg(pair: pest::iterators::Pair<Rule>) -> Result<RangeSpec, Str
 /// # Returns
 ///
 /// The characters to trim, or empty string for default whitespace trimming.
+#[inline(always)]
 fn parse_trim_chars(pair: pest::iterators::Pair<Rule>) -> String {
     let mut parts = pair.into_inner();
 
@@ -483,7 +491,11 @@ fn parse_regex_extract_operation(pair: pest::iterators::Pair<Rule>) -> Result<St
     let mut parts = pair.into_inner();
     let pattern = parts.next().unwrap().as_str().to_string();
     let group = parts.next().and_then(|p| p.as_str().parse().ok());
-    Ok(StringOp::RegexExtract { pattern, group })
+    Ok(StringOp::RegexExtract {
+        pattern,
+        group,
+        regex: OnceCell::new(),
+    })
 }
 
 /// Parses a map operation with nested operation list.
@@ -503,13 +515,15 @@ fn parse_map_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, St
     let map_op_pair = pair.into_inner().next().unwrap();
     let operation_list_pair = map_op_pair.into_inner().next().unwrap();
 
-    let mut operations = Vec::with_capacity(16);
+    let mut operations: SmallVec<[StringOp; 8]> = SmallVec::new();
     for op_pair in operation_list_pair.into_inner() {
         let inner_op_pair = op_pair.into_inner().next().unwrap();
         operations.push(parse_map_inner_operation(inner_op_pair)?);
     }
 
-    Ok(StringOp::Map { operations })
+    Ok(StringOp::Map {
+        operations: Box::new(operations),
+    })
 }
 
 /// Parses operations that can be used inside map blocks.
@@ -581,9 +595,11 @@ fn parse_map_inner_operation(pair: pest::iterators::Pair<Rule>) -> Result<String
         Rule::map_unique => Ok(StringOp::Unique),
         Rule::map_filter => Ok(StringOp::Filter {
             pattern: extract_single_arg_raw(pair)?,
+            regex: OnceCell::new(),
         }),
         Rule::map_filter_not => Ok(StringOp::FilterNot {
             pattern: extract_single_arg_raw(pair)?,
+            regex: OnceCell::new(),
         }),
 
         _ => Err(format!("Unsupported map operation: {:?}", pair.as_rule())),
@@ -614,6 +630,7 @@ fn parse_map_inner_operation(pair: pest::iterators::Pair<Rule>) -> Result<String
 /// - `\/` - Literal forward slash
 /// - `\{` - Literal opening brace
 /// - `\}` - Literal closing brace
+#[inline(always)]
 fn process_arg(s: &str) -> String {
     // Fast path: no escape sequences, return owned string directly
     if !s.contains('\\') {

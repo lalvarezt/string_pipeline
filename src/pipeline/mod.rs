@@ -39,14 +39,16 @@
 //! ```
 
 use regex::Regex;
+use smallvec::SmallVec;
 
 mod debug;
 mod parser;
 mod template;
 
-use once_cell::sync::Lazy;
+use dashmap::DashMap;
+use memchr::memchr_iter;
+use once_cell::sync::{Lazy, OnceCell};
 use std::collections::HashMap;
-use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use strip_ansi_escapes::strip;
 
@@ -61,21 +63,19 @@ pub use debug::DebugTracer;
 ///
 /// This cache stores compiled regex patterns to avoid recompilation overhead
 /// when the same patterns are used repeatedly across operations.
-static REGEX_CACHE: Lazy<Mutex<HashMap<String, Regex>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+static REGEX_CACHE: Lazy<DashMap<String, Regex>> = Lazy::new(DashMap::new);
 
 /// Type alias for split cache keys combining input hash and separator.
 type SplitCacheKey = (u64, String);
 /// Type alias for split cache values containing the split result.
 type SplitCacheValue = Vec<String>;
-/// Type alias for the complete split cache map.
-type SplitCacheMap = HashMap<SplitCacheKey, SplitCacheValue>;
 
 /// Global cache for string splitting operations.
 ///
 /// This cache stores the results of string splitting operations to avoid
 /// redundant splitting when the same input and separator are used repeatedly.
 /// Cache entries are limited by input size to prevent unbounded memory growth.
-static SPLIT_CACHE: Lazy<Mutex<SplitCacheMap>> = Lazy::new(|| Mutex::new(HashMap::new()));
+static SPLIT_CACHE: Lazy<DashMap<SplitCacheKey, SplitCacheValue>> = Lazy::new(DashMap::new);
 
 /// Interned strings for common separators to reduce memory allocations.
 ///
@@ -138,6 +138,7 @@ fn get_interned_separator(sep: &str) -> String {
 ///
 /// This function provides significant performance benefits for ASCII-only inputs
 /// by avoiding Unicode character classification overhead.
+#[inline(always)]
 fn ascii_trim(s: &str) -> Option<&str> {
     if s.is_ascii() {
         Some(s.trim_matches(|c: char| c.is_ascii_whitespace()))
@@ -169,6 +170,7 @@ fn ascii_trim(s: &str) -> Option<&str> {
 ///
 /// This function provides significant performance benefits for ASCII-only inputs
 /// by avoiding Unicode grapheme cluster boundary detection.
+#[inline(always)]
 fn ascii_reverse(s: &str) -> Option<String> {
     if s.is_ascii() {
         // For ASCII, we can safely reverse bytes
@@ -224,23 +226,30 @@ pub(crate) fn get_cached_split(input: &str, separator: &str) -> Vec<String> {
     let cache_key = (input_hash, separator.to_string());
 
     // Try to get from cache first
-    {
-        let cache = SPLIT_CACHE.lock().unwrap();
-        if let Some(cached_split) = cache.get(&cache_key) {
-            return cached_split.clone();
-        }
+    if let Some(cached_split) = SPLIT_CACHE.get(&cache_key) {
+        return cached_split.value().clone();
     }
 
-    // Not in cache, compute it
-    let parts: Vec<String> = input.split(separator).map(str::to_string).collect();
+    // Not in cache, compute it with fast path for 1-byte separators
+    let parts: Vec<String> = if separator.len() == 1 {
+        let sep_byte = separator.as_bytes()[0];
+        let mut parts = Vec::with_capacity(16);
+        let mut start = 0usize;
+        for idx in memchr_iter(sep_byte, input.as_bytes()) {
+            // Safety: idx is on UTF-8 boundary due to ASCII separator assumption
+            parts.push(input[start..idx].to_string());
+            start = idx + 1;
+        }
+        parts.push(input[start..].to_string());
+        parts
+    } else {
+        input.split(separator).map(str::to_string).collect()
+    };
 
     // Add to cache
-    {
-        let mut cache = SPLIT_CACHE.lock().unwrap();
-        /* Do not grow indefinitely for huge data */
-        if input.len() <= 10_000 && parts.len() <= 1_000 {
-            cache.insert(cache_key, parts.clone());
-        }
+    /* Do not grow indefinitely for huge data */
+    if input.len() <= 10_000 && parts.len() <= 1_000 {
+        SPLIT_CACHE.insert(cache_key, parts.clone());
     }
 
     parts
@@ -276,24 +285,18 @@ pub(crate) fn get_cached_split(input: &str, separator: &str) -> Vec<String> {
 /// - Filter operations that repeatedly use the same matching logic
 fn get_cached_regex(pattern: &str) -> Result<Regex, String> {
     // Try to get from cache first
-    {
-        let cache = REGEX_CACHE.lock().unwrap();
-        if let Some(regex) = cache.get(pattern) {
-            return Ok(regex.clone());
-        }
+    if let Some(regex) = REGEX_CACHE.get(pattern) {
+        return Ok(regex.value().clone());
     }
 
     // Not in cache, compile it
     let regex = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
 
     // Add to cache
-    {
-        let mut cache = REGEX_CACHE.lock().unwrap();
-        // Double-check in case another thread added it while we were compiling
-        if !cache.contains_key(pattern) {
-            cache.insert(pattern.to_string(), regex.clone());
-        }
-    }
+    // Double-check in case another thread added it while we were compiling
+    REGEX_CACHE
+        .entry(pattern.to_string())
+        .or_insert(regex.clone());
 
     Ok(regex)
 }
@@ -655,7 +658,10 @@ pub enum StringOp {
     /// let template = Template::parse("{split:,:..|filter:\\.txt$|join:\\n}").unwrap();
     /// assert_eq!(template.format("file.txt,readme.md,data.txt").unwrap(), "file.txt\ndata.txt");
     /// ```
-    Filter { pattern: String },
+    Filter {
+        pattern: String,
+        regex: OnceCell<Regex>,
+    },
 
     /// Remove list items matching a regex pattern.
     ///
@@ -690,7 +696,10 @@ pub enum StringOp {
     /// let template = Template::parse("{split:\\n:..|filter_not:^$|join:\\n}").unwrap();
     /// assert_eq!(template.format("line1\n\nline2\n\nline3").unwrap(), "line1\nline2\nline3");
     /// ```
-    FilterNot { pattern: String },
+    FilterNot {
+        pattern: String,
+        regex: OnceCell<Regex>,
+    },
 
     /// Select a range of items from a list.
     ///
@@ -728,7 +737,9 @@ pub enum StringOp {
     /// let template = Template::parse("{split:,:..|map:{trim|upper}|join:,}").unwrap();
     /// assert_eq!(template.format(" a , b , c ").unwrap(), "A,B,C");
     /// ```
-    Map { operations: Vec<StringOp> },
+    Map {
+        operations: Box<SmallVec<[StringOp; 8]>>,
+    },
 
     /// Sort list items alphabetically.
     ///
@@ -860,6 +871,7 @@ pub enum StringOp {
     RegexExtract {
         pattern: String,
         group: Option<usize>,
+        regex: OnceCell<Regex>,
     },
 }
 
@@ -968,6 +980,7 @@ pub enum PadDirection {
 /// // resolve_index(-1, 5) -> 4 (last item)
 /// // resolve_index(10, 5) -> 4 (clamped to last item)
 /// ```
+#[inline(always)]
 fn resolve_index(idx: isize, len: usize) -> usize {
     let len_i = len as isize;
     let resolved = if idx < 0 { len_i + idx } else { idx };
@@ -1115,8 +1128,12 @@ pub fn apply_ops_internal(
                             }
 
                             let sub_tracer = DebugTracer::sub_pipeline(debug);
-                            let result =
-                                apply_ops_internal(item, operations, debug, Some(sub_tracer));
+                            let result = apply_ops_internal(
+                                item,
+                                operations.as_slice(),
+                                debug,
+                                Some(sub_tracer),
+                            );
 
                             if debug {
                                 if let Some(ref tracer) = debug_tracer {
@@ -1329,8 +1346,10 @@ fn apply_single_operation(
         StringOp::Slice { range } => {
             apply_list_operation(val, |list| apply_range(&list, range), "Slice")
         }
-        StringOp::Filter { pattern } => {
-            let re = get_cached_regex(pattern)?;
+        StringOp::Filter { pattern, regex } => {
+            let re = regex.get_or_try_init(|| {
+                Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))
+            })?;
             match val {
                 Value::List(list) => Ok(Value::List(
                     list.into_iter().filter(|s| re.is_match(s)).collect(),
@@ -1338,8 +1357,10 @@ fn apply_single_operation(
                 Value::Str(s) => Ok(Value::Str(if re.is_match(&s) { s } else { String::new() })),
             }
         }
-        StringOp::FilterNot { pattern } => {
-            let re = get_cached_regex(pattern)?;
+        StringOp::FilterNot { pattern, regex } => {
+            let re = regex.get_or_try_init(|| {
+                Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))
+            })?;
             match val {
                 Value::List(list) => Ok(Value::List(
                     list.into_iter().filter(|s| !re.is_match(s)).collect(),
@@ -1539,9 +1560,15 @@ fn apply_single_operation(
                 )
             }
         }
-        StringOp::RegexExtract { pattern, group } => {
+        StringOp::RegexExtract {
+            pattern,
+            group,
+            regex,
+        } => {
             if let Value::Str(s) = val {
-                let re = get_cached_regex(pattern)?;
+                let re = regex.get_or_try_init(|| {
+                    Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))
+                })?;
                 let result = if let Some(group_idx) = group {
                     re.captures(&s)
                         .and_then(|caps| caps.get(*group_idx))
