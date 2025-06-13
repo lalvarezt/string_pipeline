@@ -329,7 +329,7 @@ string-pipeline --help
 
 # 🏷️ Version information
 string-pipeline --version
-# string-pipeline 0.11.2
+# string-pipeline 0.12.0
 
 # 📋 List all operations
 string-pipeline --list-operations
