@@ -33,7 +33,7 @@
 //! use string_pipeline::Template;
 //!
 //! // Create a template with mixed literal and operation sections
-//! let template = Template::parse("Files: {split:,:..|filter:\\.txt$|sort|join: \\| }", None).unwrap();
+//! let template = Template::parse("Files: {split:,:..|filter:\\.txt$|sort|join: \\| }").unwrap();
 //! let result = template.format("doc.pdf,file1.txt,readme.md,file2.txt").unwrap();
 //! assert_eq!(result, "Files: file1.txt | file2.txt");
 //! ```
@@ -374,15 +374,15 @@ pub enum StringOp {
     /// use string_pipeline::Template;
     ///
     /// // Split and take all parts
-    /// let template = Template::parse("{split:,:..}", None).unwrap();
+    /// let template = Template::parse("{split:,:..}").unwrap();
     /// assert_eq!(template.format("a,b,c").unwrap(), "a,b,c");
     ///
     /// // Split and take specific index
-    /// let template = Template::parse("{split:,:1}", None).unwrap();
+    /// let template = Template::parse("{split:,:1}").unwrap();
     /// assert_eq!(template.format("a,b,c").unwrap(), "b");
     ///
     /// // Split and take range
-    /// let template = Template::parse("{split:,:1..3}", None).unwrap();
+    /// let template = Template::parse("{split:,:1..3}").unwrap();
     /// assert_eq!(template.format("a,b,c,d").unwrap(), "b,c");
     /// ```
     Split { sep: String, range: RangeSpec },
@@ -410,15 +410,15 @@ pub enum StringOp {
     /// use string_pipeline::Template;
     ///
     /// // Join with hyphen
-    /// let template = Template::parse("{split:,:..|join: - }", None).unwrap();
+    /// let template = Template::parse("{split:,:..|join: - }").unwrap();
     /// assert_eq!(template.format("a,b,c").unwrap(), "a - b - c");
     ///
     /// // Join with newlines
-    /// let template = Template::parse("{split: :..|join:\\n}", None).unwrap();
+    /// let template = Template::parse("{split: :..|join:\\n}").unwrap();
     /// assert_eq!(template.format("hello world").unwrap(), "hello\nworld");
     ///
     /// // Join with no separator
-    /// let template = Template::parse("{split:,:..|join:}", None).unwrap();
+    /// let template = Template::parse("{split:,:..|join:}").unwrap();
     /// assert_eq!(template.format("a,b,c").unwrap(), "abc");
     /// ```
     Join { sep: String },
@@ -446,19 +446,19 @@ pub enum StringOp {
     /// use string_pipeline::Template;
     ///
     /// // Basic replacement (first match only)
-    /// let template = Template::parse("{replace:s/world/universe/}", None).unwrap();
+    /// let template = Template::parse("{replace:s/world/universe/}").unwrap();
     /// assert_eq!(template.format("hello world").unwrap(), "hello universe");
     ///
     /// // Global replacement with flags
-    /// let template = Template::parse("{replace:s/l/L/g}", None).unwrap();
+    /// let template = Template::parse("{replace:s/l/L/g}").unwrap();
     /// assert_eq!(template.format("hello").unwrap(), "heLLo");
     ///
     /// // Case-insensitive global replace
-    /// let template = Template::parse("{replace:s/WORLD/universe/gi}", None).unwrap();
+    /// let template = Template::parse("{replace:s/WORLD/universe/gi}").unwrap();
     /// assert_eq!(template.format("hello world").unwrap(), "hello universe");
     ///
     /// // Using capture groups
-    /// let template = Template::parse("{replace:s/(.+)/[$1]/}", None).unwrap();
+    /// let template = Template::parse("{replace:s/(.+)/[$1]/}").unwrap();
     /// assert_eq!(template.format("hello").unwrap(), "[hello]");
     /// ```
     Replace {
@@ -477,7 +477,7 @@ pub enum StringOp {
     /// ```rust
     /// use string_pipeline::Template;
     ///
-    /// let template = Template::parse("{upper}", None).unwrap();
+    /// let template = Template::parse("{upper}").unwrap();
     /// assert_eq!(template.format("hello world").unwrap(), "HELLO WORLD");
     /// assert_eq!(template.format("café").unwrap(), "CAFÉ");
     /// ```
@@ -493,7 +493,7 @@ pub enum StringOp {
     /// ```rust
     /// use string_pipeline::Template;
     ///
-    /// let template = Template::parse("{lower}", None).unwrap();
+    /// let template = Template::parse("{lower}").unwrap();
     /// assert_eq!(template.format("HELLO WORLD").unwrap(), "hello world");
     /// assert_eq!(template.format("CAFÉ").unwrap(), "café");
     /// ```
@@ -522,19 +522,19 @@ pub enum StringOp {
     /// use string_pipeline::Template;
     ///
     /// // Trim whitespace from both ends
-    /// let template = Template::parse("{trim}", None).unwrap();
+    /// let template = Template::parse("{trim}").unwrap();
     /// assert_eq!(template.format("  hello  ").unwrap(), "hello");
     ///
     /// // Trim from left only
-    /// let template = Template::parse("{trim:left}", None).unwrap();
+    /// let template = Template::parse("{trim:left}").unwrap();
     /// assert_eq!(template.format("  hello  ").unwrap(), "hello  ");
     ///
     /// // Trim custom characters
-    /// let template = Template::parse("{trim:xy}", None).unwrap();
+    /// let template = Template::parse("{trim:xy}").unwrap();
     /// assert_eq!(template.format("xyhelloxy").unwrap(), "hello");
     ///
     /// // Trim custom characters from right only
-    /// let template = Template::parse("{trim:*-+:right}", None).unwrap();
+    /// let template = Template::parse("{trim:*-+:right}").unwrap();
     /// assert_eq!(template.format("hello***").unwrap(), "hello");
     /// ```
     Trim {
@@ -557,11 +557,11 @@ pub enum StringOp {
     /// use string_pipeline::Template;
     ///
     /// // Single character
-    /// let template = Template::parse("{substring:1}", None).unwrap();
+    /// let template = Template::parse("{substring:1}").unwrap();
     /// assert_eq!(template.format("hello").unwrap(), "e");
     ///
     /// // Character range
-    /// let template = Template::parse("{substring:1..4}", None).unwrap();
+    /// let template = Template::parse("{substring:1..4}").unwrap();
     /// assert_eq!(template.format("hello").unwrap(), "ell");
     /// ```
     Substring { range: RangeSpec },
@@ -580,7 +580,7 @@ pub enum StringOp {
     /// ```rust
     /// use string_pipeline::Template;
     ///
-    /// let template = Template::parse("{append:!}", None).unwrap();
+    /// let template = Template::parse("{append:!}").unwrap();
     /// assert_eq!(template.format("hello").unwrap(), "hello!");
     /// ```
     Append { suffix: String },
@@ -599,7 +599,7 @@ pub enum StringOp {
     /// ```rust
     /// use string_pipeline::Template;
     ///
-    /// let template = Template::parse("{prepend:>>}", None).unwrap();
+    /// let template = Template::parse("{prepend:>>}").unwrap();
     /// assert_eq!(template.format("hello").unwrap(), ">>hello");
     /// ```
     Prepend { prefix: String },
@@ -614,7 +614,7 @@ pub enum StringOp {
     /// ```rust
     /// use string_pipeline::Template;
     ///
-    /// let template = Template::parse("{strip_ansi}", None).unwrap();
+    /// let template = Template::parse("{strip_ansi}").unwrap();
     /// let input = "\x1b[31mRed Text\x1b[0m";
     /// assert_eq!(template.format(input).unwrap(), "Red Text");
     /// ```
@@ -644,15 +644,15 @@ pub enum StringOp {
     /// use string_pipeline::Template;
     ///
     /// // Keep items starting with vowels
-    /// let template = Template::parse("{split:,:..|filter:^[aeiou]|join:,}", None).unwrap();
+    /// let template = Template::parse("{split:,:..|filter:^[aeiou]|join:,}").unwrap();
     /// assert_eq!(template.format("apple,banana,orange,grape").unwrap(), "apple,orange");
     ///
     /// // Keep items containing numbers
-    /// let template = Template::parse("{split:,:..|filter:\\d+|join:,}", None).unwrap();
+    /// let template = Template::parse("{split:,:..|filter:\\d+|join:,}").unwrap();
     /// assert_eq!(template.format("item1,test,file22,doc").unwrap(), "item1,file22");
     ///
     /// // Filter .txt files
-    /// let template = Template::parse("{split:,:..|filter:\\.txt$|join:\\n}", None).unwrap();
+    /// let template = Template::parse("{split:,:..|filter:\\.txt$|join:\\n}").unwrap();
     /// assert_eq!(template.format("file.txt,readme.md,data.txt").unwrap(), "file.txt\ndata.txt");
     /// ```
     Filter { pattern: String },
@@ -678,16 +678,16 @@ pub enum StringOp {
     /// use string_pipeline::Template;
     ///
     /// // Remove specific items
-    /// let template = Template::parse("{split:,:..|filter_not:banana|join:,}", None).unwrap();
+    /// let template = Template::parse("{split:,:..|filter_not:banana|join:,}").unwrap();
     /// assert_eq!(template.format("apple,banana,orange").unwrap(), "apple,orange");
     ///
     /// // Remove comments (lines starting with #)
-    /// let template = Template::parse("{split:\\n:..|filter_not:^#|join:\\n}", None).unwrap();
+    /// let template = Template::parse("{split:\\n:..|filter_not:^#|join:\\n}").unwrap();
     /// let input = "line1\n# comment\nline2\n# another comment\nline3";
     /// assert_eq!(template.format(input).unwrap(), "line1\nline2\nline3");
     ///
     /// // Remove empty lines
-    /// let template = Template::parse("{split:\\n:..|filter_not:^$|join:\\n}", None).unwrap();
+    /// let template = Template::parse("{split:\\n:..|filter_not:^$|join:\\n}").unwrap();
     /// assert_eq!(template.format("line1\n\nline2\n\nline3").unwrap(), "line1\nline2\nline3");
     /// ```
     FilterNot { pattern: String },
@@ -706,7 +706,7 @@ pub enum StringOp {
     /// ```rust
     /// use string_pipeline::Template;
     ///
-    /// let template = Template::parse("{split:,:..|slice:1..3|join:,}", None).unwrap();
+    /// let template = Template::parse("{split:,:..|slice:1..3|join:,}").unwrap();
     /// assert_eq!(template.format("a,b,c,d,e").unwrap(), "b,c");
     /// ```
     Slice { range: RangeSpec },
@@ -725,7 +725,7 @@ pub enum StringOp {
     /// ```rust
     /// use string_pipeline::Template;
     ///
-    /// let template = Template::parse("{split:,:..|map:{trim|upper}|join:,}", None).unwrap();
+    /// let template = Template::parse("{split:,:..|map:{trim|upper}|join:,}").unwrap();
     /// assert_eq!(template.format(" a , b , c ").unwrap(), "A,B,C");
     /// ```
     Map { operations: Vec<StringOp> },
@@ -744,10 +744,10 @@ pub enum StringOp {
     /// ```rust
     /// use string_pipeline::Template;
     ///
-    /// let template = Template::parse("{split:,:..|sort|join:,}", None).unwrap();
+    /// let template = Template::parse("{split:,:..|sort|join:,}").unwrap();
     /// assert_eq!(template.format("c,a,b").unwrap(), "a,b,c");
     ///
-    /// let template = Template::parse("{split:,:..|sort:desc|join:,}", None).unwrap();
+    /// let template = Template::parse("{split:,:..|sort:desc|join:,}").unwrap();
     /// assert_eq!(template.format("a,b,c").unwrap(), "c,b,a");
     /// ```
     Sort { direction: SortDirection },
@@ -765,11 +765,11 @@ pub enum StringOp {
     /// use string_pipeline::Template;
     ///
     /// // Reverse string
-    /// let template = Template::parse("{reverse}", None).unwrap();
+    /// let template = Template::parse("{reverse}").unwrap();
     /// assert_eq!(template.format("hello").unwrap(), "olleh");
     ///
     /// // Reverse list
-    /// let template = Template::parse("{split:,:..|reverse|join:,}", None).unwrap();
+    /// let template = Template::parse("{split:,:..|reverse|join:,}").unwrap();
     /// assert_eq!(template.format("a,b,c").unwrap(), "c,b,a");
     /// ```
     Reverse,
@@ -790,16 +790,16 @@ pub enum StringOp {
     /// use string_pipeline::Template;
     ///
     /// // Basic deduplication
-    /// let template = Template::parse("{split:,:..|unique|join:,}", None).unwrap();
+    /// let template = Template::parse("{split:,:..|unique|join:,}").unwrap();
     /// assert_eq!(template.format("a,b,a,c,b").unwrap(), "a,b,c");
     ///
     /// // Remove duplicate lines
-    /// let template = Template::parse("{split:\\n:..|unique|join:\\n}", None).unwrap();
+    /// let template = Template::parse("{split:\\n:..|unique|join:\\n}").unwrap();
     /// let input = "line1\nline2\nline1\nline3\nline2";
     /// assert_eq!(template.format(input).unwrap(), "line1\nline2\nline3");
     ///
     /// // Combine with sort for alphabetical unique list
-    /// let template = Template::parse("{split:,:..|unique|sort|join:,}", None).unwrap();
+    /// let template = Template::parse("{split:,:..|unique|sort|join:,}").unwrap();
     /// assert_eq!(template.format("c,a,b,a,c").unwrap(), "a,b,c");
     /// ```
     Unique,
@@ -821,11 +821,11 @@ pub enum StringOp {
     /// use string_pipeline::Template;
     ///
     /// // Right padding (default)
-    /// let template = Template::parse("{pad:5}", None).unwrap();
+    /// let template = Template::parse("{pad:5}").unwrap();
     /// assert_eq!(template.format("hi").unwrap(), "hi   ");
     ///
     /// // Left padding with custom character
-    /// let template = Template::parse("{pad:5:0:left}", None).unwrap();
+    /// let template = Template::parse("{pad:5:0:left}").unwrap();
     /// assert_eq!(template.format("42").unwrap(), "00042");
     /// ```
     Pad {
@@ -850,11 +850,11 @@ pub enum StringOp {
     /// use string_pipeline::Template;
     ///
     /// // Extract numbers
-    /// let template = Template::parse(r"{regex_extract:\d+}", None).unwrap();
+    /// let template = Template::parse(r"{regex_extract:\d+}").unwrap();
     /// assert_eq!(template.format("item123").unwrap(), "123");
     ///
     /// // Extract capture group
-    /// let template = Template::parse(r"{regex_extract:(\w+)@(\w+):1}", None).unwrap();
+    /// let template = Template::parse(r"{regex_extract:(\w+)@(\w+):1}").unwrap();
     /// assert_eq!(template.format("user@domain.com").unwrap(), "user");
     /// ```
     RegexExtract {
@@ -1064,7 +1064,7 @@ fn apply_range<T: Clone>(items: &[T], range: &RangeSpec) -> Vec<T> {
 /// use string_pipeline::Template;
 ///
 /// // This function is used internally by Template::format()
-/// let template = Template::parse("{upper|trim}", None).unwrap();
+/// let template = Template::parse("{upper|trim}").unwrap();
 /// let result = template.format("  hello  ").unwrap();
 /// assert_eq!(result, "HELLO");
 /// ```

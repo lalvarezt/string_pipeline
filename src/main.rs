@@ -227,7 +227,7 @@ fn main() {
     });
 
     // Parse template and handle debug mode from both template prefix and CLI flag
-    let template = MultiTemplate::parse(&config.template, None).unwrap_or_else(|e| {
+    let template = MultiTemplate::parse_with_debug(&config.template, None).unwrap_or_else(|e| {
         eprintln!("Error parsing template: {}", e);
         std::process::exit(1);
     });

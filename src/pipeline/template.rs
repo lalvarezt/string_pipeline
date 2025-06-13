@@ -16,16 +16,16 @@
 //! use string_pipeline::Template;
 //!
 //! // Mixed literal and template sections
-//! let template = Template::parse("Hello {upper}!", None).unwrap();
+//! let template = Template::parse("Hello {upper}!").unwrap();
 //! assert_eq!(template.format("world").unwrap(), "Hello WORLD!");
 //!
 //! // Multiple template sections
-//! let template = Template::parse("Name: {split: :0} | Email: {split: :1}", None).unwrap();
+//! let template = Template::parse("Name: {split: :0} | Email: {split: :1}").unwrap();
 //! assert_eq!(template.format("john doe john@example.com").unwrap(),
 //!            "Name: john | Email: doe");
 //!
 //! // Complex transformations
-//! let template = Template::parse("Files: {split:,:..|filter:\\.txt$|join:, }", None).unwrap();
+//! let template = Template::parse("Files: {split:,:..|filter:\\.txt$|join:, }").unwrap();
 //! assert_eq!(template.format("file1.txt,doc.pdf,file2.txt").unwrap(),
 //!            "Files: file1.txt, file2.txt");
 //! ```
@@ -89,7 +89,7 @@ use crate::pipeline::{DebugTracer, RangeSpec, StringOp, apply_ops_internal, appl
 /// ```rust
 /// use string_pipeline::Template;
 ///
-/// let template = Template::parse("Result: {upper|trim}", None).unwrap();
+/// let template = Template::parse("Result: {upper|trim}").unwrap();
 /// assert_eq!(template.format("  hello  ").unwrap(), "Result: HELLO");
 /// ```
 ///
@@ -98,7 +98,7 @@ use crate::pipeline::{DebugTracer, RangeSpec, StringOp, apply_ops_internal, appl
 /// ```rust
 /// use string_pipeline::Template;
 ///
-/// let template = Template::parse("User: {split: :0} ({split: :1})", None).unwrap();
+/// let template = Template::parse("User: {split: :0} ({split: :1})").unwrap();
 /// assert_eq!(template.format("john smith").unwrap(), "User: john (smith)");
 /// ```
 ///
@@ -107,7 +107,7 @@ use crate::pipeline::{DebugTracer, RangeSpec, StringOp, apply_ops_internal, appl
 /// ```rust
 /// use string_pipeline::Template;
 ///
-/// let template = Template::parse("{split:,:..|sort|join: \\| }", Some(true)).unwrap();
+/// let template = Template::parse_with_debug("{split:,:..|sort|join: \\| }", Some(true)).unwrap();
 /// let result = template.format("c,a,b").unwrap(); // Prints debug info to stderr
 /// assert_eq!(result, "a | b | c");
 /// ```
@@ -178,6 +178,43 @@ impl MultiTemplate {
     /// Parse a template string into a `MultiTemplate` instance.
     ///
     /// Parses template syntax containing literal text and `{operation}` blocks,
+    /// with support for complex operation pipelines, debug information is suppressed.
+    ///
+    /// # Arguments
+    ///
+    /// * `template` - The template string to parse
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(MultiTemplate)` - Successfully parsed template
+    /// * `Err(String)` - Parse error description
+    ///
+    /// # Template Syntax
+    ///
+    /// - Literal text appears as-is in output
+    /// - `{operation}` blocks apply transformations to input
+    /// - Multiple operations: `{op1|op2|op3}`
+    /// - Debug markers: `{!debug}` are suppressed
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// // Simple template
+    /// let template = Template::parse("Hello {upper}!").unwrap();
+    ///
+    /// // Complex pipeline
+    /// let template = Template::parse("{split:,:..|sort|join: - }").unwrap();
+    /// ```
+    pub fn parse(template: &str) -> Result<Self, String> {
+        let (sections, _) = parser::parse_multi_template(template)?;
+        Ok(Self::new(template.to_string(), sections, false))
+    }
+
+    /// Parse a template string into a `MultiTemplate` instance.
+    ///
+    /// Parses template syntax containing literal text and `{operation}` blocks,
     /// with support for complex operation pipelines and debug mode.
     ///
     /// # Arguments
@@ -203,18 +240,18 @@ impl MultiTemplate {
     /// use string_pipeline::Template;
     ///
     /// // Simple template
-    /// let template = Template::parse("Hello {upper}!", None).unwrap();
+    /// let template = Template::parse_with_debug("Hello {upper}!", None).unwrap();
     ///
     /// // Complex pipeline
-    /// let template = Template::parse("{split:,:..|sort|join: - }", None).unwrap();
+    /// let template = Template::parse_with_debug("{split:,:..|sort|join: - }", None).unwrap();
     ///
     /// // Debug enabled
-    /// let template = Template::parse("{!upper|trim}", None).unwrap();
+    /// let template = Template::parse_with_debug("{!upper|trim}", None).unwrap();
     ///
     /// // Debug override
-    /// let template = Template::parse("{upper}", Some(true)).unwrap();
+    /// let template = Template::parse_with_debug("{upper}", Some(true)).unwrap();
     /// ```
-    pub fn parse(template: &str, debug: Option<bool>) -> Result<Self, String> {
+    pub fn parse_with_debug(template: &str, debug: Option<bool>) -> Result<Self, String> {
         let (sections, inner_dbg) = parser::parse_multi_template(template)?;
         Ok(Self::new(
             template.to_string(),
@@ -259,12 +296,12 @@ impl MultiTemplate {
     /// ```rust
     /// use string_pipeline::Template;
     ///
-    /// let template = Template::parse("Name: {split: :0}, Age: {split: :1}", None).unwrap();
+    /// let template = Template::parse("Name: {split: :0}, Age: {split: :1}").unwrap();
     /// let result = template.format("John 25").unwrap();
     /// assert_eq!(result, "Name: John, Age: 25");
     ///
     /// // List processing
-    /// let template = Template::parse("Items: {split:,:..|sort|join: \\| }", None).unwrap();
+    /// let template = Template::parse("Items: {split:,:..|sort|join: \\| }").unwrap();
     /// let result = template.format("apple,banana,cherry").unwrap();
     /// assert_eq!(result, "Items: apple | banana | cherry");
     /// ```
@@ -356,7 +393,7 @@ impl MultiTemplate {
     /// ```rust
     /// use string_pipeline::Template;
     ///
-    /// let template = Template::parse("Hello {upper}!", None).unwrap();
+    /// let template = Template::parse("Hello {upper}!").unwrap();
     /// assert_eq!(template.template_string(), "Hello {upper}!");
     /// ```
     pub fn template_string(&self) -> &str {
@@ -373,7 +410,7 @@ impl MultiTemplate {
     /// ```rust
     /// use string_pipeline::Template;
     ///
-    /// let template = Template::parse("Hello {upper} world!", None).unwrap();
+    /// let template = Template::parse("Hello {upper} world!").unwrap();
     /// assert_eq!(template.section_count(), 3); // "Hello ", "{upper}", " world!"
     /// ```
     pub fn section_count(&self) -> usize {
@@ -390,7 +427,7 @@ impl MultiTemplate {
     /// ```rust
     /// use string_pipeline::Template;
     ///
-    /// let template = Template::parse("Hello {upper} world {lower}!", None).unwrap();
+    /// let template = Template::parse("Hello {upper} world {lower}!").unwrap();
     /// assert_eq!(template.template_section_count(), 2); // {upper} and {lower}
     /// ```
     pub fn template_section_count(&self) -> usize {
@@ -410,7 +447,7 @@ impl MultiTemplate {
     /// ```rust
     /// use string_pipeline::Template;
     ///
-    /// let template = Template::parse("{upper}", Some(true)).unwrap();
+    /// let template = Template::parse_with_debug("{upper}", Some(true)).unwrap();
     /// assert!(template.is_debug());
     /// ```
     pub fn is_debug(&self) -> bool {
@@ -444,7 +481,7 @@ impl MultiTemplate {
     /// ```rust
     /// use string_pipeline::Template;
     ///
-    /// let mut template = Template::parse("{upper}", None).unwrap();
+    /// let mut template = Template::parse("{upper}").unwrap();
     /// template.set_debug(true);
     /// assert!(template.is_debug());
     /// ```
@@ -555,26 +592,6 @@ impl MultiTemplate {
 
 /* ---------- trait impls -------------------------------------------------- */
 
-/// Provides convenient string-to-template conversion.
-///
-/// Enables creating templates directly from string literals using the `try_from` method,
-/// with default settings (no debug mode override).
-///
-/// # Examples
-///
-/// ```rust
-/// use string_pipeline::Template;
-///
-/// let template = Template::try_from("Hello {upper}!").unwrap();
-/// assert_eq!(template.format("world").unwrap(), "Hello WORLD!");
-/// ```
-impl TryFrom<&str> for MultiTemplate {
-    type Error = String;
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        Self::parse(s, None)
-    }
-}
-
 /// Provides string representation of the template.
 ///
 /// Returns the original template string, making it easy to display or serialize
@@ -585,7 +602,7 @@ impl TryFrom<&str> for MultiTemplate {
 /// ```rust
 /// use string_pipeline::Template;
 ///
-/// let template = Template::parse("Hello {upper}!", None).unwrap();
+/// let template = Template::parse("Hello {upper}!").unwrap();
 /// println!("{}", template); // Prints: Hello {upper}!
 /// ```
 impl Display for MultiTemplate {
@@ -608,7 +625,7 @@ impl Display for MultiTemplate {
 /// use string_pipeline::MultiTemplate;
 ///
 /// // These are equivalent:
-/// let template1 = Template::parse("{upper}", None).unwrap();
-/// let template2 = MultiTemplate::parse("{upper}", None).unwrap();
+/// let template1 = Template::parse("{upper}").unwrap();
+/// let template2 = MultiTemplate::parse("{upper}").unwrap();
 /// ```
 pub type Template = MultiTemplate;

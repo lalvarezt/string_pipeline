@@ -1,7 +1,7 @@
 use string_pipeline::Template;
 
 pub fn process(input: &str, template: &str) -> Result<String, String> {
-    let tmpl = Template::parse(template, None)?;
+    let tmpl = Template::parse(template)?;
     tmpl.format(input)
 }
 

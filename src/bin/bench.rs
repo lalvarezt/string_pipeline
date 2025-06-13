@@ -302,7 +302,7 @@ impl BenchmarkSuite {
     }
 
     fn benchmark_template(&self, name: &str, template_str: &str) -> BenchmarkResult {
-        let template = Template::parse(template_str, None)
+        let template = Template::parse(template_str)
             .unwrap_or_else(|e| panic!("Failed to parse template '{}': {}", template_str, e));
 
         // Warmup phase - run operations without timing to warm up caches and system state
