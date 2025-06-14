@@ -67,7 +67,11 @@ pub fn parse_template(template: &str) -> Result<(Vec<StringOp>, bool), String> {
         .next()
         .unwrap();
 
-    // Estimate capacity based on template length and complexity
+    // Heuristic: reserve enough space for `|`-separated operations but avoid gross
+    // over-allocation for medium templates.  Count of `|` is cheap (single pass
+    // over the input) and gives an upper bound on the number of operations.
+    let pipe_count = template.as_bytes().iter().filter(|&&b| b == b'|').count();
+
     let estimated_capacity = if template.len() < 50 {
         4 // Simple templates typically have 1-4 operations
     } else if template.len() < 150 {
@@ -76,7 +80,7 @@ pub fn parse_template(template: &str) -> Result<(Vec<StringOp>, bool), String> {
         16 // Complex templates might have 8+ operations
     };
 
-    let mut ops = Vec::with_capacity(estimated_capacity);
+    let mut ops = Vec::with_capacity(std::cmp::min(estimated_capacity, pipe_count + 1));
     let mut debug = false;
 
     for pair in pairs.into_inner() {
