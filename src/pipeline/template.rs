@@ -208,6 +208,13 @@ impl MultiTemplate {
     /// let template = Template::parse("{split:,:..|sort|join: - }").unwrap();
     /// ```
     pub fn parse(template: &str) -> Result<Self, String> {
+        // Fast-path: if the input is a *single* template block (no outer-level
+        // literal text) we can skip the multi-template scanner and directly
+        // parse the operation list.
+        if let Some(single) = Self::try_single_block(template)? {
+            return Ok(single);
+        }
+
         let (sections, _) = parser::parse_multi_template(template)?;
         Ok(Self::new(template.to_string(), sections, false))
     }
@@ -252,6 +259,14 @@ impl MultiTemplate {
     /// let template = Template::parse_with_debug("{upper}", Some(true)).unwrap();
     /// ```
     pub fn parse_with_debug(template: &str, debug: Option<bool>) -> Result<Self, String> {
+        // Re-use the single-block shortcut when applicable.
+        if let Some(mut single) = Self::try_single_block(template)? {
+            if let Some(dbg_override) = debug {
+                single.debug = dbg_override;
+            }
+            return Ok(single);
+        }
+
         let (sections, inner_dbg) = parser::parse_multi_template(template)?;
         Ok(Self::new(
             template.to_string(),
@@ -587,6 +602,45 @@ impl MultiTemplate {
             })
             .collect::<Vec<_>>()
             .join(" | ")
+    }
+
+    /* -------- helper: detect plain single-block templates ------------- */
+
+    /// Detects and parses templates that consist of exactly one `{ ... }` block
+    /// with no surrounding literal text. Returns `Ok(Some(MultiTemplate))` when
+    /// the fast path can be applied, `Ok(None)` otherwise.
+    fn try_single_block(template: &str) -> Result<Option<Self>, String> {
+        // Must start with '{' and end with '}' to be a candidate.
+        if !(template.starts_with('{') && template.ends_with('}')) {
+            return Ok(None);
+        }
+
+        // Verify that the outer-most braces close at the very end and that the
+        // brace nesting never returns to zero before the last char.
+        let mut depth = 0u32;
+        for ch in template[1..template.len() - 1].chars() {
+            match ch {
+                '{' => depth += 1,
+                '}' => {
+                    if depth == 0 {
+                        // Closed the top-level early → literal content exists.
+                        return Ok(None);
+                    }
+                    depth -= 1;
+                }
+                _ => {}
+            }
+        }
+
+        if depth != 0 {
+            // Unbalanced braces – fall back to full parser for proper error.
+            return Ok(None);
+        }
+
+        // Safe to treat as single template block.
+        let (ops, dbg_flag) = parser::parse_template(template)?;
+        let sections = vec![TemplateSection::Template(ops)];
+        Ok(Some(Self::new(template.to_string(), sections, dbg_flag)))
     }
 }
 
