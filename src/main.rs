@@ -71,7 +71,7 @@ fn read_stdin() -> Result<String, String> {
     let mut buffer = String::new();
     io::stdin()
         .read_to_string(&mut buffer)
-        .map_err(|e| format!("Failed to read from stdin: {}", e))?;
+        .map_err(|e| format!("Failed to read from stdin: {e}"))?;
     Ok(buffer)
 }
 
@@ -87,7 +87,7 @@ fn get_template(cli: &Cli) -> Result<String, String> {
         (Some(template), None) => Ok(template.clone()),
         (None, Some(file)) => read_file(file)
             .map(|content| content.trim().to_string())
-            .map_err(|e| format!("Error reading template file: {}", e)),
+            .map_err(|e| format!("Error reading template file: {e}")),
         (Some(_), Some(_)) => {
             Err("Error: Cannot specify both template argument and template file".to_string())
         }
@@ -103,7 +103,7 @@ fn get_input(cli: &Cli) -> Result<String, String> {
         (Some(input), None) => Ok(input.clone()),
         (None, Some(file)) => read_file(file)
             .map(|content| content.trim_end().to_string())
-            .map_err(|e| format!("Error reading input file: {}", e)),
+            .map_err(|e| format!("Error reading input file: {e}")),
         (None, None) => read_stdin().map(|input| input.trim_end().to_string()),
         (Some(_), Some(_)) => {
             Err("Error: Cannot specify both input argument and input file".to_string())
@@ -224,13 +224,13 @@ fn main() {
 
     // Build configuration from CLI arguments
     let config = build_config(cli).unwrap_or_else(|e| {
-        eprintln!("{}", e);
+        eprintln!("{e}");
         std::process::exit(1);
     });
 
     // Parse template and handle debug mode from both template prefix and CLI flag
     let template = MultiTemplate::parse_with_debug(&config.template, None).unwrap_or_else(|e| {
-        eprintln!("Error parsing template: {}", e);
+        eprintln!("Error parsing template: {e}");
         std::process::exit(1);
     });
 
@@ -249,10 +249,10 @@ fn main() {
 
     // Process input with template
     let result = template.format(&config.input).unwrap_or_else(|e| {
-        eprintln!("Error formatting input: {}", e);
+        eprintln!("Error formatting input: {e}");
         std::process::exit(1);
     });
 
     // Output result as string
-    print!("{}", result);
+    print!("{result}");
 }

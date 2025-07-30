@@ -68,10 +68,10 @@ impl DebugTracer {
             return;
         }
 
-        self.line(format!("📂 {}", session_type));
-        self.line_with_prefix(format!("🏁 {} START", session_type), 1);
-        self.line_with_prefix(format!("Template: {:?}", template), 1);
-        self.line_with_prefix(format!("➡️ Input: {:?}", input), 1);
+        self.line(format!("📂 {session_type}"));
+        self.line_with_prefix(format!("🏁 {session_type} START"), 1);
+        self.line_with_prefix(format!("Template: {template:?}"), 1);
+        self.line_with_prefix(format!("➡️ Input: {input:?}"), 1);
         if let Some(info) = info {
             self.line_with_prefix(info.to_string(), 1);
         }
@@ -93,9 +93,9 @@ impl DebugTracer {
             return;
         }
 
-        self.line_with_prefix(format!("🏁 ✅ {} COMPLETE", session_type), 1);
-        self.line_with_prefix(format!("🎯 Final result: {:?}", result), 1);
-        self.line_with_prefix(format!("Total execution time: {:?}", elapsed), 1);
+        self.line_with_prefix(format!("🏁 ✅ {session_type} COMPLETE"), 1);
+        self.line_with_prefix(format!("🎯 Final result: {result:?}"), 1);
+        self.line_with_prefix(format!("Total execution time: {elapsed:?}"), 1);
 
         self.line_with_ending_prefix(
             format!(
@@ -179,12 +179,12 @@ impl DebugTracer {
             "PIPELINE"
         };
 
-        self.line_with_prefix(format!("✅ {} COMPLETE", label), depth + 1);
+        self.line_with_prefix(format!("✅ {label} COMPLETE"), depth + 1);
         self.line_with_prefix(
             format!("🎯 Result: {}", Self::format_value(result)),
             depth + 1,
         );
-        self.line_with_ending_prefix(format!("Time: {:?}", elapsed), depth + 1);
+        self.line_with_ending_prefix(format!("Time: {elapsed:?}"), depth + 1);
 
         if !self.is_sub_pipeline {
             self.separator();
@@ -231,7 +231,7 @@ impl DebugTracer {
             format!("🎯 Result: {}", Self::format_value(result)),
             depth + 1,
         );
-        self.line_with_ending_prefix(format!("Time: {:?}", elapsed), depth + 1);
+        self.line_with_ending_prefix(format!("Time: {elapsed:?}"), depth + 1);
     }
 
     /// Logs the start of processing a map operation item.
@@ -249,8 +249,8 @@ impl DebugTracer {
             return;
         }
 
-        self.line_with_prefix(format!("🗂️ Item {}/{}", item_idx, total_items), 3);
-        self.line_with_prefix(format!("➡️ Input: {:?}", input), 4);
+        self.line_with_prefix(format!("🗂️ Item {item_idx}/{total_items}"), 3);
+        self.line_with_prefix(format!("➡️ Input: {input:?}"), 4);
     }
 
     /// Logs the end of processing a map operation item.
@@ -267,8 +267,8 @@ impl DebugTracer {
         }
 
         match output {
-            Ok(result) => self.line_with_ending_prefix(format!("Output: {:?}", result), 4),
-            Err(error) => self.line_with_ending_prefix(format!("❌ ERROR: {}", error), 4),
+            Ok(result) => self.line_with_ending_prefix(format!("Output: {result:?}"), 4),
+            Err(error) => self.line_with_ending_prefix(format!("❌ ERROR: {error}"), 4),
         }
     }
 
@@ -287,7 +287,7 @@ impl DebugTracer {
         }
 
         self.line_with_ending_prefix(
-            format!("📦 MAP COMPLETED: {} → {} items", input_count, output_count),
+            format!("📦 MAP COMPLETED: {input_count} → {output_count} items"),
             3,
         );
     }
@@ -306,7 +306,7 @@ impl DebugTracer {
             return;
         }
 
-        self.line_with_prefix(format!("💾 {} {}", operation, details), 1);
+        self.line_with_prefix(format!("💾 {operation} {details}"), 1);
         self.separator();
     }
 
@@ -334,14 +334,11 @@ impl DebugTracer {
 
         self.line_with_prefix(
             format!(
-                "📊 SECTION {}/{}: [{}{}]",
-                section_num,
-                total_sections,
-                section_type,
+                "📊 SECTION {section_num}/{total_sections}: [{section_type}{}]",
                 if content.is_empty() {
                     String::new()
                 } else {
-                    format!(": {}", content)
+                    format!(": {content}")
                 }
             ),
             1,
@@ -352,7 +349,7 @@ impl DebugTracer {
 
     /// Outputs a debug line without indentation prefix.
     fn line(&self, msg: String) {
-        eprintln!("DEBUG: {}", msg);
+        eprintln!("DEBUG: {msg}");
     }
 
     /// Outputs a debug line with hierarchical indentation prefix.
@@ -373,7 +370,7 @@ impl DebugTracer {
             6 => "│   │   │   │   │   ├── ".to_string(),
             _ => "│   ".repeat(depth.saturating_sub(1)) + "├── ",
         };
-        eprintln!("DEBUG: {}{}", prefix, msg);
+        eprintln!("DEBUG: {prefix}{msg}");
     }
 
     /// Outputs a debug line with ending hierarchical prefix.
@@ -394,7 +391,7 @@ impl DebugTracer {
             6 => "│   │   │   │   │   └── ".to_string(),
             _ => "│   ".repeat(depth.saturating_sub(1)) + "└── ",
         };
-        eprintln!("DEBUG: {}{}", prefix, msg);
+        eprintln!("DEBUG: {prefix}{msg}");
     }
 
     /// Outputs a visual separator line.
@@ -420,14 +417,14 @@ impl DebugTracer {
                 if s.len() > 40 {
                     format!("String({}..)", &s[..40])
                 } else {
-                    format!("String({})", s)
+                    format!("String({s})")
                 }
             }
             Value::List(list) => {
                 if list.is_empty() {
                     "List(empty)".to_string()
                 } else if list.len() <= 3 {
-                    format!("List{:?}", list)
+                    format!("List{list:?}")
                 } else {
                     format!("List[{}, {}, ...+{}]", list[0], list[1], list.len() - 2)
                 }
@@ -441,8 +438,8 @@ impl DebugTracer {
     /// parameters like separators and operation counts.
     fn format_operation(op: &StringOp) -> String {
         match op {
-            StringOp::Split { sep, .. } => format!("Split('{}')", sep),
-            StringOp::Join { sep } => format!("Join('{}')", sep),
+            StringOp::Split { sep, .. } => format!("Split('{sep}')"),
+            StringOp::Join { sep } => format!("Join('{sep}')"),
             StringOp::Map { operations } => format!("Map({})", operations.len()),
             _ => Self::format_operation_name(op),
         }

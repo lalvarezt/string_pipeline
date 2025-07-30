@@ -332,7 +332,7 @@ fn test_filter_log_processing() {
 #[test]
 fn test_filter_large_lists() {
     // Test with a larger dataset
-    let large_input: Vec<String> = (0..1000).map(|i| format!("item{}", i)).collect();
+    let large_input: Vec<String> = (0..1000).map(|i| format!("item{i}")).collect();
     let input_str = large_input.join(",");
 
     // Filter even numbers
@@ -624,17 +624,17 @@ fn test_map_extract_first_word_with_uppercase() {
         "hello world,foo bar,test case",
         "{split:,:..|map:{split: :0}}",
     );
-    println!("Step 1: {:?}", result1);
+    println!("Step 1: {result1:?}");
 
     let result2 = process("hello", "{upper}");
-    println!("Simple upper: {:?}", result2);
+    println!("Simple upper: {result2:?}");
 
     // Complex pipeline: split by comma, then for each item split by space, take first word, uppercase
     let result = process(
         "hello world,foo bar,test case",
         "{split:,:..|map:{split: :0|upper}}",
     );
-    println!("Full pipeline: {:?}", result);
+    println!("Full pipeline: {result:?}");
 
     assert_eq!(result.unwrap(), "HELLO,FOO,TEST");
 }

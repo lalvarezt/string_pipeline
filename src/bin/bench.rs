@@ -134,7 +134,7 @@ impl BenchmarkSuite {
             .into_iter()
             .map(|(name, template_str)| {
                 if !self.quiet {
-                    print!("  {} ... ", name);
+                    print!("  {name} ... ");
                 }
                 let result = self.benchmark_template(name, template_str);
                 if !self.quiet {
@@ -180,7 +180,7 @@ impl BenchmarkSuite {
             .into_iter()
             .map(|(name, template_str)| {
                 if !self.quiet {
-                    print!("  {} ... ", name);
+                    print!("  {name} ... ");
                 }
                 let result = self.benchmark_template(name, template_str);
                 if !self.quiet {
@@ -235,7 +235,7 @@ impl BenchmarkSuite {
             .into_iter()
             .map(|(name, template_str)| {
                 if !self.quiet {
-                    print!("  {} ... ", name);
+                    print!("  {name} ... ");
                 }
                 let result = self.benchmark_template(name, template_str);
                 if !self.quiet {
@@ -290,7 +290,7 @@ impl BenchmarkSuite {
             .into_iter()
             .map(|(name, template_str)| {
                 if !self.quiet {
-                    print!("  {} ... ", name);
+                    print!("  {name} ... ");
                 }
                 let result = self.benchmark_template(name, template_str);
                 if !self.quiet {
@@ -303,13 +303,13 @@ impl BenchmarkSuite {
 
     fn benchmark_template(&self, name: &str, template_str: &str) -> BenchmarkResult {
         let template = Template::parse(template_str)
-            .unwrap_or_else(|e| panic!("Failed to parse template '{}': {}", template_str, e));
+            .unwrap_or_else(|e| panic!("Failed to parse template '{template_str}': {e}"));
 
         // Warmup phase - run operations without timing to warm up caches and system state
         for _ in 0..self.warmup_iterations {
             let _ = template
                 .format(&self.test_data)
-                .unwrap_or_else(|e| panic!("Failed to execute template '{}': {}", template_str, e));
+                .unwrap_or_else(|e| panic!("Failed to execute template '{template_str}': {e}"));
         }
 
         // Actual measurement phase
@@ -319,7 +319,7 @@ impl BenchmarkSuite {
             let start = Instant::now();
             let _ = template
                 .format(&self.test_data)
-                .unwrap_or_else(|e| panic!("Failed to execute template '{}': {}", template_str, e));
+                .unwrap_or_else(|e| panic!("Failed to execute template '{template_str}': {e}"));
             let duration = start.elapsed();
             times.push(duration);
         }
@@ -331,7 +331,7 @@ impl BenchmarkSuite {
 fn format_duration(duration: Duration) -> String {
     let nanos = duration.as_nanos();
     if nanos < 1_000 {
-        format!("{}ns", nanos)
+        format!("{nanos}ns")
     } else if nanos < 1_000_000 {
         format!("{:.2}μs", nanos as f64 / 1_000.0)
     } else if nanos < 1_000_000_000 {
@@ -353,10 +353,7 @@ fn print_text_report(results: &[BenchmarkResult], total_time: Duration, warmup_i
         "• Measurement iterations per benchmark: {}",
         results.first().map(|r| r.iterations).unwrap_or(0)
     );
-    println!(
-        "• Warmup iterations per benchmark: {} (10% of measurements)",
-        warmup_iterations
-    );
+    println!("• Warmup iterations per benchmark: {warmup_iterations} (10% of measurements)");
 
     println!("\n📈 Detailed Results:");
     println!(

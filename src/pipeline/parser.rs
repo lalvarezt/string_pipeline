@@ -63,7 +63,7 @@ struct TemplateParser;
 /// ```
 pub fn parse_template(template: &str) -> Result<(Vec<StringOp>, bool), String> {
     let pairs = TemplateParser::parse(Rule::template, template)
-        .map_err(|e| format!("Parse error: {}", e))?
+        .map_err(|e| format!("Parse error: {e}"))?
         .next()
         .unwrap();
 
@@ -164,7 +164,7 @@ pub fn parse_multi_template(template: &str) -> Result<(Vec<TemplateSection>, boo
             }
 
             // Parse the template content
-            let full_template = format!("{{{}}}", template_content);
+            let full_template = format!("{{{template_content}}}");
             let (ops, section_debug) = parse_template(&full_template)?;
             if section_debug {
                 debug = true; // If any section has debug enabled, enable for the whole multi-template
@@ -775,7 +775,7 @@ fn parse_range_spec(pair: pest::iterators::Pair<Rule>) -> Result<RangeSpec, Stri
             let idx_str = inner.into_inner().next().unwrap().as_str();
             let idx = idx_str
                 .parse()
-                .map_err(|_| format!("Invalid index: {}", idx_str))?;
+                .map_err(|_| format!("Invalid index: {idx_str}"))?;
             Ok(RangeSpec::Index(idx))
         }
         _ => Err(format!("Unknown range spec: {:?}", inner.as_rule())),

@@ -91,7 +91,7 @@ fn test_multi_template_debug_mode() {
 fn test_multi_template_display_trait() {
     // Test Display implementation shows original template string
     let template = MultiTemplate::parse("Hello {upper} World!").unwrap();
-    assert_eq!(format!("{}", template), "Hello {upper} World!");
+    assert_eq!(format!("{template}"), "Hello {upper} World!");
 }
 
 #[test]

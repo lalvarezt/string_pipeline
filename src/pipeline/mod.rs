@@ -290,7 +290,7 @@ fn get_cached_regex(pattern: &str) -> Result<Regex, String> {
     }
 
     // Not in cache, compile it
-    let regex = Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))?;
+    let regex = Regex::new(pattern).map_err(|e| format!("Invalid regex: {e}"))?;
 
     // Add to cache
     // Double-check in case another thread added it while we were compiling
@@ -1285,10 +1285,7 @@ where
     if let Value::List(list) = val {
         Ok(Value::List(transform(list)))
     } else {
-        Err(format!(
-            "{} operation can only be applied to lists",
-            op_name
-        ))
+        Err(format!("{op_name} operation can only be applied to lists"))
     }
 }
 
@@ -1376,7 +1373,7 @@ fn apply_single_operation(
         }
         StringOp::Filter { pattern, regex } => {
             let re = regex.get_or_try_init(|| {
-                Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))
+                Regex::new(pattern).map_err(|e| format!("Invalid regex: {e}"))
             })?;
             match val {
                 Value::List(list) => Ok(Value::List(
@@ -1387,7 +1384,7 @@ fn apply_single_operation(
         }
         StringOp::FilterNot { pattern, regex } => {
             let re = regex.get_or_try_init(|| {
-                Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))
+                Regex::new(pattern).map_err(|e| format!("Invalid regex: {e}"))
             })?;
             match val {
                 Value::List(list) => Ok(Value::List(
@@ -1476,7 +1473,7 @@ fn apply_single_operation(
                     if inline_flags.is_empty() {
                         pattern.clone()
                     } else {
-                        format!("(?{}){}", inline_flags, pattern)
+                        format!("(?{inline_flags}){pattern}")
                     }
                 };
 
@@ -1536,13 +1533,13 @@ fn apply_single_operation(
         }
 
         StringOp::Append { suffix } => {
-            apply_string_operation(val, |s| format!("{}{}", s, suffix), "Append")
+            apply_string_operation(val, |s| format!("{s}{suffix}"), "Append")
         }
         StringOp::Prepend { prefix } => {
-            apply_string_operation(val, |s| format!("{}{}", prefix, s), "Prepend")
+            apply_string_operation(val, |s| format!("{prefix}{s}"), "Prepend")
         }
-        StringOp::Surround { chars } => {
-            apply_string_operation(val, |s| format!("{}{}{}", chars, s, chars), "Surround")
+        StringOp::Surround { text } => {
+            apply_string_operation(val, |s| format!("{text}{s}{text}"), "Surround")
         }
         StringOp::StripAnsi => {
             if let Value::Str(s) = val {
@@ -1566,18 +1563,17 @@ fn apply_single_operation(
                     let padding_needed = *width - current_len;
                     match direction {
                         PadDirection::Left => {
-                            format!("{}{}", char.to_string().repeat(padding_needed), s)
+                            format!("{}{s}", char.to_string().repeat(padding_needed))
                         }
                         PadDirection::Right => {
-                            format!("{}{}", s, char.to_string().repeat(padding_needed))
+                            format!("{s}{}", char.to_string().repeat(padding_needed))
                         }
                         PadDirection::Both => {
                             let left_pad = padding_needed / 2;
                             let right_pad = padding_needed - left_pad;
                             format!(
-                                "{}{}{}",
+                                "{}{s}{}",
                                 char.to_string().repeat(left_pad),
-                                s,
                                 char.to_string().repeat(right_pad)
                             )
                         }
@@ -1598,7 +1594,7 @@ fn apply_single_operation(
         } => {
             if let Value::Str(s) = val {
                 let re = regex.get_or_try_init(|| {
-                    Regex::new(pattern).map_err(|e| format!("Invalid regex: {}", e))
+                    Regex::new(pattern).map_err(|e| format!("Invalid regex: {e}"))
                 })?;
                 let result = if let Some(group_idx) = group {
                     re.captures(&s)
