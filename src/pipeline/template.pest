@@ -13,6 +13,8 @@ operation = {
   | trim
   | append
   | prepend
+  | surround
+  | quote
   | join
   | substring
   | replace
@@ -49,6 +51,8 @@ substring     = { "substring" ~ ":" ~ range_spec }
 replace       = { "replace" ~ ":" ~ sed_string }
 append        = { "append" ~ ":" ~ simple_arg }
 prepend       = { "prepend" ~ ":" ~ simple_arg }
+surround      = { "surround" ~ ":" ~ simple_arg }
+quote         = { "quote" ~ ":" ~ simple_arg }
 upper         = @{ "upper" }
 lower         = @{ "lower" }
 trim          = { "trim" ~ (":" ~ simple_arg)? ~ (":" ~ direction)? }
@@ -73,6 +77,8 @@ map_inner_operation = {
   | replace
   | append
   | prepend
+  | surround
+  | quote
   | upper
   | lower
   | trim
@@ -132,6 +138,8 @@ operation_keyword = _{
   | "trim"
   | "append"
   | "prepend"
+  | "surround"
+  | "quote"
   | "join"
   | "substring"
   | "replace"

@@ -87,6 +87,38 @@ pub mod individual_operations {
         }
 
         #[test]
+        fn test_map_surround_basic() {
+            assert_eq!(
+                process("apple,banana,cherry", "{split:,:..|map:{surround:\"}}").unwrap(),
+                "\"apple\",\"banana\",\"cherry\""
+            );
+        }
+
+        #[test]
+        fn test_map_quote_basic() {
+            assert_eq!(
+                process("apple,banana,cherry", "{split:,:..|map:{quote:'}}").unwrap(),
+                "'apple','banana','cherry'"
+            );
+        }
+
+        #[test]
+        fn test_map_surround_multiple_chars() {
+            assert_eq!(
+                process("a,b,c", "{split:,:..|map:{surround:**}}").unwrap(),
+                "**a**,**b**,**c**"
+            );
+        }
+
+        #[test]
+        fn test_map_quote_brackets() {
+            assert_eq!(
+                process("item1,item2", "{split:,:..|map:{quote:[]}}").unwrap(),
+                "[]item1[],[]item2[]"
+            );
+        }
+
+        #[test]
         fn test_map_trim_custom_chars_basic() {
             assert_eq!(
                 process("xappleX,xbananaX,xcherryX", "{split:,:..|map:{trim:xX}}").unwrap(),

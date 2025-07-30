@@ -575,6 +575,136 @@ pub mod prepend_operations {
     }
 }
 
+pub mod surround_operations {
+    use super::process;
+
+    // Surround operation tests
+    #[test]
+    fn test_surround_basic() {
+        assert_eq!(process("hello", "{surround:\"}").unwrap(), "\"hello\"");
+    }
+
+    #[test]
+    fn test_surround_single_quotes() {
+        assert_eq!(process("world", "{surround:'}").unwrap(), "'world'");
+    }
+
+    #[test]
+    fn test_surround_multiple_chars() {
+        assert_eq!(process("text", "{surround:**}").unwrap(), "**text**");
+    }
+
+    #[test]
+    fn test_surround_empty_string() {
+        assert_eq!(process("", "{surround:()}").unwrap(), "()()");
+    }
+
+    #[test]
+    fn test_surround_unicode() {
+        assert_eq!(process("hello", "{surround:🔥}").unwrap(), "🔥hello🔥");
+    }
+
+    #[test]
+    fn test_surround_special_chars() {
+        assert_eq!(process("test", "{surround:<<>>}").unwrap(), "<<>>test<<>>");
+    }
+
+    #[test]
+    fn test_surround_escaped_chars() {
+        assert_eq!(process("test", "{surround:\\n}").unwrap(), "\ntest\n");
+    }
+
+    #[test]
+    fn test_surround_escaped_colon() {
+        assert_eq!(process("test", "{surround:\\:}").unwrap(), ":test:");
+    }
+
+    #[test]
+    fn test_surround_escaped_pipe() {
+        assert_eq!(process("test", "{surround:\\|}").unwrap(), "|test|");
+    }
+
+    #[test]
+    fn test_surround_empty_chars() {
+        assert_eq!(process("hello", "{surround:}").unwrap(), "hello");
+    }
+
+    #[test]
+    fn test_surround_missing_argument() {
+        let result = process("hello", "{surround}");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_surround_with_newlines() {
+        assert_eq!(process("content", "{surround:--}").unwrap(), "--content--");
+    }
+
+    #[test]
+    fn test_surround_complex_chars() {
+        assert_eq!(
+            process("data", "{surround:[[ ]]}").unwrap(),
+            "[[ ]]data[[ ]]"
+        );
+    }
+}
+
+pub mod quote_operations {
+    use super::process;
+
+    // Quote operation tests (alias for surround)
+    #[test]
+    fn test_quote_basic() {
+        assert_eq!(process("hello", "{quote:\"}").unwrap(), "\"hello\"");
+    }
+
+    #[test]
+    fn test_quote_single_quotes() {
+        assert_eq!(process("world", "{quote:'}").unwrap(), "'world'");
+    }
+
+    #[test]
+    fn test_quote_multiple_chars() {
+        assert_eq!(process("text", "{quote:**}").unwrap(), "**text**");
+    }
+
+    #[test]
+    fn test_quote_empty_string() {
+        assert_eq!(process("", "{quote:()}").unwrap(), "()()");
+    }
+
+    #[test]
+    fn test_quote_unicode() {
+        assert_eq!(process("hello", "{quote:🔥}").unwrap(), "🔥hello🔥");
+    }
+
+    #[test]
+    fn test_quote_escaped_chars() {
+        assert_eq!(process("test", "{quote:\\n}").unwrap(), "\ntest\n");
+    }
+
+    #[test]
+    fn test_quote_escaped_colon() {
+        assert_eq!(process("test", "{quote:\\:}").unwrap(), ":test:");
+    }
+
+    #[test]
+    fn test_quote_empty_chars() {
+        assert_eq!(process("hello", "{quote:}").unwrap(), "hello");
+    }
+
+    #[test]
+    fn test_quote_missing_argument() {
+        let result = process("hello", "{quote}");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_quote_brackets() {
+        assert_eq!(process("content", "{quote:[]}").unwrap(), "[]content[]");
+    }
+}
+
 pub mod shorthand_operations {
     use super::process;
 

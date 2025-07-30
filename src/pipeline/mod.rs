@@ -607,6 +607,34 @@ pub enum StringOp {
     /// ```
     Prepend { prefix: String },
 
+    /// Surround text with the specified text on both sides.
+    ///
+    /// Adds the specified text to both the beginning and end of the input string,
+    /// supporting escape sequences and Unicode text. This operation has an alias `quote`.
+    ///
+    /// # Fields
+    ///
+    /// * `text` - Text to add to both sides of the string
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// // Basic surrounding with quotes
+    /// let template = Template::parse("{surround:\"}").unwrap();
+    /// assert_eq!(template.format("hello").unwrap(), "\"hello\"");
+    ///
+    /// // Using the quote alias
+    /// let template = Template::parse("{quote:''}").unwrap();
+    /// assert_eq!(template.format("world").unwrap(), "''world''");
+    ///
+    /// // Multiple characters
+    /// let template = Template::parse("{surround:**}").unwrap();
+    /// assert_eq!(template.format("text").unwrap(), "**text**");
+    /// ```
+    Surround { text: String },
+
     /// Remove ANSI escape sequences from text.
     ///
     /// Strips color codes, cursor movement commands, and other ANSI escape
@@ -1512,6 +1540,9 @@ fn apply_single_operation(
         }
         StringOp::Prepend { prefix } => {
             apply_string_operation(val, |s| format!("{}{}", prefix, s), "Prepend")
+        }
+        StringOp::Surround { chars } => {
+            apply_string_operation(val, |s| format!("{}{}{}", chars, s, chars), "Surround")
         }
         StringOp::StripAnsi => {
             if let Value::Str(s) = val {

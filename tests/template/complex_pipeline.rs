@@ -222,6 +222,35 @@ fn test_prepend_append_prepend() {
 }
 
 #[test]
+fn test_surround_with_trim() {
+    assert_eq!(
+        process("  hello  ", "{trim|surround:\"}").unwrap(),
+        "\"hello\""
+    );
+}
+
+#[test]
+fn test_quote_with_upper() {
+    assert_eq!(process("world", "{upper|quote:''}").unwrap(), "''WORLD''");
+}
+
+#[test]
+fn test_split_surround_join() {
+    assert_eq!(
+        process("a,b,c", "{split:,:..|map:{surround:[]}|join: }").unwrap(),
+        "[]a[] []b[] []c[]"
+    );
+}
+
+#[test]
+fn test_surround_prepend_append() {
+    assert_eq!(
+        process("test", "{surround:*|prepend:>>|append:<<}").unwrap(),
+        ">>*test*<<"
+    );
+}
+
+#[test]
 fn test_filter_chaining() {
     let input = "Apple,banana,Cherry,grape,KIWI";
 

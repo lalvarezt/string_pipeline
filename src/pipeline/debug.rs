@@ -466,6 +466,7 @@ impl DebugTracer {
             StringOp::Substring { .. } => "Substring".to_string(),
             StringOp::Append { .. } => "Append".to_string(),
             StringOp::Prepend { .. } => "Prepend".to_string(),
+            StringOp::Surround { .. } => "Surround".to_string(),
             StringOp::Pad { .. } => "Pad".to_string(),
             StringOp::RegexExtract { .. } => "RegexExtract".to_string(),
             StringOp::Slice { .. } => "Slice".to_string(),

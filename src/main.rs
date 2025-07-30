@@ -139,6 +139,8 @@ fn show_operations_help() {
   lower                    - Convert to lowercase
   append:TEXT              - Add text to end
   prepend:TEXT             - Add text to beginning
+  surround:CHARS           - Add characters to both ends
+  quote:CHARS              - Add characters to both ends (alias)
   replace:s/PAT/REP/FLAGS  - Find and replace with regex
   regex_extract:PAT[:GRP]  - Extract with regex pattern
   sort[:DIR]               - Sort items alphabetically

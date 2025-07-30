@@ -46,6 +46,7 @@
 //! - **`upper`**, **`lower`** - Case conversion
 //! - **`trim[:chars][:direction]`** - Remove whitespace or custom characters
 //! - **`append:text`**, **`prepend:text`** - Add text to ends
+//! - **`surround:chars`**, **`quote:chars`** - Add characters to both ends
 //! - **`pad:width[:char][:direction]`** - Pad string to width
 //! - **`substring:range`** - Extract characters from string
 //!
@@ -129,6 +130,21 @@
 //! let extractor = Template::parse("{split: :1}").unwrap();
 //! let result = extractor.format("user 1234 active").unwrap();
 //! assert_eq!(result, "1234");
+//! ```
+//!
+//! ### Text Formatting
+//! ```rust
+//! use string_pipeline::Template;
+//!
+//! // Surround text with quotes
+//! let quoter = Template::parse("{surround:\"}").unwrap();
+//! let result = quoter.format("hello world").unwrap();
+//! assert_eq!(result, "\"hello world\"");
+//!
+//! // Quote items in a list
+//! let list_quoter = Template::parse("{split:,:..|map:{trim|quote:'}}").unwrap();
+//! let result = list_quoter.format("apple, banana, cherry").unwrap();
+//! assert_eq!(result, "'apple','banana','cherry'");
 //! ```
 //!
 //! ### List Processing with Map

@@ -262,6 +262,12 @@ fn parse_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String
         Rule::prepend => Ok(StringOp::Prepend {
             prefix: extract_single_arg(pair)?,
         }),
+        Rule::surround => Ok(StringOp::Surround {
+            text: extract_single_arg(pair)?,
+        }),
+        Rule::quote => Ok(StringOp::Surround {
+            text: extract_single_arg(pair)?,
+        }),
         Rule::strip_ansi => Ok(StringOp::StripAnsi),
         Rule::filter => Ok(StringOp::Filter {
             pattern: extract_single_arg_raw(pair)?,
@@ -562,6 +568,12 @@ fn parse_map_inner_operation(pair: pest::iterators::Pair<Rule>) -> Result<String
         }),
         Rule::prepend => Ok(StringOp::Prepend {
             prefix: extract_single_arg(pair)?,
+        }),
+        Rule::surround => Ok(StringOp::Surround {
+            text: extract_single_arg(pair)?,
+        }),
+        Rule::quote => Ok(StringOp::Surround {
+            text: extract_single_arg(pair)?,
         }),
         Rule::upper => Ok(StringOp::Upper),
         Rule::lower => Ok(StringOp::Lower),
