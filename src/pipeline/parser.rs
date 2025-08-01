@@ -5,8 +5,7 @@
 //! Pest parser generator for robust syntax handling with comprehensive error reporting.
 //!
 //! The parser supports the full template syntax including operations, ranges,
-//! escape sequences, and debug flags, with intelligent handling of special
-//! characters in different contexts.
+//! escape sequences, and debug flags.
 //!
 
 use once_cell::sync::OnceCell;

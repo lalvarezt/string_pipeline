@@ -940,9 +940,11 @@ The range system includes robust edge case handling:
 
 ### When is Escaping Required?
 
-Different argument types have different escaping requirements:
+The template parser uses a unified argument parsing system where all operations follow the same escaping rules for consistency and maintainability:
 
-### Simple Arguments (append, prepend, join, etc.)
+### Operation Arguments
+
+All operations use the same argument parsing rules. The following characters require escaping:
 
 | Character | Escape | Reason                |
 |-----------|--------|----------------------|
@@ -951,18 +953,6 @@ Different argument types have different escaping requirements:
 | `}`       | `\}`   | Ends template        |
 | `{`       | `\{`   | Starts template      |
 | `\`       | `\\`   | Escape character     |
-
-### Regex Arguments (filter, regex_extract)
-
-Regex patterns can contain most characters naturally.
-
-### Split Arguments
-
-Split separators can contain most characters. Only escape:
-
-| Character | Escape | Reason |
-|-----------|--------|--------|
-| `:` | `\:` | Visual helper |
 
 ### Special Sequences
 

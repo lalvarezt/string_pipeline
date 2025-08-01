@@ -1289,7 +1289,7 @@ pub mod regex_extract_operations {
         assert_eq!(
             process(
                 "Version: 1.2.3-beta",
-                r"{regex_extract:Version: (\d+\.\d+\.\d+):1}"
+                r"{regex_extract:Version\: (\d+\.\d+\.\d+):1}"
             )
             .unwrap(),
             "1.2.3"
