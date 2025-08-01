@@ -40,33 +40,38 @@ shorthand_range = {
   | range_full
 }
 
+// Argument parsing - requires escaping for special characters
+argument     = { (escaped_char | normal_char)* }
+normal_char  = { !("|" | "}" | "{" | ":" | "\\") ~ ANY }
+escaped_char = { "\\" ~ ANY }
+
 // Main operations - using specific arg types where needed
-regex_extract = { "regex_extract" ~ ":" ~ regex_arg ~ (":" ~ number)? }
-filter_not    = { "filter_not" ~ ":" ~ regex_arg }
-filter        = { "filter" ~ ":" ~ regex_arg }
+regex_extract =  { "regex_extract" ~ ":" ~ argument ~ (":" ~ number)? }
+filter_not    =  { "filter_not" ~ ":" ~ argument }
+filter        =  { "filter" ~ ":" ~ argument }
 strip_ansi    = @{ "strip_ansi" }
-map           = { "map" ~ ":" ~ map_operation }
-split         = { "split" ~ ":" ~ split_arg ~ ":" ~ range_spec? }
-substring     = { "substring" ~ ":" ~ range_spec }
-replace       = { "replace" ~ ":" ~ sed_string }
-append        = { "append" ~ ":" ~ simple_arg }
-prepend       = { "prepend" ~ ":" ~ simple_arg }
-surround      = { "surround" ~ ":" ~ simple_arg }
-quote         = { "quote" ~ ":" ~ simple_arg }
+map           =  { "map" ~ ":" ~ map_operation }
+split         =  { "split" ~ ":" ~ argument ~ ":" ~ range_spec? }
+substring     =  { "substring" ~ ":" ~ range_spec }
+replace       =  { "replace" ~ ":" ~ sed_string }
+append        =  { "append" ~ ":" ~ argument }
+prepend       =  { "prepend" ~ ":" ~ argument }
+surround      =  { "surround" ~ ":" ~ argument }
+quote         =  { "quote" ~ ":" ~ argument }
 upper         = @{ "upper" }
 lower         = @{ "lower" }
-trim          = { "trim" ~ (":" ~ simple_arg)? ~ (":" ~ direction)? }
-join          = { "join" ~ ":" ~ simple_arg }
-slice         = { "slice" ~ ":" ~ range_spec }
-sort          = { "sort" ~ (":" ~ sort_direction)? }
+trim          =  { "trim" ~ (":" ~ argument)? ~ (":" ~ direction)? }
+join          =  { "join" ~ ":" ~ argument }
+slice         =  { "slice" ~ ":" ~ range_spec }
+sort          =  { "sort" ~ (":" ~ sort_direction)? }
 reverse       = @{ "reverse" }
 unique        = @{ "unique" }
-pad           = { "pad" ~ ":" ~ number ~ (":" ~ pad_char)? ~ (":" ~ direction)? }
+pad           =  { "pad" ~ ":" ~ number ~ (":" ~ pad_char)? ~ (":" ~ direction)? }
 
 // Direction specifiers
 direction      = @{ "left" | "right" | "both" }
 sort_direction = @{ "asc" | "desc" }
-pad_char       = @{ simple_arg_content+ }
+pad_char       = @{ argument }
 
 // Map operation
 map_operation       = { "{" ~ map_operation_list ~ "}" }
@@ -95,68 +100,16 @@ map_inner_operation = {
 }
 
 // Map-specific operations that need special handling
-map_split      = { "split" ~ ":" ~ split_arg ~ (":" ~ range_spec)? }
-map_join       = { "join" ~ ":" ~ simple_arg }
-map_slice      = { "slice" ~ ":" ~ range_spec }
-map_sort       = { "sort" ~ (":" ~ sort_direction)? }
+map_split      =  { "split" ~ ":" ~ argument ~ (":" ~ range_spec)? }
+map_join       =  { "join" ~ ":" ~ argument }
+map_slice      =  { "slice" ~ ":" ~ range_spec }
+map_sort       =  { "sort" ~ (":" ~ sort_direction)? }
 map_unique     = @{ "unique" }
-map_filter     = { "filter" ~ ":" ~ map_regex_arg }
-map_filter_not = { "filter_not" ~ ":" ~ map_regex_arg }
+map_filter     =  { "filter" ~ ":" ~ argument }
+map_filter_not =  { "filter_not" ~ ":" ~ argument }
 
 // Map-specific regex extract
-map_regex_extract = { "regex_extract" ~ ":" ~ map_regex_arg ~ (":" ~ number)? }
-
-// Simplified argument handling - three types to handle specific cases
-simple_arg         = @{ simple_arg_content* }
-simple_arg_content =  { escaped_char | simple_normal_char }
-simple_normal_char =  { !(":" | "|" | "}" | "{" | "\\") ~ ANY }
-
-// Split args - need to handle pipes that aren't operations
-split_arg          = @{ (split_escaped_char | split_content)* }
-split_content      =  { !(":" ~ (number | range_part)) ~ !("|" ~ operation_keyword) ~ !("}" ~ EOI) ~ ANY }
-split_escaped_char =  { "\\" ~ ANY }
-
-// Regex args - need to handle pipes and braces in regex patterns
-regex_arg          = @{ (regex_escaped_char | regex_content)* }
-regex_content      =  { !(":" ~ (number | range_part)) ~ !("|" ~ operation_keyword) ~ !("}" ~ EOI) ~ ANY }
-regex_escaped_char =  { "\\" ~ ANY }
-
-// Map regex args - handle braces in regex patterns
-map_regex_arg          = @{ (map_regex_escaped_char | map_regex_brace | map_regex_content)* }
-map_regex_brace        =  { "{" ~ (!"}" ~ ANY)* ~ "}" }
-map_regex_content      =  { !(":" ~ number) ~ !("|" ~ operation_keyword) ~ !("{" | ("}" ~ ("|" | "}" | EOI))) ~ ANY }
-map_regex_escaped_char =  { "\\" ~ ANY }
-
-// Common escaped character handling
-escaped_char = { "\\" ~ ANY }
-
-// Operation keywords for lookahead (simplified list)
-operation_keyword = _{
-    "split"
-  | "upper"
-  | "lower"
-  | "trim"
-  | "append"
-  | "prepend"
-  | "surround"
-  | "quote"
-  | "join"
-  | "substring"
-  | "replace"
-  | "map"
-  | "filter"
-  | "filter_not"
-  | "slice"
-  | "sort"
-  | "reverse"
-  | "unique"
-  | "regex_extract"
-  | "strip_ansi"
-  | "pad"
-}
-
-// Range parts for lookahead
-range_part = _{ ".." | "..=" }
+map_regex_extract = { "regex_extract" ~ ":" ~ argument ~ (":" ~ number)? }
 
 // Sed strings
 sed_string       =  { "s/" ~ sed_pattern ~ "/" ~ sed_replacement ~ "/" ~ sed_flags? }
