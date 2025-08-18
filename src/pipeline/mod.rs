@@ -1119,10 +1119,8 @@ pub fn apply_ops_internal(
     let mut default_sep = " ".to_string();
     let start_time = if debug { Some(Instant::now()) } else { None };
 
-    if debug {
-        if let Some(ref tracer) = debug_tracer {
-            tracer.pipeline_start(ops, &val);
-        }
+    if debug && let Some(ref tracer) = debug_tracer {
+        tracer.pipeline_start(ops, &val);
     }
 
     for (i, op) in ops.iter().enumerate() {
@@ -1131,17 +1129,15 @@ pub fn apply_ops_internal(
 
         match op {
             StringOp::Map { operations } => {
-                if debug {
-                    if let Some(ref tracer) = debug_tracer {
-                        tracer.operation_step(
-                            i + 1,
-                            ops.len(),
-                            op,
-                            &input_val,
-                            &Value::Str("processing...".to_string()),
-                            Duration::from_nanos(0),
-                        );
-                    }
+                if debug && let Some(ref tracer) = debug_tracer {
+                    tracer.operation_step(
+                        i + 1,
+                        ops.len(),
+                        op,
+                        &input_val,
+                        &Value::Str("processing...".to_string()),
+                        Duration::from_nanos(0),
+                    );
                 }
 
                 if let Value::List(list) = val {
@@ -1149,10 +1145,8 @@ pub fn apply_ops_internal(
                         .iter()
                         .enumerate()
                         .map(|(item_idx, item)| {
-                            if debug {
-                                if let Some(ref tracer) = debug_tracer {
-                                    tracer.map_item_start(item_idx + 1, list.len(), item);
-                                }
+                            if debug && let Some(ref tracer) = debug_tracer {
+                                tracer.map_item_start(item_idx + 1, list.len(), item);
                             }
 
                             let sub_tracer = DebugTracer::sub_pipeline(debug);
@@ -1163,12 +1157,10 @@ pub fn apply_ops_internal(
                                 Some(sub_tracer),
                             );
 
-                            if debug {
-                                if let Some(ref tracer) = debug_tracer {
-                                    match &result {
-                                        Ok(output) => tracer.map_item_end(Ok(output)),
-                                        Err(e) => tracer.map_item_end(Err(e)),
-                                    }
+                            if debug && let Some(ref tracer) = debug_tracer {
+                                match &result {
+                                    Ok(output) => tracer.map_item_end(Ok(output)),
+                                    Err(e) => tracer.map_item_end(Err(e)),
                                 }
                             }
 
@@ -1176,10 +1168,8 @@ pub fn apply_ops_internal(
                         })
                         .collect::<Result<Vec<_>, _>>()?;
 
-                    if debug {
-                        if let Some(ref tracer) = debug_tracer {
-                            tracer.map_complete(list.len(), mapped.len());
-                        }
+                    if debug && let Some(ref tracer) = debug_tracer {
+                        tracer.map_complete(list.len(), mapped.len());
                     }
 
                     val = Value::List(mapped);
@@ -1194,19 +1184,18 @@ pub fn apply_ops_internal(
             }
         }
 
-        if debug && !matches!(op, StringOp::Map { .. }) {
-            if let Some(ref tracer) = debug_tracer {
-                let elapsed = step_start.unwrap().elapsed();
-                tracer.operation_step(i + 1, ops.len(), op, &input_val, &val, elapsed);
-            }
+        if debug
+            && !matches!(op, StringOp::Map { .. })
+            && let Some(ref tracer) = debug_tracer
+        {
+            let elapsed = step_start.unwrap().elapsed();
+            tracer.operation_step(i + 1, ops.len(), op, &input_val, &val, elapsed);
         }
     }
 
-    if debug {
-        if let Some(ref tracer) = debug_tracer {
-            let total_elapsed = start_time.unwrap().elapsed();
-            tracer.pipeline_end(&val, total_elapsed);
-        }
+    if debug && let Some(ref tracer) = debug_tracer {
+        let total_elapsed = start_time.unwrap().elapsed();
+        tracer.pipeline_end(&val, total_elapsed);
     }
 
     Ok(match val {

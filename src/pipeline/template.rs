@@ -517,13 +517,13 @@ impl MultiTemplate {
         dbg: &Option<&DebugTracer>,
     ) -> Result<String, String> {
         /* fast path: single split --------------------------------------- */
-        if ops.len() == 1 {
-            if let StringOp::Split { sep, range } = &ops[0] {
-                if let Some(t) = dbg {
-                    t.cache_operation("FAST SPLIT", &format!("by '{sep}'"));
-                }
-                return Ok(self.fast_single_split(input, sep, range));
+        if ops.len() == 1
+            && let StringOp::Split { sep, range } = &ops[0]
+        {
+            if let Some(t) = dbg {
+                t.cache_operation("FAST SPLIT", &format!("by '{sep}'"));
             }
+            return Ok(self.fast_single_split(input, sep, range));
         }
 
         /* general path – memoised per call ------------------------------ */
