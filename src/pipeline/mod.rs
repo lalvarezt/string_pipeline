@@ -52,7 +52,7 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use strip_ansi_escapes::strip;
 
-pub use crate::pipeline::template::{MultiTemplate, Template};
+pub use crate::pipeline::template::{MultiTemplate, SectionInfo, SectionType, Template};
 pub use debug::DebugTracer;
 
 /* ------------------------------------------------------------------------ */

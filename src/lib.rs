@@ -199,6 +199,33 @@
 //!
 //! Use `map:{operation}` to apply string operations to each item in a list.
 //!
+//! ## Structured Templates (Advanced)
+//!
+//! **NEW in v0.13.0**: Apply multiple inputs to different template sections with individual separators.
+//! This enables powerful scenarios like batch processing, command construction, and data transformation.
+//!
+//! ```rust
+//! use string_pipeline::Template;
+//!
+//! // Multiple inputs per template section with different separators
+//! let template = Template::parse("Users: {upper} | Files: {lower}").unwrap();
+//! let result = template.format_with_inputs(&[
+//!     &["john doe", "jane smith"],  // Multiple users for first section
+//!     &["FILE1.TXT", "FILE2.TXT"]   // Multiple files for second section
+//! ], &[" ", ","]).unwrap();         // Space separator for users, comma for files
+//! assert_eq!(result, "Users: JOHN DOE JANE SMITH | Files: file1.txt,file2.txt");
+//!
+//! // Template introspection
+//! let sections = template.get_template_sections(); // Get template section info
+//! assert_eq!(sections.len(), 2); // Two template sections: {strip_ansi|lower} and {}
+//! ```
+//!
+//! **Key Features:**
+//! - **🎯 Flexible Input**: Each template section can receive multiple input values
+//! - **⚙️ Custom Separators**: Individual separator for each template section
+//! - **🔍 Introspection**: Examine template structure before processing
+//! - **🏗️ Batch Processing**: Perfect for processing multiple items per section
+//!
 //! ## Error Handling
 //!
 //! All operations return `Result<String, String>` for comprehensive error handling:
@@ -215,6 +242,12 @@
 //! let result = template.format("not_a_list");
 //! assert!(result.is_err());
 //! // Error: "Sort operation can only be applied to lists"
+//!
+//! // Structured template input count validation
+//! let template = Template::parse("A: {upper} B: {lower}").unwrap();
+//! let result = template.format_with_inputs(&[&["only_one"]], &[" ", " "]);
+//! assert!(result.is_err());
+//! // Error: "Expected 2 input slices for 2 template sections, got 1"
 //! ```
 //!
 //! ## Performance Notes
@@ -245,4 +278,4 @@
 
 mod pipeline;
 
-pub use pipeline::{MultiTemplate, Template};
+pub use pipeline::{MultiTemplate, SectionInfo, SectionType, Template};
