@@ -8,7 +8,6 @@
 //! escape sequences, and debug flags.
 //!
 
-use once_cell::sync::OnceCell;
 use pest::Parser;
 use pest_derive::Parser;
 use smallvec::SmallVec;
@@ -270,11 +269,9 @@ fn parse_operation(pair: pest::iterators::Pair<Rule>) -> Result<StringOp, String
         Rule::strip_ansi => Ok(StringOp::StripAnsi),
         Rule::filter => Ok(StringOp::Filter {
             pattern: extract_single_arg_raw(pair)?,
-            regex: OnceCell::new(),
         }),
         Rule::filter_not => Ok(StringOp::FilterNot {
             pattern: extract_single_arg_raw(pair)?,
-            regex: OnceCell::new(),
         }),
         Rule::slice => Ok(StringOp::Slice {
             range: extract_range_arg(pair)?,
@@ -500,11 +497,7 @@ fn parse_regex_extract_operation(pair: pest::iterators::Pair<Rule>) -> Result<St
     let mut parts = pair.into_inner();
     let pattern = parts.next().unwrap().as_str().to_string();
     let group = parts.next().and_then(|p| p.as_str().parse().ok());
-    Ok(StringOp::RegexExtract {
-        pattern,
-        group,
-        regex: OnceCell::new(),
-    })
+    Ok(StringOp::RegexExtract { pattern, group })
 }
 
 /// Parses a map operation with nested operation list.
@@ -610,11 +603,9 @@ fn parse_map_inner_operation(pair: pest::iterators::Pair<Rule>) -> Result<String
         Rule::map_unique => Ok(StringOp::Unique),
         Rule::map_filter => Ok(StringOp::Filter {
             pattern: extract_single_arg_raw(pair)?,
-            regex: OnceCell::new(),
         }),
         Rule::map_filter_not => Ok(StringOp::FilterNot {
             pattern: extract_single_arg_raw(pair)?,
-            regex: OnceCell::new(),
         }),
 
         _ => Err(format!("Unsupported map operation: {:?}", pair.as_rule())),
