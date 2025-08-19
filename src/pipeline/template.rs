@@ -699,23 +699,41 @@ impl MultiTemplate {
                         return Err("Internal error: template index out of bounds".to_string());
                     }
 
-                    // Join multiple inputs with the corresponding separator
+                    // Process each input individually, then join the results
                     let section_inputs = inputs[template_index];
                     let separator = separators[template_index];
-                    let input = match section_inputs.len() {
+                    let output = match section_inputs.len() {
                         0 => String::new(),
-                        1 => section_inputs[0].to_string(),
-                        _ => section_inputs.join(separator),
+                        1 => {
+                            let mut input_hasher = std::collections::hash_map::DefaultHasher::new();
+                            std::hash::Hash::hash(&section_inputs[0], &mut input_hasher);
+                            let input_hash = input_hasher.finish();
+
+                            self.apply_template_section(
+                                section_inputs[0],
+                                ops,
+                                input_hash,
+                                &mut cache,
+                                &None, // No debug tracing for structured processing
+                            )?
+                        }
+                        _ => {
+                            let mut results = Vec::new();
+                            for input in section_inputs {
+                                let mut input_hasher =
+                                    std::collections::hash_map::DefaultHasher::new();
+                                std::hash::Hash::hash(&input, &mut input_hasher);
+                                let input_hash = input_hasher.finish();
+
+                                let result = self.apply_template_section(
+                                    input, ops, input_hash, &mut cache,
+                                    &None, // No debug tracing for structured processing
+                                )?;
+                                results.push(result);
+                            }
+                            results.join(separator)
+                        }
                     };
-
-                    let mut input_hasher = std::collections::hash_map::DefaultHasher::new();
-                    std::hash::Hash::hash(&input, &mut input_hasher);
-                    let input_hash = input_hasher.finish();
-
-                    let output = self.apply_template_section(
-                        &input, ops, input_hash, &mut cache,
-                        &None, // No debug tracing for structured processing
-                    )?;
                     result.push_str(&output);
                     template_index += 1;
                 }

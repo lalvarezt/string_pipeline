@@ -582,13 +582,19 @@ fn test_structured_template_complex_scenario() {
     let result = template
         .format_with_inputs(
             &[
-                &["/home/user/documents/important.txt"],
+                &[
+                    "/home/user/documents/important1.txt",
+                    "/home/user/documents/important2.txt",
+                ],
                 &["/home/user/documents/important.txt"],
             ],
             &[" ", " "],
         )
         .unwrap();
-    assert_eq!(result, "cp important.txt /backup/important.bak");
+    assert_eq!(
+        result,
+        "cp important1.txt important2.txt /backup/important.bak"
+    );
 }
 
 #[test]
