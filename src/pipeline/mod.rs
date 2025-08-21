@@ -47,12 +47,12 @@ mod template;
 
 use dashmap::DashMap;
 use memchr::memchr_iter;
-use once_cell::sync::{Lazy, OnceCell};
+use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use strip_ansi_escapes::strip;
 
-pub use crate::pipeline::template::{MultiTemplate, Template};
+pub use crate::pipeline::template::{MultiTemplate, SectionInfo, SectionType, Template};
 pub use debug::DebugTracer;
 
 /* ------------------------------------------------------------------------ */
@@ -686,10 +686,7 @@ pub enum StringOp {
     /// let template = Template::parse("{split:,:..|filter:\\.txt$|join:\\n}").unwrap();
     /// assert_eq!(template.format("file.txt,readme.md,data.txt").unwrap(), "file.txt\ndata.txt");
     /// ```
-    Filter {
-        pattern: String,
-        regex: OnceCell<Regex>,
-    },
+    Filter { pattern: String },
 
     /// Remove list items matching a regex pattern.
     ///
@@ -724,10 +721,7 @@ pub enum StringOp {
     /// let template = Template::parse("{split:\\n:..|filter_not:^$|join:\\n}").unwrap();
     /// assert_eq!(template.format("line1\n\nline2\n\nline3").unwrap(), "line1\nline2\nline3");
     /// ```
-    FilterNot {
-        pattern: String,
-        regex: OnceCell<Regex>,
-    },
+    FilterNot { pattern: String },
 
     /// Select a range of items from a list.
     ///
@@ -899,7 +893,6 @@ pub enum StringOp {
     RegexExtract {
         pattern: String,
         group: Option<usize>,
-        regex: OnceCell<Regex>,
     },
 }
 
@@ -1360,10 +1353,8 @@ fn apply_single_operation(
         StringOp::Slice { range } => {
             apply_list_operation(val, |list| apply_range(&list, range), "Slice")
         }
-        StringOp::Filter { pattern, regex } => {
-            let re = regex.get_or_try_init(|| {
-                Regex::new(pattern).map_err(|e| format!("Invalid regex: {e}"))
-            })?;
+        StringOp::Filter { pattern } => {
+            let re = get_cached_regex(pattern)?;
             match val {
                 Value::List(list) => Ok(Value::List(
                     list.into_iter().filter(|s| re.is_match(s)).collect(),
@@ -1371,10 +1362,8 @@ fn apply_single_operation(
                 Value::Str(s) => Ok(Value::Str(if re.is_match(&s) { s } else { String::new() })),
             }
         }
-        StringOp::FilterNot { pattern, regex } => {
-            let re = regex.get_or_try_init(|| {
-                Regex::new(pattern).map_err(|e| format!("Invalid regex: {e}"))
-            })?;
+        StringOp::FilterNot { pattern } => {
+            let re = get_cached_regex(pattern)?;
             match val {
                 Value::List(list) => Ok(Value::List(
                     list.into_iter().filter(|s| !re.is_match(s)).collect(),
@@ -1576,15 +1565,9 @@ fn apply_single_operation(
                 )
             }
         }
-        StringOp::RegexExtract {
-            pattern,
-            group,
-            regex,
-        } => {
+        StringOp::RegexExtract { pattern, group } => {
             if let Value::Str(s) = val {
-                let re = regex.get_or_try_init(|| {
-                    Regex::new(pattern).map_err(|e| format!("Invalid regex: {e}"))
-                })?;
+                let re = get_cached_regex(pattern)?;
                 let result = if let Some(group_idx) = group {
                     re.captures(&s)
                         .and_then(|caps| caps.get(*group_idx))

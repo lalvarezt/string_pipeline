@@ -132,6 +132,92 @@ pub enum TemplateSection {
     Template(Vec<StringOp>),
 }
 
+/// Type of template section for introspection and analysis.
+///
+/// Distinguishes between literal text sections and template operation sections
+/// when examining template structure programmatically. Used by introspection
+/// methods like [`MultiTemplate::get_section_info`] to provide detailed template analysis.
+///
+/// # Examples
+///
+/// ```rust
+/// use string_pipeline::{Template, SectionType};
+///
+/// let template = Template::parse("Hello {upper} world!").unwrap();
+/// let sections = template.get_section_info();
+///
+/// assert_eq!(sections[0].section_type, SectionType::Literal);  // "Hello "
+/// assert_eq!(sections[1].section_type, SectionType::Template); // {upper}
+/// assert_eq!(sections[2].section_type, SectionType::Literal);  // " world!"
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SectionType {
+    /// A literal text section that appears unchanged in template output.
+    ///
+    /// Literal sections contain static text that is copied directly to the
+    /// output without any transformation or processing.
+    Literal,
+    /// A template section containing string operations.
+    ///
+    /// Template sections contain operation sequences like `{upper|trim}` that
+    /// transform input data before including it in the output.
+    Template,
+}
+
+/// Detailed information about a template section for introspection and debugging.
+///
+/// Provides comprehensive metadata about each section in a template, including
+/// its type, position, and content. Used by [`MultiTemplate::get_section_info`]
+/// to enable programmatic template analysis and debugging.
+///
+/// This struct contains all necessary information to understand both the structure
+/// and content of template sections, making it useful for tools that need to
+/// analyze or manipulate templates programmatically.
+///
+/// # Field Details
+///
+/// - **`section_type`**: Whether this is a literal text section or template operation section
+/// - **`overall_position`**: Zero-based position among all sections in the template
+/// - **`template_position`**: Zero-based position among template sections only (None for literals)
+/// - **`content`**: The literal text content (populated only for literal sections)
+/// - **`operations`**: The operation sequence (populated only for template sections)
+///
+/// # Examples
+///
+/// ```rust
+/// use string_pipeline::{Template, SectionType};
+///
+/// let template = Template::parse("Name: {upper} | Age: {lower}").unwrap();
+/// let sections = template.get_section_info();
+///
+/// // First section: "Name: "
+/// assert_eq!(sections[0].section_type, SectionType::Literal);
+/// assert_eq!(sections[0].overall_position, 0);
+/// assert_eq!(sections[0].template_position, None);
+/// assert_eq!(sections[0].content, Some("Name: ".to_string()));
+/// assert!(sections[0].operations.is_none());
+///
+/// // Second section: {upper}
+/// assert_eq!(sections[1].section_type, SectionType::Template);
+/// assert_eq!(sections[1].overall_position, 1);
+/// assert_eq!(sections[1].template_position, Some(0));
+/// assert!(sections[1].content.is_none());
+/// assert_eq!(sections[1].operations.as_ref().unwrap().len(), 1);
+/// ```
+#[derive(Debug, Clone)]
+pub struct SectionInfo {
+    /// The type of this section (literal or template).
+    pub section_type: SectionType,
+    /// Position within all sections (both literal and template).
+    pub overall_position: usize,
+    /// Position among template sections only (None for literal sections).
+    pub template_position: Option<usize>,
+    /// Text content for literal sections (None for template sections).
+    pub content: Option<String>,
+    /// Operations for template sections (None for literal sections).
+    pub operations: Option<Vec<StringOp>>,
+}
+
 /* ---------- per-format call cache (operation results only) -------------- */
 
 /// Per-template-instance cache for operation results.
@@ -502,6 +588,256 @@ impl MultiTemplate {
     /// ```
     pub fn set_debug(&mut self, debug: bool) {
         self.debug = debug;
+    }
+
+    /* -------- structured template processing ----------------------------- */
+
+    /// Format template with multiple inputs per template section.
+    ///
+    /// This method enables advanced template processing where each template section
+    /// can receive multiple input values that are joined with individual separators.
+    /// This is useful for complex formatting scenarios like batch processing or
+    /// command construction where different template sections need different data.
+    ///
+    /// # Arguments
+    ///
+    /// * `inputs` - Slice of input slices, where each inner slice contains the inputs for one template section
+    /// * `separators` - Slice of separators, one for each template section to join multiple inputs
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(String)` - The formatted result with each template section processed with its joined inputs
+    /// * `Err(String)` - Error if inputs/separators length doesn't match template section count or processing fails
+    ///
+    /// # Template Section Ordering
+    ///
+    /// Template sections are numbered from left to right, starting at 0. Literal sections
+    /// are not counted. For example, in `"Hello {upper} world {lower}!"`:
+    /// - Template section 0: `{upper}`
+    /// - Template section 1: `{lower}`
+    /// - Total template sections: 2
+    ///
+    /// # Input Processing
+    ///
+    /// For each template section:
+    /// - **Empty slice `[]`**: Uses empty string as input
+    /// - **Single item `["value"]`**: Uses "value" directly as input
+    /// - **Multiple items `["a", "b", "c"]`**: Joins with corresponding separator
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The number of input slices doesn't match the number of template sections
+    /// - The number of separators doesn't match the number of template sections
+    /// - Any template section processing fails
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// // Multiple inputs for first section, single input for second
+    /// let template = Template::parse("Users: {upper} | Email: {lower}").unwrap();
+    /// let result = template.format_with_inputs(&[
+    ///     &["john doe", "peter parker"],
+    ///     &["ADMIN@EXAMPLE.COM"],
+    /// ], &[" ", " "]).unwrap();
+    /// assert_eq!(result, "Users: JOHN DOE PETER PARKER | Email: admin@example.com");
+    ///
+    /// // File batch processing with different separators
+    /// let template = Template::parse("tar -czf {lower}.tar.gz {join: }").unwrap();
+    /// let result = template.format_with_inputs(&[
+    ///     &["BACKUP"],
+    ///     &["file1.txt", "file2.txt", "file3.txt"],
+    /// ], &[" ", " "]).unwrap();
+    /// assert_eq!(result, "tar -czf backup.tar.gz file1.txt file2.txt file3.txt");
+    ///
+    /// // Command construction with custom separators
+    /// let template = Template::parse("grep {join:\\|} {join:,}").unwrap();
+    /// let result = template.format_with_inputs(&[
+    ///     &["error", "warning"],
+    ///     &["log1.txt", "log2.txt"],
+    /// ], &["|", ","]).unwrap();
+    /// assert_eq!(result, "grep error|warning log1.txt,log2.txt");
+    /// ```
+    pub fn format_with_inputs(
+        &self,
+        inputs: &[&[&str]],
+        separators: &[&str],
+    ) -> Result<String, String> {
+        let template_sections_count = self.template_section_count();
+
+        if inputs.len() != template_sections_count {
+            return Err(format!(
+                "Expected {} input slices for {} template sections, got {}",
+                template_sections_count,
+                template_sections_count,
+                inputs.len()
+            ));
+        }
+
+        if separators.len() != template_sections_count {
+            return Err(format!(
+                "Expected {} separators for {} template sections, got {}",
+                template_sections_count,
+                template_sections_count,
+                separators.len()
+            ));
+        }
+
+        let mut result = String::new();
+        let mut template_index = 0;
+        let mut cache = TemplateCache::new();
+
+        for section in &self.sections {
+            match section {
+                TemplateSection::Literal(text) => {
+                    result.push_str(text);
+                }
+                TemplateSection::Template(ops) => {
+                    if template_index >= inputs.len() {
+                        return Err("Internal error: template index out of bounds".to_string());
+                    }
+
+                    // Process each input individually, then join the results
+                    let section_inputs = inputs[template_index];
+                    let separator = separators[template_index];
+                    let output = match section_inputs.len() {
+                        0 => String::new(),
+                        1 => {
+                            let mut input_hasher = std::collections::hash_map::DefaultHasher::new();
+                            std::hash::Hash::hash(&section_inputs[0], &mut input_hasher);
+                            let input_hash = input_hasher.finish();
+
+                            self.apply_template_section(
+                                section_inputs[0],
+                                ops,
+                                input_hash,
+                                &mut cache,
+                                &None, // No debug tracing for structured processing
+                            )?
+                        }
+                        _ => {
+                            let mut results = Vec::new();
+                            for input in section_inputs {
+                                let mut input_hasher =
+                                    std::collections::hash_map::DefaultHasher::new();
+                                std::hash::Hash::hash(&input, &mut input_hasher);
+                                let input_hash = input_hasher.finish();
+
+                                let result = self.apply_template_section(
+                                    input, ops, input_hash, &mut cache,
+                                    &None, // No debug tracing for structured processing
+                                )?;
+                                results.push(result);
+                            }
+                            results.join(separator)
+                        }
+                    };
+                    result.push_str(&output);
+                    template_index += 1;
+                }
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// Get information about template sections for introspection.
+    ///
+    /// Returns a vector of tuples containing the position and operations for each
+    /// template section in the template. This is useful for understanding the
+    /// structure of a template before processing it with `format_with_inputs`.
+    ///
+    /// # Returns
+    ///
+    /// A vector where each element is a tuple of:
+    /// - `usize` - The position/index of the template section (0-based)
+    /// - `&Vec<StringOp>` - Reference to the operations in that section
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// let template = Template::parse("Hello {upper} world {lower|trim}!").unwrap();
+    /// let sections = template.get_template_sections();
+    ///
+    /// assert_eq!(sections.len(), 2);
+    /// assert_eq!(sections[0].0, 0); // First template section at position 0
+    /// assert_eq!(sections[1].0, 1); // Second template section at position 1
+    /// assert_eq!(sections[0].1.len(), 1); // {upper} has 1 operation
+    /// assert_eq!(sections[1].1.len(), 2); // {lower|trim} has 2 operations
+    /// ```
+    pub fn get_template_sections(&self) -> Vec<(usize, &Vec<StringOp>)> {
+        let mut result = Vec::new();
+        let mut template_index = 0;
+
+        for section in &self.sections {
+            if let TemplateSection::Template(ops) = section {
+                result.push((template_index, ops));
+                template_index += 1;
+            }
+        }
+
+        result
+    }
+
+    /// Get detailed information about all sections in the template.
+    ///
+    /// Returns information about both literal and template sections, including
+    /// their types, positions, and content. This provides a complete view of
+    /// the template structure for debugging and introspection.
+    ///
+    /// # Returns
+    ///
+    /// A vector of section information structs containing:
+    /// - Section type (literal or template)
+    /// - Position within all sections
+    /// - Content or operation details
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// let template = Template::parse("Hello {upper} world!").unwrap();
+    /// let info = template.get_section_info();
+    ///
+    /// assert_eq!(info.len(), 3);
+    /// // info[0]: Literal("Hello ")
+    /// // info[1]: Template(position=0, operations=[Upper])
+    /// // info[2]: Literal(" world!")
+    /// ```
+    pub fn get_section_info(&self) -> Vec<SectionInfo> {
+        let mut result = Vec::new();
+        let mut template_position = 0;
+
+        for (overall_position, section) in self.sections.iter().enumerate() {
+            match section {
+                TemplateSection::Literal(text) => {
+                    result.push(SectionInfo {
+                        section_type: SectionType::Literal,
+                        overall_position,
+                        template_position: None,
+                        content: Some(text.clone()),
+                        operations: None,
+                    });
+                }
+                TemplateSection::Template(ops) => {
+                    result.push(SectionInfo {
+                        section_type: SectionType::Template,
+                        overall_position,
+                        template_position: Some(template_position),
+                        content: None,
+                        operations: Some(ops.clone()),
+                    });
+                    template_position += 1;
+                }
+            }
+        }
+
+        result
     }
 
     /* ------------------------------------------------------------------ */

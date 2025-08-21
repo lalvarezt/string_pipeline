@@ -1,4 +1,4 @@
-use string_pipeline::MultiTemplate;
+use string_pipeline::{MultiTemplate, SectionType};
 
 #[test]
 fn test_multi_template_literal_text_only() {
@@ -300,4 +300,329 @@ fn test_multi_template_mixed_operations() {
     let template = MultiTemplate::parse("First: {0} Upper: {upper} Last: {2}").unwrap();
     let result = template.format("hello world test").unwrap();
     assert_eq!(result, "First: hello Upper: HELLO WORLD TEST Last: test");
+}
+
+// Tests for the structured template functionality
+
+#[test]
+fn test_format_with_inputs_basic() {
+    // Test basic usage of format_with_inputs (single inputs)
+    let template = MultiTemplate::parse("User: {upper} | Email: {lower}").unwrap();
+    let result = template
+        .format_with_inputs(&[&["john doe"], &["JOHN@EXAMPLE.COM"]], &[" ", " "])
+        .unwrap();
+    assert_eq!(result, "User: JOHN DOE | Email: john@example.com");
+}
+
+#[test]
+fn test_format_with_inputs_redirect() {
+    // Test basic with multiple operations
+    let template = MultiTemplate::parse("bat {strip_ansi|lower} > {}.txt").unwrap();
+    let result = template
+        .format_with_inputs(&[&["MyFile.log"], &["output"]], &[" ", " "])
+        .unwrap();
+    assert_eq!(result, "bat myfile.log > output.txt");
+}
+
+#[test]
+fn test_format_with_inputs_multiple_values() {
+    // Test multiple inputs per template section
+    let template = MultiTemplate::parse("Users: {upper} | Files: {lower}").unwrap();
+    let result = template
+        .format_with_inputs(
+            &[&["john doe", "peter parker"], &["FILE1.TXT", "FILE2.TXT"]],
+            &[" ", ","],
+        )
+        .unwrap();
+    assert_eq!(
+        result,
+        "Users: JOHN DOE PETER PARKER | Files: file1.txt,file2.txt"
+    );
+}
+
+#[test]
+fn test_format_with_inputs_multiple_values_quoted() {
+    // Test multiple inputs per template section
+    let template = MultiTemplate::parse("Users: {upper} | Files: {lower}").unwrap();
+    let result = template
+        .format_with_inputs(
+            &[
+                &["john doe", "peter parker"],
+                &["'FILE1.TXT'", "'FILE2.TXT'"],
+            ],
+            &[" ", " "],
+        )
+        .unwrap();
+    assert_eq!(
+        result,
+        "Users: JOHN DOE PETER PARKER | Files: 'file1.txt' 'file2.txt'"
+    );
+}
+
+#[test]
+fn test_format_with_inputs_complex_operations() {
+    // Test with complex operations in each section
+    let template = MultiTemplate::parse(
+        "Files: {split:,:..|filter:\\.txt$|join: \\| } Count: {split:,:..|map:{upper}|join:-}",
+    )
+    .unwrap();
+    let result = template
+        .format_with_inputs(
+            &[&["file1.txt,doc.pdf,file2.txt,readme.md"], &["a,b,c"]],
+            &[" ", " "],
+        )
+        .unwrap();
+    assert_eq!(result, "Files: file1.txt | file2.txt Count: A-B-C");
+}
+
+#[test]
+fn test_format_with_inputs_single_template() {
+    // Test with just one template section
+    let template = MultiTemplate::parse("Result: {upper}").unwrap();
+    let result = template
+        .format_with_inputs(&[&["hello world"]], &[" "])
+        .unwrap();
+    assert_eq!(result, "Result: HELLO WORLD");
+}
+
+#[test]
+fn test_format_with_inputs_no_templates() {
+    // Test with no template sections (only literals)
+    let template = MultiTemplate::parse("Just literal text").unwrap();
+    let result = template.format_with_inputs(&[], &[]).unwrap();
+    assert_eq!(result, "Just literal text");
+}
+
+#[test]
+fn test_format_with_inputs_multiple_sections() {
+    // Test with multiple template sections
+    let template = MultiTemplate::parse("A: {upper} B: {lower} C: {trim} D: {append:!}").unwrap();
+    let result = template
+        .format_with_inputs(
+            &[&["hello"], &["WORLD"], &["  test  "], &["done"]],
+            &[" ", " ", " ", " "],
+        )
+        .unwrap();
+    assert_eq!(result, "A: HELLO B: world C: test D: done!");
+}
+
+#[test]
+fn test_format_with_inputs_error_wrong_input_count() {
+    // Test error when input count doesn't match template section count
+    let template = MultiTemplate::parse("A: {upper} B: {lower}").unwrap();
+
+    // Too few inputs
+    let result = template.format_with_inputs(&[&["only_one"]], &[" ", " "]);
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .contains("Expected 2 input slices for 2 template sections, got 1")
+    );
+
+    // Too many inputs
+    let result = template.format_with_inputs(&[&["one"], &["two"], &["three"]], &[" ", " "]);
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .contains("Expected 2 input slices for 2 template sections, got 3")
+    );
+}
+
+#[test]
+fn test_format_with_inputs_error_wrong_separator_count() {
+    // Test error when separator count doesn't match template section count
+    let template = MultiTemplate::parse("A: {upper} B: {lower}").unwrap();
+
+    // Too few separators
+    let result = template.format_with_inputs(&[&["one"], &["two"]], &[" "]);
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .contains("Expected 2 separators for 2 template sections, got 1")
+    );
+
+    // Too many separators
+    let result = template.format_with_inputs(&[&["one"], &["two"]], &[" ", " ", " "]);
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .contains("Expected 2 separators for 2 template sections, got 3")
+    );
+}
+
+#[test]
+fn test_format_with_inputs_consecutive_templates() {
+    // Test consecutive template sections without literal text
+    let template = MultiTemplate::parse("{upper}{lower}{trim}").unwrap();
+    let result = template
+        .format_with_inputs(&[&["Hello"], &["WORLD"], &["  test  "]], &[" ", " ", " "])
+        .unwrap();
+    assert_eq!(result, "HELLOworldtest");
+}
+
+#[test]
+fn test_format_with_inputs_empty_sections() {
+    // Test empty input sections
+    let template = MultiTemplate::parse("A: {upper} B: {lower}").unwrap();
+    let result = template
+        .format_with_inputs(&[&[], &["test"]], &[" ", " "])
+        .unwrap();
+    assert_eq!(result, "A:  B: test");
+}
+
+#[test]
+fn test_format_with_inputs_custom_separators() {
+    // Test different separators for each section
+    let template = MultiTemplate::parse("List1: {join:;} | List2: {join:,}").unwrap();
+    let result = template
+        .format_with_inputs(&[&["a", "b", "c"], &["x", "y", "z"]], &["-", "|"])
+        .unwrap();
+    assert_eq!(result, "List1: a-b-c | List2: x|y|z");
+}
+
+#[test]
+fn test_format_with_inputs_processing_error() {
+    // Test that processing errors are properly propagated
+    let template = MultiTemplate::parse("Valid: {upper} Invalid: {regex_extract:[}").unwrap();
+    let result = template.format_with_inputs(&[&["test"], &["input"]], &[" ", " "]);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_get_template_sections() {
+    // Test introspection method for template sections
+    let template = MultiTemplate::parse("Hello {upper} world {lower|trim} end").unwrap();
+    let sections = template.get_template_sections();
+
+    assert_eq!(sections.len(), 2);
+    assert_eq!(sections[0].0, 0); // First template section at position 0
+    assert_eq!(sections[1].0, 1); // Second template section at position 1
+    assert_eq!(sections[0].1.len(), 1); // {upper} has 1 operation
+    assert_eq!(sections[1].1.len(), 2); // {lower|trim} has 2 operations
+}
+
+#[test]
+fn test_get_template_sections_empty() {
+    // Test with no template sections
+    let template = MultiTemplate::parse("Just literal text with no templates").unwrap();
+    let sections = template.get_template_sections();
+    assert_eq!(sections.len(), 0);
+}
+
+#[test]
+fn test_get_section_info() {
+    // Test detailed section info method
+    let template = MultiTemplate::parse("Start {upper} middle {lower} end").unwrap();
+    let info = template.get_section_info();
+
+    assert_eq!(info.len(), 5);
+
+    // Check first section (literal)
+    assert_eq!(info[0].section_type, SectionType::Literal);
+    assert_eq!(info[0].overall_position, 0);
+    assert_eq!(info[0].template_position, None);
+    assert_eq!(info[0].content.as_ref().unwrap(), "Start ");
+    assert!(info[0].operations.is_none());
+
+    // Check second section (template)
+    assert_eq!(info[1].section_type, SectionType::Template);
+    assert_eq!(info[1].overall_position, 1);
+    assert_eq!(info[1].template_position, Some(0));
+    assert!(info[1].content.is_none());
+    assert_eq!(info[1].operations.as_ref().unwrap().len(), 1);
+
+    // Check third section (literal)
+    assert_eq!(info[2].section_type, SectionType::Literal);
+    assert_eq!(info[2].content.as_ref().unwrap(), " middle ");
+
+    // Check fourth section (template)
+    assert_eq!(info[3].section_type, SectionType::Template);
+    assert_eq!(info[3].template_position, Some(1));
+
+    // Check fifth section (literal)
+    assert_eq!(info[4].section_type, SectionType::Literal);
+    assert_eq!(info[4].content.as_ref().unwrap(), " end");
+}
+
+#[test]
+fn test_get_section_info_only_templates() {
+    // Test section info with only template sections
+    let template = MultiTemplate::parse("{upper}{lower}").unwrap();
+    let info = template.get_section_info();
+
+    assert_eq!(info.len(), 2);
+    assert_eq!(info[0].section_type, SectionType::Template);
+    assert_eq!(info[0].template_position, Some(0));
+    assert_eq!(info[1].section_type, SectionType::Template);
+    assert_eq!(info[1].template_position, Some(1));
+}
+
+#[test]
+fn test_backwards_compatibility_maintained() {
+    // Test that existing format() method still works exactly as before
+    let template = MultiTemplate::parse("Hello {upper} world {lower}!").unwrap();
+    let result_old = template.format("test").unwrap();
+    assert_eq!(result_old, "Hello TEST world test!");
+
+    // Verify section counting methods work
+    assert_eq!(template.template_section_count(), 2);
+    assert_eq!(template.section_count(), 5);
+}
+
+#[test]
+fn test_structured_template_complex_scenario() {
+    // Test a complex real-world scenario
+    let template =
+        MultiTemplate::parse("cp {split:/:-1} /backup/{split:/:-1|replace:s/\\.txt$/.bak/}")
+            .unwrap();
+    let result = template
+        .format_with_inputs(
+            &[
+                &[
+                    "/home/user/documents/important1.txt",
+                    "/home/user/documents/important2.txt",
+                ],
+                &["/home/user/documents/important.txt"],
+            ],
+            &[" ", " "],
+        )
+        .unwrap();
+    assert_eq!(
+        result,
+        "cp important1.txt important2.txt /backup/important.bak"
+    );
+}
+
+#[test]
+fn test_structured_template_data_processing() {
+    // Test structured processing for data transformation
+    let template = MultiTemplate::parse("Name: {split:,:..|slice:0..1|join:} Age: {split:,:..|slice:1..2|join:} Email: {split:,:..|slice:2..3|join:}").unwrap();
+    let csv_data = "John Doe,30,john@example.com";
+    let result = template
+        .format_with_inputs(&[&[csv_data], &[csv_data], &[csv_data]], &[" ", " ", " "])
+        .unwrap();
+    assert_eq!(result, "Name: John Doe Age: 30 Email: john@example.com");
+}
+
+#[test]
+fn test_structured_template_file_operations() {
+    // Test file operation template
+    let template = MultiTemplate::parse("mkdir -p {split:/:..-1|join:/} && touch {}.tmp").unwrap();
+    let result = template
+        .format_with_inputs(
+            &[
+                &["/home/user/projects/new/file.txt"],
+                &["/home/user/projects/new/file.txt"],
+            ],
+            &[" ", " "],
+        )
+        .unwrap();
+    assert_eq!(
+        result,
+        "mkdir -p /home/user/projects/new && touch /home/user/projects/new/file.txt.tmp"
+    );
 }
