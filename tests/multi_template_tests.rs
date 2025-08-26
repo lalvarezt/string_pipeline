@@ -626,3 +626,134 @@ fn test_structured_template_file_operations() {
         "mkdir -p /home/user/projects/new && touch /home/user/projects/new/file.txt.tmp"
     );
 }
+
+// Tests for shell variable support (${...} patterns)
+
+#[test]
+fn test_multi_template_shell_variable_basic() {
+    // Test basic shell variable pattern ${VAR}
+    let template = MultiTemplate::parse("${HOME}/projects/{upper}").unwrap();
+    let result = template.format("readme").unwrap();
+    assert_eq!(result, "${HOME}/projects/README");
+}
+
+#[test]
+fn test_multi_template_shell_variable_with_default() {
+    // Test shell variable with default value ${VAR:-default}
+    let template = MultiTemplate::parse("${EDITOR:-vim} {upper}.txt").unwrap();
+    let result = template.format("config").unwrap();
+    assert_eq!(result, "${EDITOR:-vim} CONFIG.txt");
+}
+
+#[test]
+fn test_multi_template_shell_variable_specific_case() {
+    // Test the specific case that was failing: ${EDITOR:-vim} {}
+    let template = MultiTemplate::parse("${EDITOR:-vim} {}").unwrap();
+    let result = template.format("file.txt").unwrap();
+    assert_eq!(result, "${EDITOR:-vim} file.txt");
+}
+
+#[test]
+fn test_multi_template_multiple_shell_variables() {
+    // Test multiple shell variables in one template
+    let template = MultiTemplate::parse("${USER}@${HOST}: {upper}").unwrap();
+    let result = template.format("hello world").unwrap();
+    assert_eq!(result, "${USER}@${HOST}: HELLO WORLD");
+}
+
+#[test]
+fn test_multi_template_shell_variable_complex() {
+    // Test complex shell variable expressions
+    let template = MultiTemplate::parse("${PATH:+/usr/bin:}${HOME}/bin {lower}").unwrap();
+    let result = template.format("SCRIPT").unwrap();
+    assert_eq!(result, "${PATH:+/usr/bin:}${HOME}/bin script");
+}
+
+#[test]
+fn test_multi_template_shell_variable_empty() {
+    // Test empty shell variable ${}
+    let template = MultiTemplate::parse("${} prefix {upper}").unwrap();
+    let result = template.format("test").unwrap();
+    assert_eq!(result, "${} prefix TEST");
+}
+
+#[test]
+fn test_multi_template_shell_variable_nested_braces() {
+    // Test shell variables with nested braces
+    let template = MultiTemplate::parse("${CONFIG_DIR:-${HOME}/.config} {lower}").unwrap();
+    let result = template.format("APP").unwrap();
+    assert_eq!(result, "${CONFIG_DIR:-${HOME}/.config} app");
+}
+
+#[test]
+fn test_multi_template_shell_variable_mixed_with_templates() {
+    // Test mixing shell variables with multiple template sections
+    let template = MultiTemplate::parse("cp {upper} ${BACKUP_DIR:-/backup}/{lower}.bak").unwrap();
+    let result = template.format("important.txt").unwrap();
+    assert_eq!(
+        result,
+        "cp IMPORTANT.TXT ${BACKUP_DIR:-/backup}/important.txt.bak"
+    );
+}
+
+#[test]
+fn test_multi_template_shell_variable_at_boundaries() {
+    // Test shell variables at start/end of template
+    let template = MultiTemplate::parse("${PREFIX} middle {upper} ${SUFFIX}").unwrap();
+    let result = template.format("test").unwrap();
+    assert_eq!(result, "${PREFIX} middle TEST ${SUFFIX}");
+}
+
+#[test]
+fn test_multi_template_shell_variable_consecutive() {
+    // Test consecutive shell variables
+    let template = MultiTemplate::parse("${VAR1}${VAR2} {upper}").unwrap();
+    let result = template.format("hello").unwrap();
+    assert_eq!(result, "${VAR1}${VAR2} HELLO");
+}
+
+#[test]
+fn test_multi_template_shell_variable_special_characters() {
+    // Test shell variables with special characters
+    let template = MultiTemplate::parse("${HOME}/some-dir/sub_dir {upper}").unwrap();
+    let result = template.format("file name").unwrap();
+    assert_eq!(result, "${HOME}/some-dir/sub_dir FILE NAME");
+}
+
+#[test]
+fn test_multi_template_shell_variable_real_world_example() {
+    // Test real-world shell command example
+    let template = MultiTemplate::parse("${EDITOR:-nano} ${HOME}/.config/{lower}.conf").unwrap();
+    let result = template.format("MYAPP").unwrap();
+    assert_eq!(result, "${EDITOR:-nano} ${HOME}/.config/myapp.conf");
+}
+
+// Error handling tests for shell variables
+
+#[test]
+fn test_multi_template_unclosed_shell_variable_error() {
+    // Test error when shell variable is not closed
+    let result = MultiTemplate::parse("${HOME unclosed {upper}");
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .contains("Unclosed shell variable brace")
+    );
+}
+
+#[test]
+fn test_multi_template_shell_variable_complex_nesting() {
+    // Test complex nesting of shell variables and templates
+    let template = MultiTemplate::parse(
+        "${DIR:-${HOME}/default} contains {split:,:..|filter:\\.txt$|join: and }",
+    )
+    .unwrap();
+    let result = template
+        .format("file1.txt,doc.pdf,file2.txt,readme.md")
+        .unwrap();
+    assert_eq!(
+        result,
+        "${DIR:-${HOME}/default} contains file1.txt and file2.txt"
+    );
+}
