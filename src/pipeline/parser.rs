@@ -128,47 +128,71 @@ pub fn parse_multi_template(template: &str) -> Result<(Vec<TemplateSection>, boo
 
     while let Some(ch) = chars.next() {
         if ch == '{' {
-            // Found start of template section
+            // Check if this is a shell variable expansion ${...}
+            if current_literal.ends_with('$') {
+                // This is a shell variable expansion, treat as literal text
+                current_literal.push(ch);
 
-            // Save any accumulated literal text
-            if !current_literal.is_empty() {
-                sections.push(TemplateSection::Literal(std::mem::take(
-                    &mut current_literal,
-                )));
-            }
+                // Find the matching closing brace for the shell variable
+                let mut brace_count = 1;
+                for inner_ch in chars.by_ref() {
+                    current_literal.push(inner_ch);
+                    if inner_ch == '{' {
+                        brace_count += 1;
+                    } else if inner_ch == '}' {
+                        brace_count -= 1;
+                        if brace_count == 0 {
+                            break; // Found matching closing brace for shell variable
+                        }
+                    }
+                }
 
-            // Find the matching closing brace
-            let mut brace_count = 1;
-            let mut template_content = String::new();
+                if brace_count > 0 {
+                    return Err("Unclosed shell variable brace".to_string());
+                }
+            } else {
+                // Found start of template section
 
-            for inner_ch in chars.by_ref() {
-                if inner_ch == '{' {
-                    brace_count += 1;
-                    template_content.push(inner_ch);
-                } else if inner_ch == '}' {
-                    brace_count -= 1;
-                    if brace_count == 0 {
-                        break; // Found matching closing brace
+                // Save any accumulated literal text
+                if !current_literal.is_empty() {
+                    sections.push(TemplateSection::Literal(std::mem::take(
+                        &mut current_literal,
+                    )));
+                }
+
+                // Find the matching closing brace
+                let mut brace_count = 1;
+                let mut template_content = String::new();
+
+                for inner_ch in chars.by_ref() {
+                    if inner_ch == '{' {
+                        brace_count += 1;
+                        template_content.push(inner_ch);
+                    } else if inner_ch == '}' {
+                        brace_count -= 1;
+                        if brace_count == 0 {
+                            break; // Found matching closing brace
+                        } else {
+                            template_content.push(inner_ch);
+                        }
                     } else {
                         template_content.push(inner_ch);
                     }
-                } else {
-                    template_content.push(inner_ch);
                 }
-            }
 
-            if brace_count > 0 {
-                return Err("Unclosed template brace".to_string());
-            }
+                if brace_count > 0 {
+                    return Err("Unclosed template brace".to_string());
+                }
 
-            // Parse the template content
-            let full_template = format!("{{{template_content}}}");
-            let (ops, section_debug) = parse_template(&full_template)?;
-            if section_debug {
-                debug = true; // If any section has debug enabled, enable for the whole multi-template
-            }
+                // Parse the template content
+                let full_template = format!("{{{template_content}}}");
+                let (ops, section_debug) = parse_template(&full_template)?;
+                if section_debug {
+                    debug = true; // If any section has debug enabled, enable for the whole multi-template
+                }
 
-            sections.push(TemplateSection::Template(ops));
+                sections.push(TemplateSection::Template(ops));
+            }
         } else {
             // Regular character, add to current literal
             current_literal.push(ch);
