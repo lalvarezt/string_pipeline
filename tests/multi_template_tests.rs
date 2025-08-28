@@ -407,51 +407,146 @@ fn test_format_with_inputs_multiple_sections() {
 }
 
 #[test]
-fn test_format_with_inputs_error_wrong_input_count() {
-    // Test error when input count doesn't match template section count
+fn test_format_with_inputs_input_count_handling() {
+    // Test graceful handling when input count doesn't match template section count
     let template = MultiTemplate::parse("A: {upper} B: {lower}").unwrap();
 
-    // Too few inputs
+    // Too few inputs - should use empty string for missing inputs
     let result = template.format_with_inputs(&[&["only_one"]], &[" ", " "]);
-    assert!(result.is_err());
-    assert!(
-        result
-            .unwrap_err()
-            .contains("Expected 2 input slices for 2 template sections, got 1")
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "A: ONLY_ONE B: ");
+
+    // Too many inputs - should truncate excess inputs
+    let result = template.format_with_inputs(&[&["one"], &["two"], &["three"]], &[" ", " "]);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "A: ONE B: two");
+}
+
+#[test]
+fn test_format_with_inputs_excess_inputs() {
+    // Test that excess inputs are truncated gracefully
+    let template = MultiTemplate::parse("diff {} {}").unwrap();
+    let result = template.format_with_inputs(
+        &[
+            &["file1.txt"],
+            &["file2.txt"],
+            &["file3.txt"], // This should be ignored
+            &["file4.txt"], // This should also be ignored
+        ],
+        &[" ", " "],
     );
 
-    // Too many inputs
-    let result = template.format_with_inputs(&[&["one"], &["two"], &["three"]], &[" ", " "]);
-    assert!(result.is_err());
-    assert!(
-        result
-            .unwrap_err()
-            .contains("Expected 2 input slices for 2 template sections, got 3")
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "diff file1.txt file2.txt");
+}
+
+#[test]
+fn test_format_with_inputs_insufficient_inputs() {
+    // Test that missing inputs are treated as empty strings
+    let template = MultiTemplate::parse("cmd {upper} {lower} {trim}").unwrap();
+    let result = template.format_with_inputs(
+        &[
+            &["arg1"],
+            &["ARG2"],
+            // Missing third input
+        ],
+        &[" ", " ", " "],
+    );
+
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "cmd ARG1 arg2 ");
+}
+
+#[test]
+fn test_format_with_inputs_empty_inputs_array() {
+    // Test with completely empty inputs array
+    let template = MultiTemplate::parse("start {upper} middle {lower} end").unwrap();
+    let result = template.format_with_inputs(&[], &[" ", " "]);
+
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "start  middle  end");
+}
+
+#[test]
+fn test_format_with_inputs_mixed_empty_and_filled() {
+    // Test with mix of empty slices and filled slices
+    let template = MultiTemplate::parse("A:{upper} B:{lower} C:{trim}").unwrap();
+    let result = template.format_with_inputs(
+        &[
+            &[],        // Empty slice for first section
+            &["hello"], // Normal input for second section
+            &[],        // Empty slice for third section
+        ],
+        &[" ", " ", " "],
+    );
+
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "A: B:hello C:");
+}
+
+#[test]
+fn test_format_with_inputs_one_to_one_mode_scenario() {
+    // Test the specific scenario from the original issue
+    let template = MultiTemplate::parse("diff {} {}").unwrap();
+
+    // Simulating OneToOne mode: individual slices for each input
+    let inputs = ["file1.txt", "file2.txt", "file3.txt"];
+    let input_arrays: Vec<&[&str]> = inputs.iter().map(std::slice::from_ref).collect();
+
+    let result = template.format_with_inputs(&input_arrays, &[" ", " "]);
+
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "diff file1.txt file2.txt");
+    // file3.txt should be ignored (truncated)
+}
+
+#[test]
+fn test_format_with_inputs_separator_defaults() {
+    // Test that missing separators default to space " "
+    let template = MultiTemplate::parse("files: {} | items: {} | values: {}").unwrap();
+
+    // Provide separators for only first section
+    let result = template.format_with_inputs(
+        &[
+            &["a", "b", "c"], // First section gets comma separator
+            &["x", "y", "z"], // Second section gets default space separator
+            &["1", "2", "3"], // Third section gets default space separator
+        ],
+        &[","],
+    );
+
+    assert!(result.is_ok());
+    assert_eq!(
+        result.unwrap(),
+        "files: a,b,c | items: x y z | values: 1 2 3"
     );
 }
 
 #[test]
-fn test_format_with_inputs_error_wrong_separator_count() {
-    // Test error when separator count doesn't match template section count
+fn test_format_with_inputs_no_separators_provided() {
+    // Test with no separators provided - all should default to space
+    let template = MultiTemplate::parse("A: {} B: {}").unwrap();
+
+    let result = template.format_with_inputs(&[&["one", "two", "three"], &["a", "b", "c"]], &[]); // No separators provided
+
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "A: one two three B: a b c");
+}
+
+#[test]
+fn test_format_with_inputs_separator_count_handling() {
+    // Test graceful handling when separator count doesn't match template section count
     let template = MultiTemplate::parse("A: {upper} B: {lower}").unwrap();
 
-    // Too few separators
-    let result = template.format_with_inputs(&[&["one"], &["two"]], &[" "]);
-    assert!(result.is_err());
-    assert!(
-        result
-            .unwrap_err()
-            .contains("Expected 2 separators for 2 template sections, got 1")
-    );
+    // Too few separators - should use default space for missing separators
+    let result = template.format_with_inputs(&[&["one"], &["two"]], &[","]);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "A: ONE B: two");
 
-    // Too many separators
-    let result = template.format_with_inputs(&[&["one"], &["two"]], &[" ", " ", " "]);
-    assert!(result.is_err());
-    assert!(
-        result
-            .unwrap_err()
-            .contains("Expected 2 separators for 2 template sections, got 3")
-    );
+    // Too many separators - should truncate excess separators
+    let result = template.format_with_inputs(&[&["one"], &["two"]], &[",", ";", ":"]);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "A: ONE B: two");
 }
 
 #[test]
@@ -477,7 +572,7 @@ fn test_format_with_inputs_empty_sections() {
 #[test]
 fn test_format_with_inputs_custom_separators() {
     // Test different separators for each section
-    let template = MultiTemplate::parse("List1: {join:;} | List2: {join:,}").unwrap();
+    let template = MultiTemplate::parse("List1: {} | List2: {}").unwrap();
     let result = template
         .format_with_inputs(&[&["a", "b", "c"], &["x", "y", "z"]], &["-", "|"])
         .unwrap();

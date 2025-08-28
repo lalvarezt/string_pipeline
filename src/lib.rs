@@ -242,12 +242,6 @@
 //! let result = template.format("not_a_list");
 //! assert!(result.is_err());
 //! // Error: "Sort operation can only be applied to lists"
-//!
-//! // Structured template input count validation
-//! let template = Template::parse("A: {upper} B: {lower}").unwrap();
-//! let result = template.format_with_inputs(&[&["only_one"]], &[" ", " "]);
-//! assert!(result.is_err());
-//! // Error: "Expected 2 input slices for 2 template sections, got 1"
 //! ```
 //!
 //! ## Performance Notes

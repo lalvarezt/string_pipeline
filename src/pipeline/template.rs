@@ -607,7 +607,15 @@ impl MultiTemplate {
     /// # Returns
     ///
     /// * `Ok(String)` - The formatted result with each template section processed with its joined inputs
-    /// * `Err(String)` - Error if inputs/separators length doesn't match template section count or processing fails
+    /// * `Err(String)` - Error if template section processing fails
+    ///
+    /// # Input/Template/Separator Count Handling
+    ///
+    /// This method gracefully handles mismatches between counts:
+    /// - **Excess inputs**: Extra inputs beyond template section count are truncated/ignored
+    /// - **Insufficient inputs**: Missing inputs are treated as empty strings for remaining template sections
+    /// - **Excess separators**: Extra separators beyond template section count are truncated/ignored
+    /// - **Insufficient separators**: Missing separators default to space " " for remaining template sections
     ///
     /// # Template Section Ordering
     ///
@@ -624,13 +632,6 @@ impl MultiTemplate {
     /// - **Single item `["value"]`**: Uses "value" directly as input
     /// - **Multiple items `["a", "b", "c"]`**: Joins with corresponding separator
     ///
-    /// # Errors
-    ///
-    /// Returns an error if:
-    /// - The number of input slices doesn't match the number of template sections
-    /// - The number of separators doesn't match the number of template sections
-    /// - Any template section processing fails
-    ///
     /// # Examples
     ///
     /// ```rust
@@ -644,21 +645,31 @@ impl MultiTemplate {
     /// ], &[" ", " "]).unwrap();
     /// assert_eq!(result, "Users: JOHN DOE PETER PARKER | Email: admin@example.com");
     ///
-    /// // File batch processing with different separators
-    /// let template = Template::parse("tar -czf {lower}.tar.gz {join: }").unwrap();
+    /// // Excess inputs are truncated
+    /// let template = Template::parse("diff {} {}").unwrap();
     /// let result = template.format_with_inputs(&[
-    ///     &["BACKUP"],
-    ///     &["file1.txt", "file2.txt", "file3.txt"],
+    ///     &["file1.txt"],
+    ///     &["file2.txt"],
+    ///     &["file3.txt"], // This will be ignored
     /// ], &[" ", " "]).unwrap();
-    /// assert_eq!(result, "tar -czf backup.tar.gz file1.txt file2.txt file3.txt");
+    /// assert_eq!(result, "diff file1.txt file2.txt");
     ///
-    /// // Command construction with custom separators
-    /// let template = Template::parse("grep {join:\\|} {join:,}").unwrap();
+    /// // Insufficient inputs use empty strings
+    /// let template = Template::parse("cmd {} {} {}").unwrap();
     /// let result = template.format_with_inputs(&[
-    ///     &["error", "warning"],
-    ///     &["log1.txt", "log2.txt"],
-    /// ], &["|", ","]).unwrap();
-    /// assert_eq!(result, "grep error|warning log1.txt,log2.txt");
+    ///     &["arg1"],
+    ///     &["arg2"],
+    ///     // Missing third input - will use empty string
+    /// ], &[" ", " ", " "]).unwrap();
+    /// assert_eq!(result, "cmd arg1 arg2 ");
+    ///
+    /// // Insufficient separators default to space
+    /// let template = Template::parse("files: {} more: {}").unwrap();
+    /// let result = template.format_with_inputs(&[
+    ///     &["a", "b", "c"],
+    ///     &["x", "y", "z"],
+    /// ], &[","]).unwrap(); // Only one separator provided
+    /// assert_eq!(result, "files: a,b,c more: x y z"); // Second uses default space
     /// ```
     pub fn format_with_inputs(
         &self,
@@ -667,23 +678,30 @@ impl MultiTemplate {
     ) -> Result<String, String> {
         let template_sections_count = self.template_section_count();
 
-        if inputs.len() != template_sections_count {
-            return Err(format!(
-                "Expected {} input slices for {} template sections, got {}",
-                template_sections_count,
-                template_sections_count,
-                inputs.len()
-            ));
-        }
+        // Handle input/template count mismatches gracefully
+        let adjusted_inputs: Vec<&[&str]> = (0..template_sections_count)
+            .map(|i| {
+                if i < inputs.len() {
+                    inputs[i] // Use actual input
+                } else {
+                    &[] as &[&str] // Empty slice for missing inputs
+                }
+            })
+            .collect();
 
-        if separators.len() != template_sections_count {
-            return Err(format!(
-                "Expected {} separators for {} template sections, got {}",
-                template_sections_count,
-                template_sections_count,
-                separators.len()
-            ));
-        }
+        // Handle separator/template count mismatches gracefully
+        let adjusted_separators: Vec<&str> = (0..template_sections_count)
+            .map(|i| {
+                if i < separators.len() {
+                    separators[i] // Use actual separator
+                } else {
+                    " " // Default to space for missing separators
+                }
+            })
+            .collect();
+
+        let inputs = &adjusted_inputs;
+        let separators = &adjusted_separators;
 
         let mut result = String::new();
         let mut template_index = 0;
