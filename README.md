@@ -5,18 +5,19 @@
 [![CI](https://github.com/lalvarezt/string_pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/lalvarezt/string_pipeline/actions)
 [![License](https://img.shields.io/crates/l/string_pipeline.svg)](https://github.com/lalvarezt/string_pipeline/blob/main/LICENSE)
 
-A powerful string transformation CLI tool and Rust library that makes complex text processing simple. Transform data using intuitive **template syntax** — chain operations like **split**, **join**, **replace**, **filter**, and **20+ others** in a single readable expression.
+A string transformation library and CLI tool for Rust. Chain operations like split, join, replace, and filter using template syntax.
 
 ---
 
 ## 📋 Table of Contents
 
 - [🌟 Why String Pipeline?](#-why-string-pipeline)
-- [⚡ Quick Examples](#-quick-examples)
+- [⚡ Examples](#-examples)
 - [🚀 Installation](#-installation)
 - [🏃 Quick Start](#-quick-start)
-- [📚 Documentation](#-documentation)
 - [🧪 Testing](#-testing)
+- [⚡ Performance & Benchmarking](#-performance--benchmarking)
+- [📚 Documentation](#-documentation)
 - [🤝 Contributing](#-contributing)
 - [📄 License](#-license)
 
@@ -41,14 +42,11 @@ string-pipeline "{split:,:..|map:{regex_extract:@(.+):1}|sort}" "john.doe@email.
 ### ✨ Key Features
 
 - **🔗 Chainable Operations**: Pipe operations together naturally
-- **🎯 Precise Control**: Python-like ranges with Rust syntax (`-2..`, `1..=3`)
 - **🗺️ Powerful Mapping**: Apply sub-pipelines to each list item
 - **🔍 Regex Support**: sed-like patterns for complex transformations
 - **🐛 Debug Mode**: Step-by-step operation visualization
-- **⚡ Performance Tools**: Comprehensive benchmarking and optimization
-- **📥 Flexible I/O**: CLI tool + embeddable Rust library
 
-## ⚡ Quick Examples
+## ⚡ Examples
 
 ### 🔥 Basic Transformations
 
@@ -81,8 +79,6 @@ string-pipeline '{split:,:..|map:{regex_extract://([^/]+):1|upper}}' "https://gi
 string-pipeline "{split: :..|filter:^[A-Z]|sort:desc}" "apple Banana cherry Date"
 # Output: Date,Banana
 ```
-
-> 💡 **Want to see more?** Check out the [📚 Documentation](#-documentation) with 20+ operations and real-world examples!
 
 ## 🚀 Installation
 
@@ -118,8 +114,8 @@ string-pipeline '{template}' "input string"
 # With stdin
 echo "input" | string-pipeline '{template}'
 
-# Debug mode (shows each step)
-string-pipeline "{!split:,:..|map:{upper}}" "hello,world"
+# Debug mode
+string-pipeline --debug "{split:,:..|map:{upper}}" "hello,world"
 # DEBUG: 📂 MULTI-TEMPLATE
 # DEBUG: ├── 🏁 MULTI-TEMPLATE START
 # DEBUG: ├── Template: "{!split:,:..|map:{upper}}"
@@ -193,32 +189,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-## 📚 Documentation
-
-🎯 **[📖 Template System](docs/template-system.md)**
-
-🔗 **[⚙️  CLI Options & Usage](docs/command-line-options.md)**
-
-🐛 **[🔍 Comprehensive Debug System Guide](docs/debug-system.md)**
-
-⚡ **[📊 Performance Benchmarking Guide](docs/benchmarking.md)**
-
-**Everything you need to master String Pipeline:**
-
-- **🏗️ Template Syntax** - Structure, chaining, escaping rules
-- **📊 Operations Reference** - 20+ operations with examples
-  - 🔪 **Split & Join** - Parse and reassemble text
-  - ✂️ **Slice & Range** - Extract with Python-like indices
-  - 🎨 **Transform** - Case, trim, pad, append/prepend
-  - 🔍 **Regex** - Pattern matching and replacement
-  - 🗂️ **List Ops** - Filter, sort, unique, reverse
-  - 🗺️ **Map** - Apply operations to each item
-- **🎯 Range Specifications** - Negative indexing, edge cases
-- **🛡️ Escaping Rules** - When and how to escape characters
-- **🐛 Debug Mode** - Visual operation debugging
-- **💡 Real-world Examples** - Data processing, log analysis, formatting
-- **⚠️ Troubleshooting** - Common errors and best practices
-
 ## 🧪 Testing
 
 ```bash
@@ -250,14 +220,12 @@ cargo build --release --bin bench
 ./target/release/bench --format json > benchmark_results.json
 ```
 
-**Performance Examples:**
+## 📚 Documentation
 
-- **Fast basic operations**: 100-150ns (upper, lower, trim)
-- **List processing**: 3-6μs (split, join, sort)
-- **Complex transformations**: 10-60μs (map operations, regex)
-- **Release builds**: 3-10x faster than debug builds
-
-See the [📊 Performance Benchmarking Guide](docs/benchmarking.md) for timing details and measurement tips.
+[📖 Template System](docs/template-system.md)
+[⚙️  CLI Options & Usage](docs/command-line-options.md)
+[🔍 Comprehensive Debug System Guide](docs/debug-system.md)
+[📊 Performance Benchmarking Guide](docs/benchmarking.md)
 
 ## 🤝 Contributing
 
@@ -267,12 +235,10 @@ We welcome contributions! 🎉
 - 💡 **Suggest features** or improvements
 - 🔧 **Submit pull requests**
 
-📖 Please see our [comprehensive documentation](docs/template-system.md) for syntax details and examples.
-
 ## 📄 License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
 ---
 
-**⚡ Fast, composable string transformations made simple!**
+**⚡ Fast and composable string transformations made simple!**

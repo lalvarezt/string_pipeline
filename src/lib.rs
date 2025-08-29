@@ -1,20 +1,14 @@
 //! # string_pipeline
 //!
-//! A powerful string transformation CLI tool and Rust library that makes complex text processing simple.
-//! Transform data using intuitive **template syntax** — chain operations like **split**, **join**, **replace**,
-//! **filter**, and **20+ others** in a single readable expression.
+//! A string transformation library and CLI tool for Rust. Chain operations like split, join,
+//! replace, and filter using template syntax.
 //!
 //! ## Features
 //!
 //! - **🔗 Chainable Operations**: Pipe operations together naturally
-//! - **🎯 Precise Control**: Python-like ranges with Rust syntax (`-2..`, `1..=3`)
 //! - **🗺️ Powerful Mapping**: Apply sub-pipelines to each list item
 //! - **🔍 Regex Support**: sed-like patterns for complex transformations
-//! - **🐛 Debug Mode**: Hierarchical operation visualization with detailed tracing
-//! - **📥 Flexible I/O**: CLI tool + embeddable Rust library
-//! - **🦀 Performance optimized**: Zero-copy operations where possible, efficient memory usage
-//! - **🌍 Unicode support**: Full UTF-8 and Unicode character handling
-//! - **🛡️ Error handling**: Comprehensive error reporting for invalid operations
+//! - **🐛 Debug Mode**: Step-by-step operation visualization
 //!
 //! ## Quick Start
 //!
@@ -110,6 +104,55 @@
 //! assert_eq!(result, "First: apple Second: banana");
 //! ```
 //!
+//! ## Type System
+//!
+//! The pipeline system has a clear type system that distinguishes between:
+//! - **String operations**: Work only on strings (e.g., `upper`, `lower`, `trim`, `replace`)
+//! - **List operations**: Work only on lists (e.g., `sort`, `unique`, `slice`)
+//! - **Type-preserving operations**: Accept both types (e.g., `filter`, `reverse`)
+//! - **Type-converting operations**: Change between types (e.g., `split` converts string→list, `join` converts list→string)
+//!
+//! Use `map:{operation}` to apply string operations to each item in a list.
+//!
+//! ## Structured Templates
+//!
+//! **Added in v0.13.0**: Apply multiple inputs to different template sections with individual separators.
+//! This enables powerful scenarios like batch processing, command construction, and data transformation.
+//!
+//! ```rust
+//! use string_pipeline::Template;
+//!
+//! // Multiple inputs per template section with different separators
+//! let template = Template::parse("Users: {upper} | Files: {lower}").unwrap();
+//! let result = template.format_with_inputs(&[
+//!     &["john doe", "jane smith"],  // Multiple users for first section
+//!     &["FILE1.TXT", "FILE2.TXT"]   // Multiple files for second section
+//! ], &[" ", ","]).unwrap();         // Space separator for users, comma for files
+//! assert_eq!(result, "Users: JOHN DOE JANE SMITH | Files: file1.txt,file2.txt");
+//!
+//! // Template introspection
+//! let sections = template.get_template_sections(); // Get template section info
+//! assert_eq!(sections.len(), 2); // Two template sections: {strip_ansi|lower} and {}
+//! ```
+//!
+//! ## Error Handling
+//!
+//! All operations return `Result<String, String>` for comprehensive error handling:
+//!
+//! ```rust
+//! use string_pipeline::Template;
+//!
+//! // Invalid template syntax
+//! let result = Template::parse("{split:}");
+//! assert!(result.is_err());
+//!
+//! // Type mismatch errors are clear and helpful
+//! let template = Template::parse("{sort}").unwrap();
+//! let result = template.format("not_a_list");
+//! assert!(result.is_err());
+//! // Error: "Sort operation can only be applied to lists"
+//! ```
+//!
 //! ## Common Use Cases
 //!
 //! ### Basic Text Processing
@@ -187,61 +230,6 @@
 //! let files = "app.py,readme.md,test.py,data.json";
 //! let result = py_filter.format(files).unwrap();
 //! assert_eq!(result, "app.py\ntest.py");
-//! ```
-//!
-//! ## Type System
-//!
-//! The pipeline system has a clear type system that distinguishes between:
-//! - **String operations**: Work only on strings (e.g., `upper`, `lower`, `trim`, `replace`)
-//! - **List operations**: Work only on lists (e.g., `sort`, `unique`, `slice`)
-//! - **Type-preserving operations**: Accept both types (e.g., `filter`, `reverse`)
-//! - **Type-converting operations**: Change between types (e.g., `split` converts string→list, `join` converts list→string)
-//!
-//! Use `map:{operation}` to apply string operations to each item in a list.
-//!
-//! ## Structured Templates (Advanced)
-//!
-//! **NEW in v0.13.0**: Apply multiple inputs to different template sections with individual separators.
-//! This enables powerful scenarios like batch processing, command construction, and data transformation.
-//!
-//! ```rust
-//! use string_pipeline::Template;
-//!
-//! // Multiple inputs per template section with different separators
-//! let template = Template::parse("Users: {upper} | Files: {lower}").unwrap();
-//! let result = template.format_with_inputs(&[
-//!     &["john doe", "jane smith"],  // Multiple users for first section
-//!     &["FILE1.TXT", "FILE2.TXT"]   // Multiple files for second section
-//! ], &[" ", ","]).unwrap();         // Space separator for users, comma for files
-//! assert_eq!(result, "Users: JOHN DOE JANE SMITH | Files: file1.txt,file2.txt");
-//!
-//! // Template introspection
-//! let sections = template.get_template_sections(); // Get template section info
-//! assert_eq!(sections.len(), 2); // Two template sections: {strip_ansi|lower} and {}
-//! ```
-//!
-//! **Key Features:**
-//! - **🎯 Flexible Input**: Each template section can receive multiple input values
-//! - **⚙️ Custom Separators**: Individual separator for each template section
-//! - **🔍 Introspection**: Examine template structure before processing
-//! - **🏗️ Batch Processing**: Perfect for processing multiple items per section
-//!
-//! ## Error Handling
-//!
-//! All operations return `Result<String, String>` for comprehensive error handling:
-//!
-//! ```rust
-//! use string_pipeline::Template;
-//!
-//! // Invalid template syntax
-//! let result = Template::parse("{split:}");
-//! assert!(result.is_err());
-//!
-//! // Type mismatch errors are clear and helpful
-//! let template = Template::parse("{sort}").unwrap();
-//! let result = template.format("not_a_list");
-//! assert!(result.is_err());
-//! // Error: "Sort operation can only be applied to lists"
 //! ```
 //!
 //! ## Performance Notes
