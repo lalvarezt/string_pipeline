@@ -55,7 +55,7 @@ struct Cli {
 /// Processed configuration from CLI arguments
 struct Config {
     template: String,
-    input: String,
+    input: Option<String>,
     validate: bool,
     quiet: bool,
     debug: bool,
@@ -114,7 +114,13 @@ fn get_input(cli: &Cli) -> Result<String, String> {
 /// Build configuration from CLI arguments
 fn build_config(cli: Cli) -> Result<Config, String> {
     let template = get_template(&cli)?;
-    let input = get_input(&cli)?;
+
+    // Skip input collection if we're only validating the template
+    let input = if cli.validate {
+        None
+    } else {
+        Some(get_input(&cli)?)
+    };
 
     Ok(Config {
         template,
@@ -247,8 +253,13 @@ fn main() {
         return;
     }
 
+    // For non-validation, input is required
+    let input = config
+        .input
+        .expect("Input should be available for non-validation operations");
+
     // Process input with template
-    let result = template.format(&config.input).unwrap_or_else(|e| {
+    let result = template.format(&input).unwrap_or_else(|e| {
         eprintln!("Error formatting input: {e}");
         std::process::exit(1);
     });
