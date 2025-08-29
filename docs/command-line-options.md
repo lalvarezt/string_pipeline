@@ -1,5 +1,7 @@
 # 🔗 String Pipeline - Command Line Interface
 
+_NOTE: what follows has mostly been assembled using AI as an experiment and as a basis for further improvements._
+
 A comprehensive CLI tool for powerful string transformations with flexible input/output options and advanced debugging capabilities.
 
 ## 📋 Table of Contents

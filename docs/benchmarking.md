@@ -1,5 +1,7 @@
 # 🏆 String Pipeline Benchmarking Tool
 
+_NOTE: what follows has mostly been assembled using AI as an experiment and as a basis for further improvements._
+
 A simple benchmarking tool that helps measure performance of string pipeline operations and provides timing information in both text and JSON formats.
 
 ## 📋 Table of Contents

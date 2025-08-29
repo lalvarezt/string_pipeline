@@ -1,5 +1,7 @@
 # 🐛 Debug System Documentation
 
+_NOTE: what follows has mostly been assembled using AI as an experiment and as a basis for further improvements._
+
 A comprehensive debugging system for visualizing, analyzing, and troubleshooting string pipeline transformations with detailed execution insights and performance analysis.
 
 ## 📋 Table of Contents
