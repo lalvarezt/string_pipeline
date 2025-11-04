@@ -46,11 +46,11 @@ mod parser;
 mod template;
 
 use dashmap::DashMap;
+use fast_strip_ansi::strip_ansi_string;
 use memchr::memchr_iter;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-use strip_ansi_escapes::strip;
 
 pub use crate::pipeline::template::{MultiTemplate, SectionInfo, SectionType, Template};
 pub use debug::DebugTracer;
@@ -1521,8 +1521,7 @@ fn apply_single_operation(
         }
         StringOp::StripAnsi => {
             if let Value::Str(s) = val {
-                let result = String::from_utf8(strip(s.as_bytes()))
-                    .map_err(|_| "Failed to convert stripped bytes to UTF-8".to_string())?;
+                let result = strip_ansi_string(&s).into_owned();
                 Ok(Value::Str(result))
             } else {
                 Err("StripAnsi operation can only be applied to strings. Use map:{strip_ansi} for lists.".to_string())
