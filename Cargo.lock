@@ -313,6 +313,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fast-strip-ansi"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "105d2d6bfe89682bfc2b6227b6b582d12682c65f889a89ce6e896026a6b31dec"
+dependencies = [
+ "vt-push-parser",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -361,6 +370,12 @@ name = "heck"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
+
+[[package]]
+name = "hex"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "is_terminal_polyfill"
@@ -744,6 +759,7 @@ dependencies = [
  "clap_mangen",
  "criterion",
  "dashmap",
+ "fast-strip-ansi",
  "memchr",
  "once_cell",
  "parking_lot",
@@ -751,17 +767,7 @@ dependencies = [
  "pest_derive",
  "regex",
  "smallvec",
- "strip-ansi-escapes",
  "tempfile",
-]
-
-[[package]]
-name = "strip-ansi-escapes"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a8f8038e7e7969abb3f1b7c2a811225e9296da208539e0f79c5251d6cac0025"
-dependencies = [
- "vte",
 ]
 
 [[package]]
@@ -855,12 +861,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
-name = "vte"
-version = "0.14.1"
+name = "vt-push-parser"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "231fdcd7ef3037e8330d8e17e61011a2c244126acc0a982f4040ac3f9f0bc077"
+checksum = "1f8a8f80d386fd6819e90195fb12b03744a67046e8c22bde0407863d6c172d02"
 dependencies = [
- "memchr",
+ "hex",
+ "smallvec",
 ]
 
 [[package]]
