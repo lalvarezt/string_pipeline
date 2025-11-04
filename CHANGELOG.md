@@ -3,6 +3,44 @@
 All notable changes to this project will be documented in this file.
 <!-- ignore lint rules that are often triggered by content generated from commits / git-cliff -->
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style -->
+## [0.13.0](https://github.com/lalvarezt/string_pipeline/compare/0.12.0..0.13.0) - 2025-11-04
+
+### ⛰️  Features
+
+- *(bench)* New benchmarks - ([2b02311](https://github.com/lalvarezt/string_pipeline/commit/2b023116b8afb32b98babf20e8d33cc09fa75354))
+- *(lib)* Migrating to fast-strip-ansi  - ([01dbc0e](https://github.com/lalvarezt/string_pipeline/commit/01dbc0e610fa140e68d3859df861abfab83ef950))
+- *(lib)* Introduce structured templates  - ([ff3e1da](https://github.com/lalvarezt/string_pipeline/commit/ff3e1daf4d40b68d101d9932e5e4d54fa5dbeadf))
+- *(parser)* Add ${...} shell variable exception support - ([7814c8a](https://github.com/lalvarezt/string_pipeline/commit/7814c8accf0fbde5ac9305cbda2a75565b43cd82))
+- *(parser)* Added new surround/quote operation - ([88f77bd](https://github.com/lalvarezt/string_pipeline/commit/88f77bdff6c3fd5754339860b2808b3a2d1eb419))
+- *(template)* Ease restrictions on format_with_inputs method - ([3f9f04c](https://github.com/lalvarezt/string_pipeline/commit/3f9f04cabdc4d3be8f00522243f66f8229fd1bab))
+
+### 🐛 Bug Fixes
+
+- *(cli)* Fix input handling error that made it mandatory during validation without need - ([3ecb7ca](https://github.com/lalvarezt/string_pipeline/commit/3ecb7ca4eb80b89742b18d80f174dfd048ac806a))
+
+### 🚜 Refactor
+
+- *(lib)* Remove unecessary nesting - ([2a1cfd4](https://github.com/lalvarezt/string_pipeline/commit/2a1cfd43fc142ca00530fbdb65795a2e34df12ab))
+- *(lib)* Fix clippy warnings - ([7f69371](https://github.com/lalvarezt/string_pipeline/commit/7f69371c637559fe0f226ff5e28f097444ddcfb3))
+
+### 📚 Documentation
+
+- General clean up - ([bb2ae6c](https://github.com/lalvarezt/string_pipeline/commit/bb2ae6c3836df30b53cd8fe9ca3fa92cdf3d90de))
+- Add AI generated documentation disclaimer - ([499e094](https://github.com/lalvarezt/string_pipeline/commit/499e09494903704d2b5a401adfca2b3ed3618cbc))
+
+### ⚡ Performance
+
+- *(lib)* Add heuristics for fast allocation - ([3ec17dd](https://github.com/lalvarezt/string_pipeline/commit/3ec17ddc6bb5098765fa2cc9ec9604d75852f9b1))
+- *(lib)* Streamline the grammar and other performance improvements - ([9e248ce](https://github.com/lalvarezt/string_pipeline/commit/9e248ce29bae6a79008041df50f93a26f7a1482e))
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump to 0.13.0 - ([0836720](https://github.com/lalvarezt/string_pipeline/commit/0836720a4a7bfb0e43b058b20a24f69142208f43))
+
+## New Contributors ❤️
+
+* @lalvarezt made their first contribution in [#8](https://github.com/lalvarezt/string_pipeline/pull/8)
+
 ## [0.12.0](https://github.com/lalvarezt/string_pipeline/compare/0.11.2..0.12.0) - 2025-06-13
 
 ### ⛰️  Features
