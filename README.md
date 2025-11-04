@@ -100,7 +100,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-string_pipeline = "0.12.0"
+string_pipeline = "0.13.0"
 ```
 
 ## 🏃 Quick Start
