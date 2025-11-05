@@ -38,6 +38,11 @@ path = "src/main.rs"
 name = "string-pipeline-bench"
 path = "src/bin/bench.rs"
 
+[[bin]]
+bench = false
+name = "bench_throughput"
+path = "src/bin/bench_throughput.rs"
+
 [profile.staging]
 inherits = "dev"
 opt-level = 3
