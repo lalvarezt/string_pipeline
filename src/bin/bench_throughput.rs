@@ -649,17 +649,27 @@ fn print_statistics_explanation(sample_count: usize) {
 }
 
 fn print_summary(all_results: &[(&str, Vec<BenchmarkResult>)]) {
-    print_header("📊 SUMMARY - Performance at Largest Input Size");
+    // Get the largest input size for the header
+    let largest_size = all_results
+        .iter()
+        .filter_map(|(_, results)| results.last().map(|r| r.input_size))
+        .max()
+        .unwrap_or(0);
 
-    // Collect results with throughput for sorting
-    let mut summary_data: Vec<(&str, usize, Duration, f64)> = all_results
+    let header_text = format!("📊 SUMMARY - Performance at Largest Input Size ({})", format_size(largest_size));
+    print_header(&header_text);
+
+    // Collect results with latency stats for sorting
+    let mut summary_data: Vec<(&str, Duration, Duration, Duration, f64, f64)> = all_results
         .iter()
         .filter_map(|(name, results)| {
             results.last().map(|last| {
                 (
                     *name,
-                    last.input_size,
                     last.avg_time_per_path,
+                    last.latency_stats.p95,
+                    last.latency_stats.p99,
+                    last.latency_stats.stddev,
                     last.throughput_paths_per_sec,
                 )
             })
@@ -667,7 +677,7 @@ fn print_summary(all_results: &[(&str, Vec<BenchmarkResult>)]) {
         .collect();
 
     // Sort by throughput (highest first)
-    summary_data.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap());
+    summary_data.sort_by(|a, b| b.5.partial_cmp(&a.5).unwrap());
 
     // Create summary table with comfy-table
     let mut table = Table::new();
@@ -678,10 +688,16 @@ fn print_summary(all_results: &[(&str, Vec<BenchmarkResult>)]) {
             Cell::new("Template")
                 .add_attribute(TableAttribute::Bold)
                 .fg(TableColor::Yellow),
-            Cell::new("Input Size")
+            Cell::new("Avg/Path")
                 .add_attribute(TableAttribute::Bold)
                 .fg(TableColor::Yellow),
-            Cell::new("Avg/Path")
+            Cell::new("p95")
+                .add_attribute(TableAttribute::Bold)
+                .fg(TableColor::Yellow),
+            Cell::new("p99")
+                .add_attribute(TableAttribute::Bold)
+                .fg(TableColor::Yellow),
+            Cell::new("Stddev")
                 .add_attribute(TableAttribute::Bold)
                 .fg(TableColor::Yellow),
             Cell::new("Throughput")
@@ -689,7 +705,7 @@ fn print_summary(all_results: &[(&str, Vec<BenchmarkResult>)]) {
                 .fg(TableColor::Yellow),
         ]);
 
-    for (idx, (template_name, input_size, avg_time, throughput)) in summary_data.iter().enumerate()
+    for (idx, (template_name, avg_time, p95, p99, stddev, throughput)) in summary_data.iter().enumerate()
     {
         // Highlight fastest (green) and slowest (yellow)
         let color = if idx == 0 {
@@ -702,8 +718,10 @@ fn print_summary(all_results: &[(&str, Vec<BenchmarkResult>)]) {
 
         table.add_row(vec![
             Cell::new(template_name).fg(color),
-            Cell::new(format_size(*input_size)).fg(color),
             Cell::new(format_duration(*avg_time)).fg(color),
+            Cell::new(format_duration(*p95)).fg(color),
+            Cell::new(format_duration(*p99)).fg(color),
+            Cell::new(format_duration(Duration::from_nanos(*stddev as u64))).fg(color),
             Cell::new(format_throughput(*throughput)).fg(color),
         ]);
     }
