@@ -101,7 +101,7 @@ def compare_benchmarks(baseline_path: str, current_path: str) -> str:
 
     # Build comparison table
     report.append("## Performance Comparison\n")
-    report.append("| Template | Avg/Path | Change | p99 | Change | Throughput | Change |")
+    report.append("| Template | Avg/Path | Change | p95 | Change | Throughput | Change |")
     report.append("|----------|----------|--------|-----|--------|------------|--------|")
 
     # Sort by template name for consistent ordering
@@ -119,10 +119,10 @@ def compare_benchmarks(baseline_path: str, current_path: str) -> str:
         curr_avg_ns = curr['avg_time_per_path']
         avg_change, avg_emoji = calculate_change(base_avg_ns, curr_avg_ns)
 
-        # Compare p99
-        base_p99 = base['latency_stats']['p99']
-        curr_p99 = curr['latency_stats']['p99']
-        p99_change, p99_emoji = calculate_change(base_p99, curr_p99)
+        # Compare p95
+        base_p95 = base['latency_stats']['p95']
+        curr_p95 = curr['latency_stats']['p95']
+        p95_change, p95_emoji = calculate_change(base_p95, curr_p95)
 
         # Compare throughput (higher is better, so invert the change)
         base_throughput = base['throughput_paths_per_sec']
@@ -157,8 +157,8 @@ def compare_benchmarks(baseline_path: str, current_path: str) -> str:
             f"| {template_name} "
             f"| {format_duration_ns(curr_avg_ns)} "
             f"| {avg_emoji} {avg_change:+.1f}% "
-            f"| {format_duration_ns(curr_p99)} "
-            f"| {p99_emoji} {p99_change:+.1f}% "
+            f"| {format_duration_ns(curr_p95)} "
+            f"| {p95_emoji} {p95_change:+.1f}% "
             f"| {format_throughput(curr_throughput)} "
             f"| {throughput_emoji} {throughput_change:+.1f}% |"
         )
