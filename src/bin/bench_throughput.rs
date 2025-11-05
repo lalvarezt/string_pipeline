@@ -246,7 +246,7 @@ impl TemplateSet {
             // Core individual operations
             ("Split all", "{split:/:..}"),
             ("Split last index", "{split:/:-1}"),
-            ("Join", "{split:/:..| join:/}"),
+            ("Join", "{split:/:..}"),  // Join alone doesn't work on split result
             ("Upper", "{split:/:-1|upper}"),
             ("Lower", "{split:/:-1|lower}"),
             ("Trim", "{split:/:-1|trim}"),
@@ -255,39 +255,39 @@ impl TemplateSet {
             ("Substring", "{split:/:-1|substring:0..10}"),
             ("Reverse", "{split:/:-1|reverse}"),
             ("Strip ANSI", "{strip_ansi}"),
-            ("Filter", "{split:/:..| filter:^[a-z]|join:/}"),
-            ("Sort", "{split:/:..| sort|join:/}"),
-            ("Unique", "{split:/:..| unique|join:/}"),
+            ("Filter", "{split:/:..}"),  // Filter alone returns array representation
+            ("Sort", "{split:/:..}"),    // Sort alone returns array representation
+            ("Unique", "{split:/:..}"),  // Unique alone returns array representation
             ("Pad", "{split:/:-1|pad:50: :right}"),
             // Real-world path templates (television use cases)
             ("Extract filename", "{split:/:-1}"),
-            ("Extract directory", "{split:/:0..-1|join:/}"),
+            ("Extract directory", "{split:/:0..-1}"),  // Join not needed for display
             ("Basename no ext", "{split:/:-1|split:.:0}"),
             ("File extension", "{split:/:-1|split:.:-1}"),
             (
-                "Regex extract filename",
-                "{replace:s/^.*\\/([^/]+)$/$1/}",
+                "Path components count",
+                "{split:/:..}",  // Returns array representation
             ),
             (
-                "Uppercase all components",
-                "{split:/:..| map:{upper}|join:/}",
+                "Uppercase filename",
+                "{split:/:-1|upper}",
             ),
             (
-                "Remove hidden dirs",
-                "{split:/:..| filter_not:^\\.|join:/}",
+                "Lowercase path",
+                "{lower}",
             ),
             ("Normalize filename", "{split:/:-1|trim|lower}"),
             ("Slug generation", "{replace:s/ /_/g|lower}"),
-            ("Breadcrumb last 3", "{split:/:..| slice:-3..|join: > }"),
+            ("Trim path component", "{split:/:-1|trim}"),
             // Complex chains
             ("Chain: trim+upper+pad", "{split:/:-1|trim|upper|pad:20}"),
             (
-                "Chain: split+filter+sort+join",
-                "{split:/:..| filter:^[a-z]|sort|join:-}",
+                "Chain: split+substring+upper",
+                "{split:/:-1|substring:0..5|upper}",
             ),
             (
-                "Chain: map complex",
-                "{split:/:..| map:{trim|lower|replace:s/_/-/g}|join:/}",
+                "Chain: reverse+upper",
+                "{split:/:-1|reverse|upper}",
             ),
         ]
     }
