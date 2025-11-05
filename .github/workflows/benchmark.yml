@@ -32,8 +32,8 @@ jobs:
         run: |
           # Run benchmarks with multiple sizes and save to JSON
           ./target/release/bench_throughput \
-            --sizes 1000,10000,100000 \
-            --iterations 50 \
+            --sizes 1000,5000,10000 \
+            --iterations 100 \
             --format json \
             --output benchmark_results.json
 

@@ -11,7 +11,7 @@ on:
       iterations:
         description: 'Number of benchmark iterations'
         required: false
-        default: '50'
+        default: '100'
         type: string
 
 jobs:
@@ -48,7 +48,7 @@ jobs:
         run: |
           echo "Running benchmarks for commit ${{ steps.commit-info.outputs.short_sha }}"
           ./target/release/bench_throughput \
-            --sizes 1000,10000,100000 \
+            --sizes 1000,5000,10000 \
             --iterations ${{ inputs.iterations }} \
             --format json \
             --output benchmark_results.json
