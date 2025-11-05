@@ -1,13 +1,32 @@
 use clap::{Arg, Command};
+use comfy_table::{presets::UTF8_FULL, Attribute as TableAttribute, Cell, CellAlignment, Color as TableColor, ContentArrangement, Table};
+use crossterm::{
+    cursor, execute, queue,
+    style::{Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor},
+    terminal::{Clear, ClearType},
+};
+use serde::{Serialize, Serializer};
+use std::io::{self, Write};
 use std::time::{Duration, Instant};
 use string_pipeline::Template;
 
+// Helper to serialize Duration as nanoseconds
+fn serialize_duration<S>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_u128(duration.as_nanos())
+}
+
 /// Represents the results of a throughput benchmark for a specific input size
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 struct BenchmarkResult {
     input_size: usize,
+    #[serde(serialize_with = "serialize_duration")]
     parse_time: Duration,
+    #[serde(serialize_with = "serialize_duration")]
     total_format_time: Duration,
+    #[serde(serialize_with = "serialize_duration")]
     avg_time_per_path: Duration,
     throughput_paths_per_sec: f64,
     parse_percentage: f64,
@@ -15,12 +34,17 @@ struct BenchmarkResult {
 }
 
 /// Statistical analysis of latency distribution
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 struct LatencyStatistics {
+    #[serde(serialize_with = "serialize_duration")]
     min: Duration,
+    #[serde(serialize_with = "serialize_duration")]
     p50: Duration,
+    #[serde(serialize_with = "serialize_duration")]
     p95: Duration,
+    #[serde(serialize_with = "serialize_duration")]
     p99: Duration,
+    #[serde(serialize_with = "serialize_duration")]
     max: Duration,
     stddev: f64,
 }
@@ -368,16 +392,109 @@ fn format_size(size: usize) -> String {
     }
 }
 
-fn print_template_results(template_name: &str, results: &[BenchmarkResult], detailed: bool) {
-    println!("\n{}", "=".repeat(110));
-    println!("Template: {}", template_name);
-    println!("{}", "=".repeat(110));
-
-    println!(
-        "\n{:<12} {:>12} {:>12} {:>12} {:>15} {:>10} {:>12}",
-        "Input Size", "Parse Time", "Total Time", "Avg/Path", "Throughput", "Parse %", "Scaling"
+// Styled output helpers
+fn print_header(text: &str) {
+    let mut stdout = io::stdout();
+    let _ = execute!(
+        stdout,
+        Print("\n"),
+        SetForegroundColor(Color::Cyan),
+        SetAttribute(Attribute::Bold),
+        Print("╔"),
+        Print("═".repeat(108)),
+        Print("╗\n║ "),
+        Print(text),
+        Print(" ".repeat(106 - text.len())),
+        Print("║\n╚"),
+        Print("═".repeat(108)),
+        Print("╝\n"),
+        ResetColor
     );
-    println!("{}", "-".repeat(110));
+}
+
+fn print_section_header(text: &str) {
+    let mut stdout = io::stdout();
+    let _ = execute!(
+        stdout,
+        Print("\n"),
+        SetForegroundColor(Color::Cyan),
+        SetAttribute(Attribute::Bold),
+        Print(text),
+        ResetColor,
+        Print("\n"),
+        SetForegroundColor(Color::DarkGrey),
+        Print("─".repeat(110)),
+        Print("\n"),
+        ResetColor
+    );
+}
+
+fn print_success(msg: &str) {
+    let mut stdout = io::stdout();
+    let _ = execute!(
+        stdout,
+        SetForegroundColor(Color::Green),
+        Print("✓ "),
+        ResetColor,
+        Print(msg),
+        Print("\n")
+    );
+}
+
+fn print_error(msg: &str) {
+    let mut stdout = io::stdout();
+    let _ = execute!(
+        stdout,
+        SetForegroundColor(Color::Red),
+        Print("✗ "),
+        ResetColor,
+        Print(msg),
+        Print("\n")
+    );
+}
+
+fn print_progress_bar(current: usize, total: usize, template_name: &str) {
+    let mut stdout = io::stdout();
+    let progress = (current as f64 / total as f64) * 100.0;
+    let filled = ((progress / 100.0) * 40.0) as usize;
+    let _ = queue!(
+        stdout,
+        cursor::MoveToColumn(0),
+        Clear(ClearType::CurrentLine),
+        SetForegroundColor(Color::Cyan),
+        Print("["),
+        SetForegroundColor(Color::Green),
+        Print("█".repeat(filled)),
+        SetForegroundColor(Color::DarkGrey),
+        Print("░".repeat(40 - filled)),
+        SetForegroundColor(Color::Cyan),
+        Print("]"),
+        ResetColor,
+        Print(format!(" {:.0}% ({}/{}) - ", progress, current, total)),
+        SetAttribute(Attribute::Dim),
+        Print(template_name),
+        ResetColor
+    );
+    stdout.flush().ok();
+}
+
+fn print_template_results(template_name: &str, results: &[BenchmarkResult], detailed: bool) {
+    print_section_header(&format!("Template: {}", template_name));
+
+    // Create results table with comfy-table
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .set_content_arrangement(ContentArrangement::Dynamic)
+        .set_header(vec![
+            Cell::new("Input Size").add_attribute(TableAttribute::Bold).fg(TableColor::Yellow),
+            Cell::new("Parse Time").add_attribute(TableAttribute::Bold).fg(TableColor::Yellow),
+            Cell::new("Total Time").add_attribute(TableAttribute::Bold).fg(TableColor::Yellow),
+            Cell::new("Avg/Path").add_attribute(TableAttribute::Bold).fg(TableColor::Yellow),
+            Cell::new("Throughput").add_attribute(TableAttribute::Bold).fg(TableColor::Yellow),
+            Cell::new("Parse %").add_attribute(TableAttribute::Bold).fg(TableColor::Yellow),
+            Cell::new("Scaling").add_attribute(TableAttribute::Bold).fg(TableColor::Yellow),
+        ]);
 
     for (idx, result) in results.iter().enumerate() {
         let scaling = if idx == 0 {
@@ -386,17 +503,18 @@ fn print_template_results(template_name: &str, results: &[BenchmarkResult], deta
             format!("{:.2}x", result.scaling_factor(&results[0]))
         };
 
-        println!(
-            "{:<12} {:>12} {:>12} {:>12} {:>15} {:>9.2}% {:>12}",
-            format_size(result.input_size),
-            format_duration(result.parse_time),
-            format_duration(result.total_format_time),
-            format_duration(result.avg_time_per_path),
-            format_throughput(result.throughput_paths_per_sec),
-            result.parse_percentage,
-            scaling
-        );
+        table.add_row(vec![
+            Cell::new(format_size(result.input_size)),
+            Cell::new(format_duration(result.parse_time)),
+            Cell::new(format_duration(result.total_format_time)),
+            Cell::new(format_duration(result.avg_time_per_path)),
+            Cell::new(format_throughput(result.throughput_paths_per_sec)),
+            Cell::new(format!("{:.2}%", result.parse_percentage)),
+            Cell::new(scaling),
+        ]);
     }
+
+    println!("\n{}", table);
 
     // Scaling analysis
     if results.len() >= 2 {
@@ -408,7 +526,14 @@ fn print_template_results(template_name: &str, results: &[BenchmarkResult], deta
             last.total_format_time.as_secs_f64() / first.total_format_time.as_secs_f64();
         let scaling_quality = time_ratio / size_ratio;
 
-        println!("\n📊 Scaling Analysis:");
+        let mut stdout = io::stdout();
+        let _ = execute!(
+            stdout,
+            Print("\n"),
+            SetForegroundColor(Color::Magenta),
+            Print("📊 Scaling Analysis:\n"),
+            ResetColor
+        );
         println!(
             "   Size increase: {:.0}x ({} → {})",
             size_ratio,
@@ -462,9 +587,7 @@ fn print_template_results(template_name: &str, results: &[BenchmarkResult], deta
 }
 
 fn print_summary(all_results: &[(&str, Vec<BenchmarkResult>)]) {
-    println!("\n{}", "=".repeat(110));
-    println!("SUMMARY - Performance at Largest Input Size");
-    println!("{}", "=".repeat(110));
+    print_header("📊 SUMMARY - Performance at Largest Input Size");
 
     // Collect results with throughput for sorting
     let mut summary_data: Vec<(&str, usize, Duration, f64)> = all_results
@@ -484,21 +607,37 @@ fn print_summary(all_results: &[(&str, Vec<BenchmarkResult>)]) {
     // Sort by throughput (highest first)
     summary_data.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap());
 
-    println!(
-        "\n{:<35} {:>12} {:>12} {:>15}",
-        "Template", "Input Size", "Avg/Path", "Throughput"
-    );
-    println!("{}", "-".repeat(85));
+    // Create summary table with comfy-table
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .set_content_arrangement(ContentArrangement::Dynamic)
+        .set_header(vec![
+            Cell::new("Template").add_attribute(TableAttribute::Bold).fg(TableColor::Yellow),
+            Cell::new("Input Size").add_attribute(TableAttribute::Bold).fg(TableColor::Yellow),
+            Cell::new("Avg/Path").add_attribute(TableAttribute::Bold).fg(TableColor::Yellow),
+            Cell::new("Throughput").add_attribute(TableAttribute::Bold).fg(TableColor::Yellow),
+        ]);
 
-    for (template_name, input_size, avg_time, throughput) in summary_data {
-        println!(
-            "{:<35} {:>12} {:>12} {:>15}",
-            truncate_name(template_name, 35),
-            format_size(input_size),
-            format_duration(avg_time),
-            format_throughput(throughput)
-        );
+    for (idx, (template_name, input_size, avg_time, throughput)) in summary_data.iter().enumerate() {
+        // Highlight fastest (green) and slowest (yellow)
+        let color = if idx == 0 {
+            TableColor::Green
+        } else if idx == summary_data.len() - 1 {
+            TableColor::Yellow
+        } else {
+            TableColor::Reset
+        };
+
+        table.add_row(vec![
+            Cell::new(template_name).fg(color),
+            Cell::new(format_size(*input_size)).fg(color),
+            Cell::new(format_duration(*avg_time)).fg(color),
+            Cell::new(format_throughput(*throughput)).fg(color),
+        ]);
     }
+
+    println!("\n{}", table);
 }
 
 fn truncate_name(name: &str, max_len: usize) -> String {
@@ -510,101 +649,54 @@ fn truncate_name(name: &str, max_len: usize) -> String {
 }
 
 /// Output results in JSON format for tracking over time
+#[derive(Serialize)]
+struct BenchmarkOutput<'a> {
+    timestamp: u64,
+    benchmarks: Vec<TemplateBenchmark<'a>>,
+}
+
+#[derive(Serialize)]
+struct TemplateBenchmark<'a> {
+    template_name: &'a str,
+    results: &'a [BenchmarkResult],
+}
+
 fn output_json(
     all_results: &[(&str, Vec<BenchmarkResult>)],
     output_path: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use std::io::Write;
-
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
         .as_secs();
 
-    let mut json_output = String::from("{\n");
-    json_output.push_str(&format!("  \"timestamp\": {},\n", timestamp));
-    json_output.push_str("  \"benchmarks\": [\n");
+    let benchmarks: Vec<TemplateBenchmark> = all_results
+        .iter()
+        .map(|(name, results)| TemplateBenchmark {
+            template_name: name,
+            results,
+        })
+        .collect();
 
-    for (idx, (template_name, results)) in all_results.iter().enumerate() {
-        json_output.push_str("    {\n");
-        json_output.push_str(&format!("      \"template_name\": \"{}\",\n", template_name));
-        json_output.push_str("      \"results\": [\n");
+    let output = BenchmarkOutput {
+        timestamp,
+        benchmarks,
+    };
 
-        for (ridx, result) in results.iter().enumerate() {
-            json_output.push_str("        {\n");
-            json_output.push_str(&format!("          \"input_size\": {},\n", result.input_size));
-            json_output.push_str(&format!(
-                "          \"parse_time_ns\": {},\n",
-                result.parse_time.as_nanos()
-            ));
-            json_output.push_str(&format!(
-                "          \"total_format_time_ns\": {},\n",
-                result.total_format_time.as_nanos()
-            ));
-            json_output.push_str(&format!(
-                "          \"avg_time_per_path_ns\": {},\n",
-                result.avg_time_per_path.as_nanos()
-            ));
-            json_output.push_str(&format!(
-                "          \"throughput_per_sec\": {:.2},\n",
-                result.throughput_paths_per_sec
-            ));
-            json_output.push_str(&format!(
-                "          \"parse_percentage\": {:.2},\n",
-                result.parse_percentage
-            ));
-
-            // Latency statistics
-            json_output.push_str("          \"latency_stats\": {\n");
-            json_output.push_str(&format!(
-                "            \"min_ns\": {},\n",
-                result.latency_stats.min.as_nanos()
-            ));
-            json_output.push_str(&format!(
-                "            \"p50_ns\": {},\n",
-                result.latency_stats.p50.as_nanos()
-            ));
-            json_output.push_str(&format!(
-                "            \"p95_ns\": {},\n",
-                result.latency_stats.p95.as_nanos()
-            ));
-            json_output.push_str(&format!(
-                "            \"p99_ns\": {},\n",
-                result.latency_stats.p99.as_nanos()
-            ));
-            json_output.push_str(&format!(
-                "            \"max_ns\": {},\n",
-                result.latency_stats.max.as_nanos()
-            ));
-            json_output.push_str(&format!(
-                "            \"stddev_ns\": {:.2}\n",
-                result.latency_stats.stddev
-            ));
-            json_output.push_str("          }\n");
-
-            json_output.push_str(if ridx == results.len() - 1 {
-                "        }\n"
-            } else {
-                "        },\n"
-            });
-        }
-
-        json_output.push_str("      ]\n");
-        json_output.push_str(if idx == all_results.len() - 1 {
-            "    }\n"
-        } else {
-            "    },\n"
-        });
-    }
-
-    json_output.push_str("  ]\n");
-    json_output.push_str("}\n");
+    let json_string = serde_json::to_string_pretty(&output)?;
 
     if let Some(path) = output_path {
-        let mut file = std::fs::File::create(path)?;
-        file.write_all(json_output.as_bytes())?;
-        println!("\n✓ JSON output written to: {}", path);
+        std::fs::write(path, json_string)?;
+        let mut stdout = io::stdout();
+        let _ = execute!(
+            stdout,
+            Print("\n"),
+            SetForegroundColor(Color::Green),
+            Print("✓ JSON output written to: "),
+            ResetColor,
+            Print(format!("{}\n", path))
+        );
     } else {
-        println!("\n{}", json_output);
+        println!("\n{}", json_string);
     }
 
     Ok(())
@@ -689,42 +781,69 @@ fn main() {
     }
 
     if !quiet {
-        println!("String Pipeline Throughput Benchmark");
-        println!("=====================================");
-        println!("Measuring batch processing performance with varying input sizes");
-        println!("Pattern: Parse once, format N paths individually");
-        println!();
-        println!(
-            "Input sizes: {:?}",
-            sizes.iter().map(|s| format_size(*s)).collect::<Vec<_>>()
+        print_header("String Pipeline Throughput Benchmark v0.13.0");
+        let mut stdout = io::stdout();
+        let _ = execute!(
+            stdout,
+            Print("Measuring batch processing performance with varying input sizes\n"),
+            Print("Pattern: Parse once, format N paths individually\n\n"),
+            SetForegroundColor(Color::Cyan),
+            Print("Input sizes: "),
+            ResetColor,
+            Print(format!("{:?}\n", sizes.iter().map(|s| format_size(*s)).collect::<Vec<_>>())),
+            SetForegroundColor(Color::Cyan),
+            Print("Measurement iterations: "),
+            ResetColor,
+            Print(format!("{}\n", iterations)),
+            SetForegroundColor(Color::Cyan),
+            Print("Detailed profiling: "),
+            ResetColor,
+            Print(if detailed { "enabled\n" } else { "disabled\n" }),
+            SetForegroundColor(Color::Cyan),
+            Print("Output format: "),
+            ResetColor,
+            Print(format!("{}\n", format))
         );
-        println!("Measurement iterations: {}", iterations);
-        println!("Detailed profiling: {}", if detailed { "enabled" } else { "disabled" });
-        println!("Output format: {}", format);
     }
 
     let templates = TemplateSet::get_templates();
     let mut all_results = Vec::new();
+    let total_templates = templates.len();
 
-    for (template_name, template_str) in &templates {
-        if quiet {
-            print!("Benchmarking '{}' ... ", template_name);
-        } else {
-            print!("\nBenchmarking '{}' ... ", template_name);
+    for (idx, (template_name, template_str)) in templates.iter().enumerate() {
+        if !quiet {
+            print_progress_bar(idx + 1, total_templates, template_name);
         }
-        std::io::Write::flush(&mut std::io::stdout()).unwrap();
 
         match benchmark_template(template_name, template_str, &sizes, iterations, detailed) {
             Ok(results) => {
-                println!("✓");
                 if !quiet {
+                    let mut stdout = io::stdout();
+                    let _ = execute!(
+                        stdout,
+                        cursor::MoveToColumn(0),
+                        Clear(ClearType::CurrentLine),
+                        SetForegroundColor(Color::Green),
+                        Print("✓ "),
+                        ResetColor,
+                        Print(format!("Completed: {}\n", template_name))
+                    );
                     print_template_results(template_name, &results, detailed);
+                } else {
+                    print_success(&format!("Benchmarking '{}'", template_name));
                 }
                 all_results.push((*template_name, results));
             }
             Err(e) => {
-                println!("✗");
-                eprintln!("Failed to benchmark '{}': {}", template_name, e);
+                if !quiet {
+                    let mut stdout = io::stdout();
+                    let _ = execute!(
+                        stdout,
+                        cursor::MoveToColumn(0),
+                        Clear(ClearType::CurrentLine)
+                    );
+                }
+                print_error(&format!("Failed to benchmark '{}': {}", template_name, e));
             }
         }
     }
@@ -741,7 +860,14 @@ fn main() {
     }
 
     if !quiet {
-        println!("\n{}", "=".repeat(110));
-        println!("Benchmark complete!");
+        let mut stdout = io::stdout();
+        let _ = execute!(
+            stdout,
+            Print("\n"),
+            SetForegroundColor(Color::Green),
+            SetAttribute(Attribute::Bold),
+            Print("✓ Benchmark complete!\n"),
+            ResetColor
+        );
     }
 }
