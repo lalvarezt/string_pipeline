@@ -37,11 +37,6 @@ jobs:
             --format json \
             --output benchmark_results.json
 
-          # Also create a human-readable version for artifacts
-          ./target/release/bench_throughput \
-            --sizes 100,1000,10000 \
-            --iterations 50 > benchmark_results.txt
-
       - name: Download baseline benchmark
         id: download-baseline
         continue-on-error: true
@@ -89,7 +84,6 @@ jobs:
           name: benchmark-current
           path: |
             benchmark_results.json
-            benchmark_results.txt
             comparison.md
 
       - name: Upload as baseline (main branch only)
