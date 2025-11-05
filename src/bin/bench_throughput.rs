@@ -864,32 +864,29 @@ fn main() {
     let total_templates = templates.len();
 
     for (idx, (template_name, template_str)) in templates.iter().enumerate() {
-        if verbose {
-            print_progress_bar(idx + 1, total_templates, template_name);
-        }
+        // Always show progress bar
+        print_progress_bar(idx + 1, total_templates, template_name);
 
         match benchmark_template(template_name, template_str, &sizes, iterations) {
             Ok(results) => {
+                let mut stdout = io::stdout();
+                let _ = execute!(
+                    stdout,
+                    cursor::MoveToColumn(0),
+                    Clear(ClearType::CurrentLine)
+                );
                 if verbose {
-                    let mut stdout = io::stdout();
-                    let _ = execute!(
-                        stdout,
-                        cursor::MoveToColumn(0),
-                        Clear(ClearType::CurrentLine)
-                    );
                     print_template_results(template_name, &results);
                 }
                 all_results.push((*template_name, results));
             }
             Err(e) => {
-                if verbose {
-                    let mut stdout = io::stdout();
-                    let _ = execute!(
-                        stdout,
-                        cursor::MoveToColumn(0),
-                        Clear(ClearType::CurrentLine)
-                    );
-                }
+                let mut stdout = io::stdout();
+                let _ = execute!(
+                    stdout,
+                    cursor::MoveToColumn(0),
+                    Clear(ClearType::CurrentLine)
+                );
                 print_error(&format!("Failed to benchmark '{}': {}", template_name, e));
             }
         }
@@ -902,8 +899,12 @@ fn main() {
         iterations
     };
 
-    // Always show statistics explanation and summary
-    print_statistics_explanation(sample_count);
+    // In verbose mode, show statistics explanation before summary
+    if verbose {
+        print_statistics_explanation(sample_count);
+    }
+
+    // Always show summary
     print_summary(&all_results);
 
     if format == "json"
