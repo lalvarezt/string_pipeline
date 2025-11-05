@@ -1,5 +1,8 @@
 use clap::{Arg, Command};
-use comfy_table::{presets::UTF8_FULL, Attribute as TableAttribute, Cell, CellAlignment, Color as TableColor, ContentArrangement, Table};
+use comfy_table::{
+    Attribute as TableAttribute, Cell, Color as TableColor, ContentArrangement, Table,
+    presets::UTF8_FULL,
+};
 use crossterm::{
     cursor, execute, queue,
     style::{Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor},
@@ -271,18 +274,12 @@ impl TemplateSet {
             ("Extract directory", "{split:/:0..-1|join:/}"),
             ("Basename no ext", "{split:/:-1|split:.:0}"),
             ("File extension", "{split:/:-1|split:.:-1}"),
-            (
-                "Regex extract filename",
-                "{regex_extract:[^/]+$}",
-            ),
+            ("Regex extract filename", "{regex_extract:[^/]+$}"),
             (
                 "Uppercase all components",
                 "{split:/:..|map:{upper}|join:/}",
             ),
-            (
-                "Remove hidden dirs",
-                "{split:/:..|filter_not:^\\.|join:/}",
-            ),
+            ("Remove hidden dirs", "{split:/:..|filter_not:^\\.|join:/}"),
             ("Normalize filename", "{split:/:-1|trim|lower}"),
             ("Slug generation", "{replace:s/ /_/g|lower}"),
             ("Breadcrumb last 3", "{split:/:..|slice:-3..|join: > }"),
@@ -397,14 +394,13 @@ fn print_header(text: &str) {
     let mut stdout = io::stdout();
     let _ = execute!(
         stdout,
-        Print("\n"),
         SetForegroundColor(Color::Cyan),
         SetAttribute(Attribute::Bold),
         Print("╔"),
         Print("═".repeat(108)),
         Print("╗\n║ "),
         Print(text),
-        Print(" ".repeat(106 - text.len())),
+        Print(" ".repeat(110 - text.len())),
         Print("║\n╚"),
         Print("═".repeat(108)),
         Print("╝\n"),
@@ -424,7 +420,6 @@ fn print_section_header(text: &str) {
         Print("\n"),
         SetForegroundColor(Color::DarkGrey),
         Print("─".repeat(110)),
-        Print("\n"),
         ResetColor
     );
 }
@@ -487,13 +482,27 @@ fn print_template_results(template_name: &str, results: &[BenchmarkResult], deta
         .load_preset(UTF8_FULL)
         .set_content_arrangement(ContentArrangement::Dynamic)
         .set_header(vec![
-            Cell::new("Input Size").add_attribute(TableAttribute::Bold).fg(TableColor::Yellow),
-            Cell::new("Parse Time").add_attribute(TableAttribute::Bold).fg(TableColor::Yellow),
-            Cell::new("Total Time").add_attribute(TableAttribute::Bold).fg(TableColor::Yellow),
-            Cell::new("Avg/Path").add_attribute(TableAttribute::Bold).fg(TableColor::Yellow),
-            Cell::new("Throughput").add_attribute(TableAttribute::Bold).fg(TableColor::Yellow),
-            Cell::new("Parse %").add_attribute(TableAttribute::Bold).fg(TableColor::Yellow),
-            Cell::new("Scaling").add_attribute(TableAttribute::Bold).fg(TableColor::Yellow),
+            Cell::new("Input Size")
+                .add_attribute(TableAttribute::Bold)
+                .fg(TableColor::Yellow),
+            Cell::new("Parse Time")
+                .add_attribute(TableAttribute::Bold)
+                .fg(TableColor::Yellow),
+            Cell::new("Total Time")
+                .add_attribute(TableAttribute::Bold)
+                .fg(TableColor::Yellow),
+            Cell::new("Avg/Path")
+                .add_attribute(TableAttribute::Bold)
+                .fg(TableColor::Yellow),
+            Cell::new("Throughput")
+                .add_attribute(TableAttribute::Bold)
+                .fg(TableColor::Yellow),
+            Cell::new("Parse %")
+                .add_attribute(TableAttribute::Bold)
+                .fg(TableColor::Yellow),
+            Cell::new("Scaling")
+                .add_attribute(TableAttribute::Bold)
+                .fg(TableColor::Yellow),
         ]);
 
     for (idx, result) in results.iter().enumerate() {
@@ -573,7 +582,10 @@ fn print_template_results(template_name: &str, results: &[BenchmarkResult], deta
 
         // Latency statistics
         let stats = &largest_result.latency_stats;
-        println!("\n📈 Latency Statistics (at {} inputs):", format_size(largest_result.input_size));
+        println!(
+            "\n📈 Latency Statistics (at {} inputs):",
+            format_size(largest_result.input_size)
+        );
         println!(
             "   Min: {}  p50: {}  p95: {}  p99: {}  Max: {}  Stddev: {:.2}ns",
             format_duration(stats.min),
@@ -583,6 +595,7 @@ fn print_template_results(template_name: &str, results: &[BenchmarkResult], deta
             format_duration(stats.max),
             stats.stddev
         );
+        println!();
     }
 }
 
@@ -613,13 +626,22 @@ fn print_summary(all_results: &[(&str, Vec<BenchmarkResult>)]) {
         .load_preset(UTF8_FULL)
         .set_content_arrangement(ContentArrangement::Dynamic)
         .set_header(vec![
-            Cell::new("Template").add_attribute(TableAttribute::Bold).fg(TableColor::Yellow),
-            Cell::new("Input Size").add_attribute(TableAttribute::Bold).fg(TableColor::Yellow),
-            Cell::new("Avg/Path").add_attribute(TableAttribute::Bold).fg(TableColor::Yellow),
-            Cell::new("Throughput").add_attribute(TableAttribute::Bold).fg(TableColor::Yellow),
+            Cell::new("Template")
+                .add_attribute(TableAttribute::Bold)
+                .fg(TableColor::Yellow),
+            Cell::new("Input Size")
+                .add_attribute(TableAttribute::Bold)
+                .fg(TableColor::Yellow),
+            Cell::new("Avg/Path")
+                .add_attribute(TableAttribute::Bold)
+                .fg(TableColor::Yellow),
+            Cell::new("Throughput")
+                .add_attribute(TableAttribute::Bold)
+                .fg(TableColor::Yellow),
         ]);
 
-    for (idx, (template_name, input_size, avg_time, throughput)) in summary_data.iter().enumerate() {
+    for (idx, (template_name, input_size, avg_time, throughput)) in summary_data.iter().enumerate()
+    {
         // Highlight fastest (green) and slowest (yellow)
         let color = if idx == 0 {
             TableColor::Green
@@ -637,15 +659,7 @@ fn print_summary(all_results: &[(&str, Vec<BenchmarkResult>)]) {
         ]);
     }
 
-    println!("\n{}", table);
-}
-
-fn truncate_name(name: &str, max_len: usize) -> String {
-    if name.len() <= max_len {
-        name.to_string()
-    } else {
-        format!("{}...", &name[..max_len - 3])
-    }
+    println!("{}", table);
 }
 
 /// Output results in JSON format for tracking over time
@@ -790,7 +804,10 @@ fn main() {
             SetForegroundColor(Color::Cyan),
             Print("Input sizes: "),
             ResetColor,
-            Print(format!("{:?}\n", sizes.iter().map(|s| format_size(*s)).collect::<Vec<_>>())),
+            Print(format!(
+                "{:?}\n",
+                sizes.iter().map(|s| format_size(*s)).collect::<Vec<_>>()
+            )),
             SetForegroundColor(Color::Cyan),
             Print("Measurement iterations: "),
             ResetColor,
@@ -852,18 +869,17 @@ fn main() {
         print_summary(&all_results);
     }
 
-    if format == "json" {
-        if let Err(e) = output_json(&all_results, output_path.map(|s| s.as_str())) {
-            eprintln!("Error writing JSON output: {}", e);
-            std::process::exit(1);
-        }
+    if format == "json"
+        && let Err(e) = output_json(&all_results, output_path.map(|s| s.as_str()))
+    {
+        eprintln!("Error writing JSON output: {}", e);
+        std::process::exit(1);
     }
 
     if !quiet {
         let mut stdout = io::stdout();
         let _ = execute!(
             stdout,
-            Print("\n"),
             SetForegroundColor(Color::Green),
             SetAttribute(Attribute::Bold),
             Print("✓ Benchmark complete!\n"),
