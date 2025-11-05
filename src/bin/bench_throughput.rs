@@ -777,6 +777,13 @@ fn main() {
                 .value_name("FILE")
                 .help("Output file path (for JSON format)"),
         )
+        .arg(
+            Arg::new("quiet")
+                .short('q')
+                .long("quiet")
+                .action(clap::ArgAction::SetTrue)
+                .help("Minimal output (only show benchmark progress lines)"),
+        )
         .get_matches();
 
     // Parse arguments
@@ -799,37 +806,45 @@ fn main() {
     let detailed = matches.get_flag("detailed");
     let format = matches.get_one::<String>("format").unwrap();
     let output_path = matches.get_one::<String>("output");
+    let quiet = matches.get_flag("quiet");
 
     if sizes.is_empty() {
         eprintln!("Error: At least one input size is required");
         std::process::exit(1);
     }
 
-    println!("String Pipeline Throughput Benchmark");
-    println!("=====================================");
-    println!("Measuring batch processing performance with varying input sizes");
-    println!("Pattern: Parse once, format N paths individually");
-    println!();
-    println!(
-        "Input sizes: {:?}",
-        sizes.iter().map(|s| format_size(*s)).collect::<Vec<_>>()
-    );
-    println!("Measurement iterations: {}", iterations);
-    println!("Detailed profiling: {}", if detailed { "enabled" } else { "disabled" });
-    println!("Output format: {}", format);
-    println!();
+    if !quiet {
+        println!("String Pipeline Throughput Benchmark");
+        println!("=====================================");
+        println!("Measuring batch processing performance with varying input sizes");
+        println!("Pattern: Parse once, format N paths individually");
+        println!();
+        println!(
+            "Input sizes: {:?}",
+            sizes.iter().map(|s| format_size(*s)).collect::<Vec<_>>()
+        );
+        println!("Measurement iterations: {}", iterations);
+        println!("Detailed profiling: {}", if detailed { "enabled" } else { "disabled" });
+        println!("Output format: {}", format);
+    }
 
     let templates = TemplateSet::get_templates();
     let mut all_results = Vec::new();
 
     for (template_name, template_str) in &templates {
-        print!("Benchmarking '{}' ... ", template_name);
+        if quiet {
+            print!("Benchmarking '{}' ... ", template_name);
+        } else {
+            print!("\nBenchmarking '{}' ... ", template_name);
+        }
         std::io::Write::flush(&mut std::io::stdout()).unwrap();
 
         match benchmark_template(template_name, template_str, &sizes, iterations, detailed) {
             Ok(results) => {
                 println!("✓");
-                print_template_results(template_name, &results, detailed);
+                if !quiet {
+                    print_template_results(template_name, &results, detailed);
+                }
                 all_results.push((*template_name, results));
             }
             Err(e) => {
@@ -839,7 +854,9 @@ fn main() {
         }
     }
 
-    print_summary(&all_results);
+    if !quiet {
+        print_summary(&all_results);
+    }
 
     if format == "json" {
         if let Err(e) = output_json(&all_results, output_path.map(|s| s.as_str())) {
@@ -848,6 +865,8 @@ fn main() {
         }
     }
 
-    println!("\n{}", "=".repeat(110));
-    println!("Benchmark complete!");
+    if !quiet {
+        println!("\n{}", "=".repeat(110));
+        println!("Benchmark complete!");
+    }
 }
