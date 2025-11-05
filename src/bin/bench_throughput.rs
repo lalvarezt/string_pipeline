@@ -829,9 +829,7 @@ fn main() {
         match benchmark_template(template_name, template_str, &sizes, iterations, detailed) {
             Ok(results) => {
                 println!("✓");
-                if format == "console" {
-                    print_template_results(template_name, &results, detailed);
-                }
+                print_template_results(template_name, &results, detailed);
                 all_results.push((*template_name, results));
             }
             Err(e) => {
@@ -841,9 +839,9 @@ fn main() {
         }
     }
 
-    if format == "console" {
-        print_summary(&all_results);
-    } else if format == "json" {
+    print_summary(&all_results);
+
+    if format == "json" {
         if let Err(e) = output_json(&all_results, output_path.map(|s| s.as_str())) {
             eprintln!("Error writing JSON output: {}", e);
             std::process::exit(1);
