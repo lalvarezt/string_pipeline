@@ -300,21 +300,27 @@ impl TemplateSet {
     }
 }
 
-/// Runs a benchmark for a single template with varying input sizes and detailed profiling
+/// Runs a benchmark for a single template with varying input sizes
 fn benchmark_template(
     _template_name: &str,
     template_str: &str,
     sizes: &[usize],
     iterations: usize,
-    detailed: bool,
 ) -> Result<Vec<BenchmarkResult>, Box<dyn std::error::Error>> {
     let generator = PathGenerator::new();
     let mut results = Vec::new();
 
-    // Parse template once
-    let parse_start = Instant::now();
+    // Parse template N times and average
+    let mut total_parse_time = Duration::ZERO;
+    for _ in 0..iterations {
+        let parse_start = Instant::now();
+        let _ = Template::parse(template_str)?;
+        total_parse_time += parse_start.elapsed();
+    }
+    let avg_parse_time = total_parse_time / iterations as u32;
+
+    // Parse once for actual use
     let template = Template::parse(template_str)?;
-    let parse_time = parse_start.elapsed();
 
     for &size in sizes {
         // Generate N paths for this size
@@ -325,33 +331,22 @@ fn benchmark_template(
             let _ = template.format(path)?;
         }
 
-        // Measure: format all paths multiple times for stable measurements
-        let mut total_duration = Duration::ZERO;
-        let mut individual_times = Vec::new();
+        // Measure: format all paths multiple times, collecting individual timings
+        let mut all_individual_times = Vec::new();
 
         for _ in 0..iterations {
-            let start = Instant::now();
             for path in &paths {
                 let format_start = Instant::now();
                 let _ = template.format(path)?;
-                if detailed && iterations == 1 {
-                    // Only collect individual times on single iteration runs
-                    individual_times.push(format_start.elapsed());
-                }
+                all_individual_times.push(format_start.elapsed());
             }
-            total_duration += start.elapsed();
         }
 
-        // Average across iterations
+        // Calculate total from all iterations
+        let total_duration: Duration = all_individual_times.iter().sum();
         let avg_format_time = total_duration / iterations as u32;
 
-        // If not detailed mode, create dummy individual times for stats
-        if !detailed || iterations > 1 {
-            let avg_per_path = avg_format_time / size as u32;
-            individual_times = vec![avg_per_path; size];
-        }
-
-        let result = BenchmarkResult::new(size, parse_time, avg_format_time, individual_times);
+        let result = BenchmarkResult::new(size, avg_parse_time, avg_format_time, all_individual_times);
 
         results.push(result);
     }
@@ -477,7 +472,7 @@ fn print_progress_bar(current: usize, total: usize, template_name: &str) {
     stdout.flush().ok();
 }
 
-fn print_template_results(template_name: &str, results: &[BenchmarkResult], detailed: bool) {
+fn print_template_results(template_name: &str, results: &[BenchmarkResult]) {
     print_section_header(&format!("Template: {}", template_name));
 
     // Create results table with comfy-table
@@ -581,7 +576,7 @@ fn print_template_results(template_name: &str, results: &[BenchmarkResult], deta
     }
 
     // Latency statistics for largest size
-    if detailed && !results.is_empty() {
+    if !results.is_empty() {
         let largest_result = results.last().unwrap();
 
         // Latency statistics
@@ -723,7 +718,7 @@ fn output_json(
 fn main() {
     let matches = Command::new("String Pipeline Throughput Benchmark")
         .version(env!("CARGO_PKG_VERSION"))
-        .about("Benchmarks batch processing throughput with varying input sizes and detailed profiling")
+        .about("Benchmarks batch processing throughput with varying input sizes")
         .arg(
             Arg::new("sizes")
                 .short('s')
@@ -739,13 +734,6 @@ fn main() {
                 .value_name("COUNT")
                 .help("Number of measurement iterations per size for stability")
                 .default_value("50"),
-        )
-        .arg(
-            Arg::new("detailed")
-                .short('d')
-                .long("detailed")
-                .action(clap::ArgAction::SetTrue)
-                .help("Enable detailed per-operation profiling and statistics"),
         )
         .arg(
             Arg::new("format")
@@ -788,7 +776,6 @@ fn main() {
         .parse()
         .expect("Invalid iteration count");
 
-    let detailed = matches.get_flag("detailed");
     let format = matches.get_one::<String>("format").unwrap();
     let output_path = matches.get_one::<String>("output");
     let quiet = matches.get_flag("quiet");
@@ -804,7 +791,7 @@ fn main() {
         let _ = execute!(
             stdout,
             Print("Measuring batch processing performance with varying input sizes\n"),
-            Print("Pattern: Parse once, format N paths individually\n\n"),
+            Print("Pattern: Parse and format N paths with M iterations for stability\n\n"),
             SetForegroundColor(Color::Cyan),
             Print("Input sizes: "),
             ResetColor,
@@ -816,10 +803,6 @@ fn main() {
             Print("Measurement iterations: "),
             ResetColor,
             Print(format!("{}\n", iterations)),
-            SetForegroundColor(Color::Cyan),
-            Print("Detailed profiling: "),
-            ResetColor,
-            Print(if detailed { "enabled\n" } else { "disabled\n" }),
             SetForegroundColor(Color::Cyan),
             Print("Output format: "),
             ResetColor,
@@ -836,7 +819,7 @@ fn main() {
             print_progress_bar(idx + 1, total_templates, template_name);
         }
 
-        match benchmark_template(template_name, template_str, &sizes, iterations, detailed) {
+        match benchmark_template(template_name, template_str, &sizes, iterations) {
             Ok(results) => {
                 if !quiet {
                     let mut stdout = io::stdout();
@@ -849,7 +832,7 @@ fn main() {
                         ResetColor,
                         Print(format!("Completed: {}\n", template_name))
                     );
-                    print_template_results(template_name, &results, detailed);
+                    print_template_results(template_name, &results);
                 } else {
                     print_success(&format!("Benchmarking '{}'", template_name));
                 }
