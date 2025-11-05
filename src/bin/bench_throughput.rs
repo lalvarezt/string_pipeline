@@ -539,14 +539,17 @@ fn print_template_results(template_name: &str, results: &[BenchmarkResult], deta
         }
 
         // Latency statistics for largest size
-        println!("\n📈 Latency Statistics (at {} inputs):", format_size(largest_result.input_size));
         let stats = &largest_result.latency_stats;
-        println!("   Min:    {}", format_duration(stats.min));
-        println!("   p50:    {}", format_duration(stats.p50));
-        println!("   p95:    {}", format_duration(stats.p95));
-        println!("   p99:    {}", format_duration(stats.p99));
-        println!("   Max:    {}", format_duration(stats.max));
-        println!("   Stddev: {:.2}ns", stats.stddev);
+        println!("\n📈 Latency Statistics (at {} inputs):", format_size(largest_result.input_size));
+        println!(
+            "   Min: {}  p50: {}  p95: {}  p99: {}  Max: {}  Stddev: {:.2}ns",
+            format_duration(stats.min),
+            format_duration(stats.p50),
+            format_duration(stats.p95),
+            format_duration(stats.p99),
+            format_duration(stats.max),
+            stats.stddev
+        );
     }
 }
 
