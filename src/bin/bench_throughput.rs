@@ -399,12 +399,12 @@ fn print_header(text: &str) {
         SetForegroundColor(Color::Cyan),
         SetAttribute(Attribute::Bold),
         Print("╔"),
-        Print("═".repeat(108)),
+        Print("═".repeat(78)),
         Print("╗\n║ "),
         Print(text),
-        Print(" ".repeat(107 - text_width)),
+        Print(" ".repeat(77 - text_width)),
         Print("║\n╚"),
-        Print("═".repeat(108)),
+        Print("═".repeat(78)),
         Print("╝\n"),
         ResetColor
     );
@@ -421,7 +421,7 @@ fn print_section_header(text: &str) {
         ResetColor,
         Print("\n"),
         SetForegroundColor(Color::DarkGrey),
-        Print("─".repeat(110)),
+        Print("─".repeat(80)),
         ResetColor
     );
 }
