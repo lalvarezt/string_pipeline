@@ -1,0 +1,76 @@
+name: Update Benchmark Baseline
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref (tag, branch, or commit SHA) to benchmark'
+        required: true
+        default: 'main'
+        type: string
+      iterations:
+        description: 'Number of benchmark iterations'
+        required: false
+        default: '50'
+        type: string
+
+jobs:
+  update-baseline:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository at specified ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - name: Get commit info
+        id: commit-info
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "date=$(git log -1 --format=%ci)" >> $GITHUB_OUTPUT
+          echo "message=$(git log -1 --format=%s)" >> $GITHUB_OUTPUT
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build benchmark tool
+        run: cargo build --release --bin bench_throughput
+
+      - name: Run benchmarks
+        run: |
+          echo "Running benchmarks for commit ${{ steps.commit-info.outputs.short_sha }}"
+          ./target/release/bench_throughput \
+            --sizes 1000,10000,100000 \
+            --iterations ${{ inputs.iterations }} \
+            --format json \
+            --output benchmark_results.json
+
+      - name: Add workflow summary
+        run: |
+          echo "## Baseline Update Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Reference:** \`${{ inputs.ref }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ steps.commit-info.outputs.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** ${{ steps.commit-info.outputs.date }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Message:** ${{ steps.commit-info.outputs.message }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Baseline has been updated successfully." >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload new baseline
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-baseline
+          path: benchmark_results.json
+          retention-days: 90
+
+      - name: Baseline updated successfully
+        run: |
+          echo "::notice::Baseline successfully updated to commit ${{ steps.commit-info.outputs.short_sha }}"

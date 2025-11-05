@@ -32,7 +32,7 @@ jobs:
         run: |
           # Run benchmarks with multiple sizes and save to JSON
           ./target/release/bench_throughput \
-            --sizes 100,1000,10000 \
+            --sizes 1000,10000,100000 \
             --iterations 50 \
             --format json \
             --output benchmark_results.json
@@ -85,14 +85,6 @@ jobs:
           path: |
             benchmark_results.json
             comparison.md
-
-      - name: Upload as baseline (main branch only)
-        if: github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@v4
-        with:
-          name: benchmark-baseline
-          path: benchmark_results.json
-          retention-days: 90
 
       - name: Fail if significant performance regression
         if: steps.compare.outputs.comparison_available == 'true'
