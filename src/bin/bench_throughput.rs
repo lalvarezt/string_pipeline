@@ -12,6 +12,7 @@ use serde::{Serialize, Serializer};
 use std::io::{self, Write};
 use std::time::{Duration, Instant};
 use string_pipeline::Template;
+use unicode_width::UnicodeWidthStr;
 
 // Helper to serialize Duration as nanoseconds
 fn serialize_duration<S>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error>
@@ -392,6 +393,7 @@ fn format_size(size: usize) -> String {
 // Styled output helpers
 fn print_header(text: &str) {
     let mut stdout = io::stdout();
+    let text_width = text.width();
     let _ = execute!(
         stdout,
         SetForegroundColor(Color::Cyan),
@@ -400,7 +402,7 @@ fn print_header(text: &str) {
         Print("═".repeat(108)),
         Print("╗\n║ "),
         Print(text),
-        Print(" ".repeat(110 - text.len())),
+        Print(" ".repeat(107 - text_width)),
         Print("║\n╚"),
         Print("═".repeat(108)),
         Print("╝\n"),
