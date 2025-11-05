@@ -1,5 +1,4 @@
 use clap::{Arg, Command};
-use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use string_pipeline::Template;
 
@@ -12,18 +11,7 @@ struct BenchmarkResult {
     avg_time_per_path: Duration,
     throughput_paths_per_sec: f64,
     parse_percentage: f64,
-    operation_metrics: Vec<OperationMetric>,
     latency_stats: LatencyStatistics,
-}
-
-/// Tracks metrics for individual operation types
-#[derive(Debug, Clone)]
-struct OperationMetric {
-    operation_name: String,
-    total_time: Duration,
-    call_count: usize,
-    avg_time_per_call: Duration,
-    percentage_of_total: f64,
 }
 
 /// Statistical analysis of latency distribution
@@ -58,7 +46,6 @@ impl BenchmarkResult {
             avg_time_per_path,
             throughput_paths_per_sec,
             parse_percentage,
-            operation_metrics: Vec::new(),
             latency_stats,
         }
     }
@@ -116,10 +103,6 @@ impl BenchmarkResult {
         let actual =
             self.total_format_time.as_secs_f64() / baseline.total_format_time.as_secs_f64();
         actual / expected
-    }
-
-    fn add_operation_metrics(&mut self, metrics: Vec<OperationMetric>) {
-        self.operation_metrics = metrics;
     }
 }
 
@@ -295,7 +278,7 @@ impl TemplateSet {
 
 /// Runs a benchmark for a single template with varying input sizes and detailed profiling
 fn benchmark_template(
-    template_name: &str,
+    _template_name: &str,
     template_str: &str,
     sizes: &[usize],
     iterations: usize,
@@ -344,68 +327,12 @@ fn benchmark_template(
             individual_times = vec![avg_per_path; size];
         }
 
-        let mut result = BenchmarkResult::new(size, parse_time, avg_format_time, individual_times);
-
-        // If detailed mode, gather operation-level metrics
-        if detailed {
-            let op_metrics = gather_operation_metrics(&template, template_name, &paths)?;
-            result.add_operation_metrics(op_metrics);
-        }
+        let result = BenchmarkResult::new(size, parse_time, avg_format_time, individual_times);
 
         results.push(result);
     }
 
     Ok(results)
-}
-
-/// Gather detailed metrics for each operation type in the template
-fn gather_operation_metrics(
-    template: &Template,
-    _template_name: &str,
-    paths: &[String],
-) -> Result<Vec<OperationMetric>, Box<dyn std::error::Error>> {
-    // For now, we'll do a simple breakdown by re-running the template
-    // In a future enhancement, we could instrument the library itself
-
-    // Count operation types in the template string
-    let template_str = format!("{:?}", template);
-
-    let mut metrics = Vec::new();
-    let mut operation_counts: HashMap<String, usize> = HashMap::new();
-
-    // Simple heuristic: count operations mentioned
-    let operations = vec![
-        "Split", "Join", "Upper", "Lower", "Trim", "Replace", "Substring", "Reverse",
-        "StripAnsi", "Filter", "Sort", "Unique", "Pad", "Map", "RegexExtract", "Append",
-        "Prepend", "Surround", "Slice", "FilterNot",
-    ];
-
-    for op in &operations {
-        if template_str.contains(op) {
-            *operation_counts.entry(op.to_string()).or_insert(0) += 1;
-        }
-    }
-
-    // Measure total time for the template
-    let total_start = Instant::now();
-    for path in paths {
-        let _ = template.format(path)?;
-    }
-    let total_time = total_start.elapsed();
-
-    // Create metrics based on detected operations
-    // Note: This is a simplified approach. Full instrumentation would require library changes.
-    for (op_name, count) in &operation_counts {
-        metrics.push(OperationMetric {
-            operation_name: op_name.clone(),
-            total_time: total_time / operation_counts.len() as u32, // Simplified distribution
-            call_count: count * paths.len(),
-            avg_time_per_call: total_time / (count * paths.len()) as u32,
-            percentage_of_total: 100.0 / operation_counts.len() as f64, // Simplified
-        });
-    }
-
-    Ok(metrics)
 }
 
 fn format_duration(duration: Duration) -> String {
@@ -515,30 +442,11 @@ fn print_template_results(template_name: &str, results: &[BenchmarkResult], deta
         );
     }
 
-    // Detailed operation breakdown for largest size
+    // Latency statistics for largest size
     if detailed && !results.is_empty() {
         let largest_result = results.last().unwrap();
-        if !largest_result.operation_metrics.is_empty() {
-            println!("\n🔍 Operation Breakdown (at {} inputs):", format_size(largest_result.input_size));
-            println!(
-                "{:<20} {:>12} {:>12} {:>15} {:>10}",
-                "Operation", "Calls", "Total Time", "Avg/Call", "% Total"
-            );
-            println!("{}", "-".repeat(80));
 
-            for metric in &largest_result.operation_metrics {
-                println!(
-                    "{:<20} {:>12} {:>12} {:>15} {:>9.2}%",
-                    truncate_name(&metric.operation_name, 20),
-                    format_size(metric.call_count),
-                    format_duration(metric.total_time),
-                    format_duration(metric.avg_time_per_call),
-                    metric.percentage_of_total
-                );
-            }
-        }
-
-        // Latency statistics for largest size
+        // Latency statistics
         let stats = &largest_result.latency_stats;
         println!("\n📈 Latency Statistics (at {} inputs):", format_size(largest_result.input_size));
         println!(
@@ -671,40 +579,7 @@ fn output_json(
                 "            \"stddev_ns\": {:.2}\n",
                 result.latency_stats.stddev
             ));
-            json_output.push_str("          },\n");
-
-            // Operation metrics
-            if !result.operation_metrics.is_empty() {
-                json_output.push_str("          \"operations\": [\n");
-                for (oidx, op) in result.operation_metrics.iter().enumerate() {
-                    json_output.push_str("            {\n");
-                    json_output.push_str(&format!(
-                        "              \"name\": \"{}\",\n",
-                        op.operation_name
-                    ));
-                    json_output.push_str(&format!(
-                        "              \"total_time_ns\": {},\n",
-                        op.total_time.as_nanos()
-                    ));
-                    json_output.push_str(&format!("              \"call_count\": {},\n", op.call_count));
-                    json_output.push_str(&format!(
-                        "              \"avg_time_per_call_ns\": {},\n",
-                        op.avg_time_per_call.as_nanos()
-                    ));
-                    json_output.push_str(&format!(
-                        "              \"percentage_of_total\": {:.2}\n",
-                        op.percentage_of_total
-                    ));
-                    json_output.push_str(if oidx == result.operation_metrics.len() - 1 {
-                        "            }\n"
-                    } else {
-                        "            },\n"
-                    });
-                }
-                json_output.push_str("          ]\n");
-            } else {
-                json_output.push_str("          \"operations\": []\n");
-            }
+            json_output.push_str("          }\n");
 
             json_output.push_str(if ridx == results.len() - 1 {
                 "        }\n"
