@@ -653,7 +653,7 @@ Converts text to uppercase.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| *(none)* | - | - | No parameters required |
+| _(none)_ | - | - | No parameters required |
 
 **Examples:**
 
@@ -671,7 +671,7 @@ Converts text to lowercase.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| *(none)* | - | - | No parameters required |
+| _(none)_ | - | - | No parameters required |
 
 **Examples:**
 
@@ -784,7 +784,7 @@ Reverses the order of list items or characters in a string.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| *(none)* | - | - | No parameters required |
+| _(none)_ | - | - | No parameters required |
 
 **Behavior on Different Input Types:**
 
@@ -807,7 +807,7 @@ Removes duplicate items from a list, preserving order.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| *(none)* | - | - | No parameters required |
+| _(none)_ | - | - | No parameters required |
 
 **Order Preservation:** The first occurrence of each item is kept, maintaining the original order.
 
@@ -873,7 +873,7 @@ Removes ANSI escape sequences (colors, formatting) from text.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| *(none)* | - | - | No parameters required |
+| _(none)_ | - | - | No parameters required |
 
 **Sequence Types Removed:** Color codes, cursor movement, text formatting, and other ANSI escape sequences.
 
@@ -1431,5 +1431,4 @@ string-pipeline '{split:,:..|map:{prepend:• |append: ✓}}' 'First item,Second
 📚 **Essential Resources:**
 
 - 🐛 **[Debug System Guide](debug-system.md)** - Master debugging techniques and error diagnosis
-- 🏆 **[Performance Benchmarking Guide](benchmarking.md)** - Optimize templates for production use
 - 🔗 **[Command Line Interface Guide](command-line-options.md)** - CLI features and automation tips

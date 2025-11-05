@@ -730,8 +730,6 @@ DEBUG: Total execution time: 18.7456ms
 '{split:,:..|map:{trim|upper|append:!}}'
 ```
 
-> 📊 **Comprehensive Guide:** For detailed benchmarking methodology, performance analysis, automation scripts, and optimization strategies, see the [🏆 Performance Benchmarking Guide](benchmarking.md).
-
 ## 🔧 Troubleshooting
 
 ### 🐛 Common Issues and Solutions
