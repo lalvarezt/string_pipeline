@@ -826,11 +826,7 @@ fn main() {
                     let _ = execute!(
                         stdout,
                         cursor::MoveToColumn(0),
-                        Clear(ClearType::CurrentLine),
-                        SetForegroundColor(Color::Green),
-                        Print("✓ "),
-                        ResetColor,
-                        Print(format!("Completed: {}\n", template_name))
+                        Clear(ClearType::CurrentLine)
                     );
                     print_template_results(template_name, &results);
                 } else {
