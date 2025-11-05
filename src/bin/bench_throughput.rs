@@ -96,13 +96,15 @@ impl BenchmarkResult {
         let min = sorted_times[0];
         let max = sorted_times[sorted_times.len() - 1];
 
-        let p50_idx = (sorted_times.len() as f64 * 0.50) as usize;
-        let p95_idx = (sorted_times.len() as f64 * 0.95) as usize;
-        let p99_idx = (sorted_times.len() as f64 * 0.99) as usize;
+        // Nearest-rank percentile calculation: ceil(p * n) - 1
+        let n = sorted_times.len() as f64;
+        let p50_idx = ((n * 0.50).ceil() as usize).saturating_sub(1);
+        let p95_idx = ((n * 0.95).ceil() as usize).saturating_sub(1);
+        let p99_idx = ((n * 0.99).ceil() as usize).saturating_sub(1);
 
-        let p50 = sorted_times[p50_idx.min(sorted_times.len() - 1)];
-        let p95 = sorted_times[p95_idx.min(sorted_times.len() - 1)];
-        let p99 = sorted_times[p99_idx.min(sorted_times.len() - 1)];
+        let p50 = sorted_times[p50_idx];
+        let p95 = sorted_times[p95_idx];
+        let p99 = sorted_times[p99_idx];
 
         // Calculate standard deviation
         let mean = times.iter().map(|d| d.as_nanos() as f64).sum::<f64>() / times.len() as f64;
