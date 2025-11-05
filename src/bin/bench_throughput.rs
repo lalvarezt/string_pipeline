@@ -594,6 +594,52 @@ fn print_template_results(template_name: &str, results: &[BenchmarkResult]) {
             format_duration(stats.max),
             stats.stddev
         );
+
+        // Performance consistency analysis
+        let p50_ns = stats.p50.as_nanos() as f64;
+        let p99_ns = stats.p99.as_nanos() as f64;
+        let max_ns = stats.max.as_nanos() as f64;
+
+        if p50_ns > 0.0 {
+            let p99_p50_ratio = p99_ns / p50_ns;
+            let stddev_percent = (stats.stddev / p50_ns) * 100.0;
+            let max_p99_ratio = max_ns / p99_ns;
+
+            println!("   Analysis:");
+
+            // Consistency (p99/p50 ratio)
+            print!("   - Consistency: {:.2}x", p99_p50_ratio);
+            if p99_p50_ratio < 2.0 {
+                println!(" (excellent - very predictable)");
+            } else if p99_p50_ratio < 3.0 {
+                println!(" (good - mostly consistent)");
+            } else if p99_p50_ratio < 5.0 {
+                println!(" (fair - some variance)");
+            } else {
+                println!(" (poor - high variance)");
+            }
+
+            // Variance (stddev %)
+            print!("   - Variance: {:.1}%", stddev_percent);
+            if stddev_percent < 20.0 {
+                println!(" (low - stable)");
+            } else if stddev_percent < 40.0 {
+                println!(" (moderate)");
+            } else {
+                println!(" (high - jittery)");
+            }
+
+            // Outliers (max/p99 ratio)
+            print!("   - Outliers: {:.2}x", max_p99_ratio);
+            if max_p99_ratio < 2.0 {
+                println!(" (few outliers)");
+            } else if max_p99_ratio < 5.0 {
+                println!(" (some outliers)");
+            } else {
+                println!(" (many outliers)");
+            }
+        }
+
         println!();
     }
 }
