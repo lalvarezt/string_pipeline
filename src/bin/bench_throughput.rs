@@ -395,7 +395,7 @@ fn gather_operation_metrics(
 
     // Create metrics based on detected operations
     // Note: This is a simplified approach. Full instrumentation would require library changes.
-    for (op_name, count) in operation_counts {
+    for (op_name, count) in &operation_counts {
         metrics.push(OperationMetric {
             operation_name: op_name.clone(),
             total_time: total_time / operation_counts.len() as u32, // Simplified distribution
