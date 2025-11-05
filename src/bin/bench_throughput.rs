@@ -586,24 +586,21 @@ fn print_template_results(template_name: &str, results: &[BenchmarkResult]) {
             format_size(largest_result.input_size)
         );
         println!(
-            "   Min: {}  p50: {}  p95: {}  p99: {}  Max: {}  Stddev: {:.2}ns",
+            "   Min: {}  p50: {}  p95: {}  p99: {}  Stddev: {}",
             format_duration(stats.min),
             format_duration(stats.p50),
             format_duration(stats.p95),
             format_duration(stats.p99),
-            format_duration(stats.max),
-            stats.stddev
+            format_duration(Duration::from_nanos(stats.stddev as u64))
         );
 
         // Performance consistency analysis
         let p50_ns = stats.p50.as_nanos() as f64;
         let p99_ns = stats.p99.as_nanos() as f64;
-        let max_ns = stats.max.as_nanos() as f64;
 
         if p50_ns > 0.0 {
             let p99_p50_ratio = p99_ns / p50_ns;
             let stddev_percent = (stats.stddev / p50_ns) * 100.0;
-            let max_p99_ratio = max_ns / p99_ns;
 
             println!("   Analysis:");
 
@@ -627,16 +624,6 @@ fn print_template_results(template_name: &str, results: &[BenchmarkResult]) {
                 println!(" (moderate)");
             } else {
                 println!(" (high - jittery)");
-            }
-
-            // Outliers (max/p99 ratio)
-            print!("   - Outliers: {:.2}x", max_p99_ratio);
-            if max_p99_ratio < 2.0 {
-                println!(" (few outliers)");
-            } else if max_p99_ratio < 5.0 {
-                println!(" (some outliers)");
-            } else {
-                println!(" (many outliers)");
             }
         }
 
