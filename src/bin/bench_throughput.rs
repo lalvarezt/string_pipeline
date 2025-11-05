@@ -357,7 +357,8 @@ fn benchmark_template(
         let total_duration: Duration = iteration_total_times.iter().sum();
         let avg_format_time = total_duration / iterations as u32;
 
-        let result = BenchmarkResult::new(size, avg_parse_time, avg_format_time, iteration_avg_times);
+        let result =
+            BenchmarkResult::new(size, avg_parse_time, avg_format_time, iteration_avg_times);
 
         results.push(result);
     }
@@ -633,7 +634,10 @@ fn print_template_results(template_name: &str, results: &[BenchmarkResult]) {
 fn print_statistics_explanation(sample_count: usize) {
     print_header("📖 LATENCY STATISTICS METHODOLOGY");
 
-    println!("   Latency statistics calculated from {} iteration samples", sample_count);
+    println!(
+        "   Latency statistics calculated from {} iteration samples",
+        sample_count
+    );
     println!("   Each sample = average time per path for one complete iteration");
     println!();
     println!("   Statistical Methods:");
@@ -656,7 +660,10 @@ fn print_summary(all_results: &[(&str, Vec<BenchmarkResult>)]) {
         .max()
         .unwrap_or(0);
 
-    let header_text = format!("📊 SUMMARY - Performance at Largest Input Size ({})", format_size(largest_size));
+    let header_text = format!(
+        "📊 SUMMARY - Performance at Largest Input Size ({})",
+        format_size(largest_size)
+    );
     print_header(&header_text);
 
     // Collect results with latency stats for sorting
@@ -705,7 +712,8 @@ fn print_summary(all_results: &[(&str, Vec<BenchmarkResult>)]) {
                 .fg(TableColor::Yellow),
         ]);
 
-    for (idx, (template_name, avg_time, p95, p99, stddev, throughput)) in summary_data.iter().enumerate()
+    for (idx, (template_name, avg_time, p95, p99, stddev, throughput)) in
+        summary_data.iter().enumerate()
     {
         // Highlight fastest (green) and slowest (yellow)
         let color = if idx == 0 {
