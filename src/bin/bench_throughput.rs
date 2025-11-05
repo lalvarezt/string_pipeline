@@ -51,6 +51,7 @@ struct LatencyStatistics {
     #[serde(serialize_with = "serialize_duration")]
     max: Duration,
     stddev: f64,
+    sample_count: usize,
 }
 
 impl BenchmarkResult {
@@ -79,6 +80,8 @@ impl BenchmarkResult {
     }
 
     fn calculate_statistics(times: &[Duration]) -> LatencyStatistics {
+        let sample_count = times.len();
+
         if times.is_empty() {
             return LatencyStatistics {
                 min: Duration::ZERO,
@@ -87,6 +90,7 @@ impl BenchmarkResult {
                 p99: Duration::ZERO,
                 max: Duration::ZERO,
                 stddev: 0.0,
+                sample_count: 0,
             };
         }
 
@@ -125,6 +129,7 @@ impl BenchmarkResult {
             p99,
             max,
             stddev,
+            sample_count,
         }
     }
 
@@ -331,22 +336,28 @@ fn benchmark_template(
             let _ = template.format(path)?;
         }
 
-        // Measure: format all paths multiple times, collecting individual timings
-        let mut all_individual_times = Vec::new();
+        // Measure: time complete iterations, calculate avg per-path for each iteration
+        let mut iteration_total_times = Vec::new();
+        let mut iteration_avg_times = Vec::new();
 
         for _ in 0..iterations {
+            let iteration_start = Instant::now();
             for path in &paths {
-                let format_start = Instant::now();
                 let _ = template.format(path)?;
-                all_individual_times.push(format_start.elapsed());
             }
+            let iteration_time = iteration_start.elapsed();
+            iteration_total_times.push(iteration_time);
+
+            // Calculate average time per path for this iteration (for statistics)
+            let avg_per_path = iteration_time / size as u32;
+            iteration_avg_times.push(avg_per_path);
         }
 
-        // Calculate total from all iterations
-        let total_duration: Duration = all_individual_times.iter().sum();
+        // Calculate average total time across all iterations
+        let total_duration: Duration = iteration_total_times.iter().sum();
         let avg_format_time = total_duration / iterations as u32;
 
-        let result = BenchmarkResult::new(size, avg_parse_time, avg_format_time, all_individual_times);
+        let result = BenchmarkResult::new(size, avg_parse_time, avg_format_time, iteration_avg_times);
 
         results.push(result);
     }
@@ -625,6 +636,17 @@ fn print_template_results(template_name: &str, results: &[BenchmarkResult]) {
             } else {
                 println!(" (high - jittery)");
             }
+
+            // Formulas note
+            println!("\n   Note: Latency statistics calculated from {} iteration samples", stats.sample_count);
+            println!("   Each sample = average time per path for one complete iteration");
+            println!("   - Percentiles: Nearest-rank method on sorted iteration averages");
+            println!("     p50 = value at index ceil(n × 0.50) - 1");
+            println!("     p95 = value at index ceil(n × 0.95) - 1");
+            println!("     p99 = value at index ceil(n × 0.99) - 1");
+            println!("   - Consistency: p99/p50 ratio (lower = more predictable)");
+            println!("   - Variance: (stddev/p50) × 100% (lower = more stable)");
+            println!("   - Stddev: √(Σ(x - mean)² / n) over iteration samples");
         }
 
         println!();
