@@ -1,19 +1,104 @@
 name: Performance Benchmarks
-on: [push, pull_request]
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
 
 jobs:
   benchmark:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
       - name: Build benchmark tool
-        run: cargo build --release --bin string-pipeline-bench
+        run: cargo build --release --bin bench_throughput
+
       - name: Run benchmarks
         run: |
-          ./target/release/string-pipeline-bench --iterations 5000 > benchmark_results.txt
-      - name: Upload results
+          # Run benchmarks with multiple sizes and save to JSON
+          ./target/release/bench_throughput \
+            --sizes 100,1000,10000 \
+            --iterations 50 \
+            --format json \
+            --output benchmark_results.json
+
+      - name: Download baseline benchmark
+        id: download-baseline
+        continue-on-error: true
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: benchmark.yml
+          branch: main
+          name: benchmark-baseline
+          path: baseline
+          if_no_artifact_found: warn
+
+      - name: Compare with baseline
+        id: compare
+        run: |
+          if [ -f baseline/benchmark_results.json ]; then
+            echo "Baseline found, comparing results..."
+            python3 scripts/compare_benchmarks.py \
+              baseline/benchmark_results.json \
+              benchmark_results.json > comparison.md
+            echo "comparison_available=true" >> $GITHUB_OUTPUT
+          else
+            echo "No baseline found, this will become the new baseline"
+            echo "comparison_available=false" >> $GITHUB_OUTPUT
+            echo "## Benchmark Results\n\nNo baseline available for comparison. These results will be used as the baseline for future comparisons." > comparison.md
+          fi
+
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request' && steps.compare.outputs.comparison_available == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const comparison = fs.readFileSync('comparison.md', 'utf8');
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comparison
+            });
+
+      - name: Upload current results as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-results
+          name: benchmark-current
+          path: |
+            benchmark_results.json
+            comparison.md
+
+      - name: Upload as baseline (main branch only)
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-baseline
           path: benchmark_results.json
+          retention-days: 90
+
+      - name: Fail if significant performance regression
+        if: steps.compare.outputs.comparison_available == 'true'
+        run: |
+          if grep -q "⚠️ PERFORMANCE REGRESSION" comparison.md; then
+            echo "::warning::Performance regression detected. Review comparison.md for details."
+            # Uncomment the next line to fail the build on regression
+            # exit 1
+          fi
