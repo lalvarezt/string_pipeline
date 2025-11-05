@@ -823,7 +823,7 @@ fn main() {
     let mut all_results = Vec::new();
 
     for (template_name, template_str) in &templates {
-        print!("\nBenchmarking '{}' ... ", template_name);
+        print!("Benchmarking '{}' ... ", template_name);
         std::io::Write::flush(&mut std::io::stdout()).unwrap();
 
         match benchmark_template(template_name, template_str, &sizes, iterations, detailed) {
