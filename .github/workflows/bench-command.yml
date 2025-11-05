@@ -1,0 +1,620 @@
+name: Benchmark Command
+# Trigger on-demand benchmarks via PR comments
+# Usage: /bench <ref1> <ref2> [size] [warmup] [runs]
+# Examples:
+#   /bench main v0.13.0
+#   /bench abc123 def456 50000
+#   /bench main HEAD 50000 5 20
+# Only repository owner can trigger this command
+
+on:
+  issue_comment:
+    types: [created]
+
+# Prevent concurrent benchmark runs on the same PR
+concurrency:
+  group: bench-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  check-permission:
+    name: Check Command Permission
+    # Only run on PR comments (not regular issues)
+    if: |
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/bench ')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    outputs:
+      authorized: ${{ steps.check.outputs.authorized }}
+      ref1: ${{ steps.parse.outputs.ref1 }}
+      ref2: ${{ steps.parse.outputs.ref2 }}
+      size: ${{ steps.parse.outputs.size }}
+      warmup: ${{ steps.parse.outputs.warmup }}
+      runs: ${{ steps.parse.outputs.runs }}
+    steps:
+      - name: Check if commenter is repo owner
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const commenter = context.payload.comment.user.login;
+            const owner = context.payload.repository.owner.login;
+            const isOwner = commenter === owner;
+
+            console.log(`Commenter: ${commenter}`);
+            console.log(`Repository owner: ${owner}`);
+            console.log(`Is owner: ${isOwner}`);
+
+            if (!isOwner) {
+              await github.rest.reactions.createForIssueComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: context.payload.comment.id,
+                content: '-1'
+              });
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `❌ **Permission denied**: Only @${owner} can trigger benchmark comparisons.`
+              });
+            } else {
+              await github.rest.reactions.createForIssueComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: context.payload.comment.id,
+                content: 'eyes'
+              });
+            }
+
+            core.setOutput('authorized', isOwner);
+
+      - name: Parse benchmark command
+        id: parse
+        if: steps.check.outputs.authorized == 'true'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          COMMENT="${{ github.event.comment.body }}"
+
+          # Parse command: /bench ref1 ref2 [size] [warmup] [runs]
+          # Remove /bench prefix and extract parameters
+          PARAMS=$(echo "$COMMENT" | sed 's|^/bench[[:space:]]*||')
+
+          # Extract parameters
+          REF1=$(echo "$PARAMS" | awk '{print $1}')
+          REF2=$(echo "$PARAMS" | awk '{print $2}')
+          SIZE=$(echo "$PARAMS" | awk '{print $3}')
+          WARMUP=$(echo "$PARAMS" | awk '{print $4}')
+          RUNS=$(echo "$PARAMS" | awk '{print $5}')
+
+          # Validate required parameters
+          if [ -z "$REF1" ] || [ -z "$REF2" ]; then
+            echo "error=Invalid format. Missing required parameters." >> $GITHUB_OUTPUT
+            echo "parse_failed=true" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+          # Set defaults for optional parameters
+          if [ -z "$SIZE" ] || ! [[ "$SIZE" =~ ^[0-9]+$ ]]; then
+            SIZE=10000
+          fi
+
+          if [ -z "$WARMUP" ] || ! [[ "$WARMUP" =~ ^[0-9]+$ ]]; then
+            WARMUP=5
+          fi
+
+          if [ -z "$RUNS" ] || ! [[ "$RUNS" =~ ^[0-9]+$ ]]; then
+            RUNS=50
+          fi
+
+          echo "ref1=$REF1" >> $GITHUB_OUTPUT
+          echo "ref2=$REF2" >> $GITHUB_OUTPUT
+          echo "size=$SIZE" >> $GITHUB_OUTPUT
+          echo "warmup=$WARMUP" >> $GITHUB_OUTPUT
+          echo "runs=$RUNS" >> $GITHUB_OUTPUT
+          echo "parse_failed=false" >> $GITHUB_OUTPUT
+
+          echo "Parsed parameters:"
+          echo "  ref1: $REF1"
+          echo "  ref2: $REF2"
+          echo "  size: $SIZE"
+          echo "  warmup: $WARMUP"
+          echo "  runs: $RUNS"
+
+      - name: Post parse error
+        if: steps.check.outputs.authorized == 'true' && steps.parse.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'confused'
+            });
+
+            const errorMessage = [
+              '❌ **Invalid command format**',
+              '',
+              '**Usage:** `/bench <ref1> <ref2> [size] [warmup] [runs]`',
+              '',
+              '**Examples:**',
+              '```',
+              '/bench main v0.13.0',
+              '/bench abc123 def456 50000',
+              '/bench main HEAD 50000 5',
+              '/bench main HEAD 50000 5 20',
+              '```',
+              '',
+              '**Parameters:**',
+              '- `ref1` (required): Baseline git reference',
+              '- `ref2` (required): Current git reference',
+              '- `size` (optional): Input size (default: 10000)',
+              '- `warmup` (optional): Warmup runs (default: 5)',
+              '- `runs` (optional): Benchmark runs (default: 50)',
+              '',
+              '**Note:** This runs all 28 predefined templates with a single input size.',
+              'For detailed per-template analysis with hyperfine, use the local tools.'
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: errorMessage
+            });
+
+      - name: Post acknowledgment
+        if: steps.check.outputs.authorized == 'true' && steps.parse.outcome == 'success'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ref1 = '${{ steps.parse.outputs.ref1 }}';
+            const ref2 = '${{ steps.parse.outputs.ref2 }}';
+            const size = '${{ steps.parse.outputs.size }}';
+            const warmup = '${{ steps.parse.outputs.warmup }}';
+            const runs = '${{ steps.parse.outputs.runs }}';
+
+            const message = [
+              '🚀 **Benchmark comparison started**',
+              '',
+              '**Comparing:**',
+              `- **Baseline**: \`${ref1}\``,
+              `- **Current**: \`${ref2}\``,
+              '',
+              '**Parameters:**',
+              `- **Size**: ${size} paths`,
+              `- **Warmup**: ${warmup} runs`,
+              `- **Runs**: ${runs} measurements`,
+              `- **Templates**: All 28 predefined templates`,
+              '',
+              'Results will be posted here when complete...'
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: message
+            });
+
+  run-benchmarks:
+    name: Run Benchmark Comparison
+    needs: check-permission
+    if: needs.check-permission.outputs.authorized == 'true' && needs.check-permission.outputs.ref1 != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history to access all refs
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install hyperfine
+        run: |
+          wget https://github.com/sharkdp/hyperfine/releases/download/v1.18.0/hyperfine_1.18.0_amd64.deb
+          sudo dpkg -i hyperfine_1.18.0_amd64.deb
+          hyperfine --version
+
+      - name: Fetch refs from remote
+        run: |
+          set -euo pipefail
+          REF1="${{ needs.check-permission.outputs.ref1 }}"
+          REF2="${{ needs.check-permission.outputs.ref2 }}"
+
+          echo "Fetching ref1: $REF1"
+          git fetch origin "$REF1" || git fetch origin "refs/tags/$REF1" || git fetch origin "refs/heads/$REF1" || true
+
+          echo "Fetching ref2: $REF2"
+          git fetch origin "$REF2" || git fetch origin "refs/tags/$REF2" || git fetch origin "refs/heads/$REF2" || true
+
+          # Update remote refs
+          git fetch origin --tags
+
+      - name: Validate and order refs
+        id: validate
+        run: |
+          set -euo pipefail
+          REF1="${{ needs.check-permission.outputs.ref1 }}"
+          REF2="${{ needs.check-permission.outputs.ref2 }}"
+
+          # Validate both refs exist
+          if ! git rev-parse --verify "$REF1" >/dev/null 2>&1; then
+            echo "error=Ref '$REF1' not found" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+          if ! git rev-parse --verify "$REF2" >/dev/null 2>&1; then
+            echo "error=Ref '$REF2' not found" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+          # Resolve to full SHAs
+          SHA1=$(git rev-parse "$REF1")
+          SHA2=$(git rev-parse "$REF2")
+
+          # Check if both refs resolve to the same commit
+          if [ "$SHA1" = "$SHA2" ]; then
+            echo "same_commit=true" >> $GITHUB_OUTPUT
+            echo "ref1_sha=$(git rev-parse --short $REF1)" >> $GITHUB_OUTPUT
+            echo "ref2_sha=$(git rev-parse --short $REF2)" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "same_commit=false" >> $GITHUB_OUTPUT
+
+          # Determine which is older (baseline) and newer (current)
+          # Get commit timestamps
+          TIMESTAMP1=$(git log -1 --format=%ct "$SHA1")
+          TIMESTAMP2=$(git log -1 --format=%ct "$SHA2")
+
+          if [ "$TIMESTAMP1" -le "$TIMESTAMP2" ]; then
+            # REF1 is older or same age -> baseline
+            BASELINE_REF="$REF1"
+            BASELINE_SHA="$SHA1"
+            CURRENT_REF="$REF2"
+            CURRENT_SHA="$SHA2"
+          else
+            # REF2 is older -> baseline
+            BASELINE_REF="$REF2"
+            BASELINE_SHA="$SHA2"
+            CURRENT_REF="$REF1"
+            CURRENT_SHA="$SHA1"
+          fi
+
+          # Output the determined ordering
+          echo "baseline_ref=$BASELINE_REF" >> $GITHUB_OUTPUT
+          echo "baseline_sha=$(git rev-parse --short $BASELINE_SHA)" >> $GITHUB_OUTPUT
+          echo "current_ref=$CURRENT_REF" >> $GITHUB_OUTPUT
+          echo "current_sha=$(git rev-parse --short $CURRENT_SHA)" >> $GITHUB_OUTPUT
+
+          # Keep original refs for display
+          echo "ref1_sha=$(git rev-parse --short $REF1)" >> $GITHUB_OUTPUT
+          echo "ref2_sha=$(git rev-parse --short $REF2)" >> $GITHUB_OUTPUT
+
+          echo "Determined ordering:"
+          echo "  Baseline (older): $BASELINE_REF ($BASELINE_SHA)"
+          echo "  Current (newer):  $CURRENT_REF ($CURRENT_SHA)"
+
+      - name: Handle same commit case
+        if: steps.validate.outputs.same_commit == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ref1 = '${{ needs.check-permission.outputs.ref1 }}';
+            const ref2 = '${{ needs.check-permission.outputs.ref2 }}';
+            const sha = '${{ steps.validate.outputs.ref1_sha }}';
+
+            const message = [
+              '⚠️ **Same commit detected**',
+              '',
+              `Both \`${ref1}\` and \`${ref2}\` resolve to the same commit: \`${sha}\``,
+              '',
+              'No benchmark comparison needed - the refs are identical.',
+              '',
+              '**Tip:** To compare different versions, use refs that point to different commits.'
+            ].join('\n');
+
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: ${{ github.event.comment.id }},
+              content: 'eyes'
+            });
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: message
+            });
+
+      - name: Check benchmark tool exists in baseline
+        if: steps.validate.outputs.same_commit == 'false'
+        id: check_baseline_tool
+        run: |
+          set -euo pipefail
+          BASELINE_REF="${{ steps.validate.outputs.baseline_ref }}"
+          echo "Checking out $BASELINE_REF..."
+          git checkout "$BASELINE_REF"
+
+          # Check if bench-throughput binary is defined in Cargo.toml
+          if ! grep -q 'name = "bench-throughput"' Cargo.toml 2>/dev/null; then
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "❌ Benchmark tool 'bench-throughput' not found in $BASELINE_REF"
+            exit 0
+          fi
+
+          # Check if the source file exists
+          if ! grep -A 2 'name = "bench-throughput"' Cargo.toml | grep -q 'path.*='; then
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "❌ Benchmark tool source file not found in $BASELINE_REF"
+            exit 0
+          fi
+
+          echo "exists=true" >> $GITHUB_OUTPUT
+          echo "✓ Benchmark tool found in $BASELINE_REF"
+
+      - name: Check benchmark tool exists in current
+        if: steps.validate.outputs.same_commit == 'false'
+        id: check_current_tool
+        run: |
+          set -euo pipefail
+          CURRENT_REF="${{ steps.validate.outputs.current_ref }}"
+          echo "Checking out $CURRENT_REF..."
+          git checkout "$CURRENT_REF"
+
+          # Check if bench-throughput binary is defined in Cargo.toml
+          if ! grep -q 'name = "bench-throughput"' Cargo.toml 2>/dev/null; then
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "❌ Benchmark tool 'bench-throughput' not found in $CURRENT_REF"
+            exit 0
+          fi
+
+          # Check if the source file exists
+          if ! grep -A 2 'name = "bench-throughput"' Cargo.toml | grep -q 'path.*='; then
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "❌ Benchmark tool source file not found in $CURRENT_REF"
+            exit 0
+          fi
+
+          echo "exists=true" >> $GITHUB_OUTPUT
+          echo "✓ Benchmark tool found in $CURRENT_REF"
+
+      - name: Post missing tool error
+        if: steps.validate.outputs.same_commit == 'false' && (steps.check_baseline_tool.outputs.exists == 'false' || steps.check_current_tool.outputs.exists == 'false')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const baseline_ref = '${{ steps.validate.outputs.baseline_ref }}';
+            const current_ref = '${{ steps.validate.outputs.current_ref }}';
+            const baseline_exists = '${{ steps.check_baseline_tool.outputs.exists }}' === 'true';
+            const current_exists = '${{ steps.check_current_tool.outputs.exists }}' === 'true';
+
+            let message = '❌ **Benchmark comparison failed**\n\n';
+            message += '**Reason**: The benchmark tool (`bench-throughput`) does not exist in ';
+
+            if (!baseline_exists && !current_exists) {
+              message += `both refs:\n- \`${baseline_ref}\` (baseline/older)\n- \`${current_ref}\` (current/newer)`;
+            } else if (!baseline_exists) {
+              message += `baseline ref: \`${baseline_ref}\` (older commit)`;
+            } else {
+              message += `current ref: \`${current_ref}\` (newer commit)`;
+            }
+
+            message += '\n\n**Solution**: The benchmark tool was added in commit `d264124` and stabilized in `78594af` (v1.0.0). For reliable comparisons, use refs from `78594af` or later.';
+            message += '\n\n**Example**: `/bench main HEAD` (if both include the benchmark tool)';
+
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: ${{ github.event.comment.id }},
+              content: 'confused'
+            });
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: message
+            });
+
+      - name: Build baseline benchmark tool
+        if: steps.validate.outputs.same_commit == 'false' && steps.check_baseline_tool.outputs.exists == 'true' && steps.check_current_tool.outputs.exists == 'true'
+        run: |
+          set -euo pipefail
+          BASELINE_REF="${{ steps.validate.outputs.baseline_ref }}"
+
+          echo "Checking out baseline: $BASELINE_REF..."
+          git checkout "$BASELINE_REF"
+
+          echo "Building benchmark tool..."
+          if ! cargo build --release --bin bench-throughput 2>&1 | tee build_baseline.log; then
+            echo "❌ Failed to build benchmark tool for $BASELINE_REF"
+            exit 1
+          fi
+
+          # Save binary with unique name
+          cp target/release/bench-throughput bench-throughput-baseline
+          echo "✓ Built baseline benchmark tool"
+
+      - name: Build current benchmark tool
+        if: steps.validate.outputs.same_commit == 'false' && steps.check_baseline_tool.outputs.exists == 'true' && steps.check_current_tool.outputs.exists == 'true'
+        run: |
+          set -euo pipefail
+          CURRENT_REF="${{ steps.validate.outputs.current_ref }}"
+
+          echo "Checking out current: $CURRENT_REF..."
+          git checkout "$CURRENT_REF"
+
+          # Rebuild in case dependencies changed
+          echo "Building benchmark tool..."
+          if ! cargo build --release --bin bench-throughput 2>&1 | tee build_current.log; then
+            echo "❌ Failed to build benchmark tool for $CURRENT_REF"
+            exit 1
+          fi
+
+          # Save binary with unique name
+          cp target/release/bench-throughput bench-throughput-current
+          echo "✓ Built current benchmark tool"
+
+      - name: Run benchmarks
+        if: steps.validate.outputs.same_commit == 'false' && steps.check_baseline_tool.outputs.exists == 'true' && steps.check_current_tool.outputs.exists == 'true'
+        run: |
+          set -euo pipefail
+          SIZE="${{ needs.check-permission.outputs.size }}"
+          WARMUP="${{ needs.check-permission.outputs.warmup }}"
+          RUNS="${{ needs.check-permission.outputs.runs }}"
+          BASELINE_SHA="${{ steps.validate.outputs.baseline_sha }}"
+          CURRENT_SHA="${{ steps.validate.outputs.current_sha }}"
+
+          echo "Running benchmark comparison..."
+          echo "  Baseline: $BASELINE_SHA"
+          echo "  Current:  $CURRENT_SHA"
+          echo "  Size:     $SIZE paths"
+          echo "  Warmup:   $WARMUP runs"
+          echo "  Runs:     $RUNS measurements"
+          echo ""
+
+          # Run hyperfine with markdown export
+          hyperfine \
+            --warmup "$WARMUP" \
+            --runs "$RUNS" \
+            --export-markdown comparison_results.md \
+            --command-name "baseline ($BASELINE_SHA)" \
+            "./bench-throughput-baseline --template all --size $SIZE --output /dev/null" \
+            --command-name "current ($CURRENT_SHA)" \
+            "./bench-throughput-current --template all --size $SIZE --output /dev/null"
+
+          echo "✓ Benchmark comparison complete"
+
+      - name: Post results to PR
+        if: steps.validate.outputs.same_commit == 'false' && steps.check_baseline_tool.outputs.exists == 'true' && steps.check_current_tool.outputs.exists == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const comparison_results = fs.readFileSync('comparison_results.md', 'utf8');
+            const baseline_sha = '${{ steps.validate.outputs.baseline_sha }}';
+            const current_sha = '${{ steps.validate.outputs.current_sha }}';
+            const size = '${{ needs.check-permission.outputs.size }}';
+            const warmup = '${{ needs.check-permission.outputs.warmup }}';
+            const runs = '${{ needs.check-permission.outputs.runs }}';
+
+            const body = [
+              '## 🔬 Benchmark Comparison Report',
+              '',
+              '**Requested by:** @${{ github.event.comment.user.login }}',
+              '',
+              '**Configuration:**',
+              `- **Baseline (older):** \`${baseline_sha}\``,
+              `- **Current (newer):** \`${current_sha}\``,
+              `- **Test:** All 28 predefined templates`,
+              `- **Input size:** ${size} paths per run`,
+              `- **Warmup:** ${warmup} runs`,
+              `- **Measurements:** ${runs} runs`,
+              '',
+              '**Results:**',
+              '',
+              comparison_results.trim(),
+              '',
+              '> **Interpretation:**',
+              '> - **Mean**: Average execution time across all runs',
+              '> - **Min/Max**: Fastest and slowest runs observed',
+              '> - **Relative**: Speed comparison (1.00 = baseline, <1.00 = faster, >1.00 = slower)',
+              '> - Each run processes all 28 templates on ${size} generated paths',
+              '',
+              '---',
+              '',
+              '<sub>Triggered by [/bench command](${{ github.event.comment.html_url }})</sub>',
+              '',
+              '**Note:** Build logs are available in the [workflow artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).'
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+
+      - name: Upload benchmark artifacts
+        if: steps.validate.outputs.same_commit == 'false' && steps.check_baseline_tool.outputs.exists == 'true' && steps.check_current_tool.outputs.exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-comparison-${{ github.event.comment.id }}
+          path: |
+            comparison_results.md
+            build_baseline.log
+            build_current.log
+          retention-days: 30
+
+      - name: Add success reaction
+        if: steps.validate.outputs.same_commit == 'false' && steps.check_baseline_tool.outputs.exists == 'true' && steps.check_current_tool.outputs.exists == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: ${{ github.event.comment.id }},
+              content: 'rocket'
+            });
+
+  handle-error:
+    name: Handle Errors
+    needs: [check-permission, run-benchmarks]
+    if: failure() && needs.check-permission.outputs.authorized == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Post error message
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ref1 = '${{ needs.check-permission.outputs.ref1 }}';
+            const ref2 = '${{ needs.check-permission.outputs.ref2 }}';
+
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: ${{ github.event.comment.id }},
+              content: 'confused'
+            });
+
+            const errorBody = [
+              '❌ **Benchmark comparison failed**',
+              '',
+              `Failed to compare \`${ref1}\` and \`${ref2}\`.`,
+              '',
+              '**Please check:**',
+              '- Both refs exist and are valid git references (branches, tags, or commits)',
+              '- The benchmark tool exists in both refs',
+              '- The code at those refs compiles successfully',
+              '- Parameters are in correct format: `/bench <ref1> <ref2> [size] [warmup] [runs]`',
+              '',
+              '**See the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.**'
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: errorBody
+            });

@@ -1,783 +1,347 @@
-# 🏆 String Pipeline Benchmarking Tool
+# Benchmarking
 
-_NOTE: what follows has mostly been assembled using AI as an experiment and as a basis for further improvements._
+String Pipeline includes a throughput-based benchmarking tool designed for both comprehensive template testing and hyperfine integration.
 
-A simple benchmarking tool that helps measure performance of string pipeline operations and provides timing information in both text and JSON formats.
-
-## 📋 Table of Contents
-
-- [🚀 Quick Start](#-quick-start)
-- [✨ Features Overview](#-features-overview)
-- [📖 Usage Guide](#-usage-guide)
-  - [Basic Usage](#basic-usage)
-  - [Command Line Options](#command-line-options)
-  - [Output Formats](#output-formats)
-- [🧪 Benchmark Categories](#-benchmark-categories)
-  - [Single Operations](#1--single-operations)
-  - [Multiple Simple Operations](#2--multiple-simple-operations)
-  - [Map Operations](#3-️-map-operations)
-  - [Complex Operations](#4--complex-operations)
-- [📊 Test Data & Methodology](#-test-data--methodology)
-- [📈 Performance Analysis](#-performance-analysis)
-  - [Basic Methods](#basic-methods)
-  - [Timing Precision](#timing-precision)
-  - [Metrics Explanation](#metrics-explanation)
-- [💼 Automated Usage](#-automated-usage)
-  - [Script Integration](#script-integration)
-  - [Performance Comparison](#performance-comparison)
-- [🔧 Development Guide](#-development-guide)
-  - [Adding New Benchmarks](#adding-new-benchmarks)
-  - [Performance Considerations](#performance-considerations)
-  - [Best Practices](#best-practices)
-- [📋 Example Results](#-example-results)
-- [⚠️ Troubleshooting](#️-troubleshooting)
-
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
-# Run with default settings (1000 iterations, text output)
-cargo run --bin bench
+# Mode 1: All templates (default)
+cargo run --release --bin bench-throughput
 
-# Run in release mode for better performance
-cargo run --release --bin bench
+# Mode 2: Specific template with hyperfine
+hyperfine --warmup 10 --runs 100 \
+  'cargo run --release --bin bench-throughput -- \
+    --template "{split:/:-1}" --size 10000'
 
-# Quick test with fewer iterations
-cargo run --bin bench -- --iterations 100
+# List available templates
+cargo run --release --bin bench-throughput -- --list-templates
 ```
 
-## ✨ Features Overview
+## Operating Modes
 
-- 🧪 **Test Coverage**: Tests single operations, multiple operations, map operations, and complex nested operations
-- 📊 **Basic Statistics**: Runs configurable iterations (default 1000) and calculates averages with outlier removal
-- 🏋️ **Warmup Phase**: Runs warmup iterations (10% of measurements) to help get consistent timing
-- 🎯 **Outlier Removal**: Removes top and bottom 5% of measurements to reduce noise
-- 📄 **Multiple Output Formats**: Supports both human-readable text and machine-readable JSON output
-- 🏗️ **Performance Categories**: Groups results by operation type for easier analysis
-- 📈 **Basic Metrics**: Provides average, minimum, maximum times from the filtered measurements
-- ⚡ **Automation Support**: Works well in CI/CD and automated scripts
-- 🔍 **Debug Integration**: Works with the existing debug system's timing capabilities
+### Mode 1: All Templates (Default)
 
-## 📖 Usage Guide
-
-### Basic Usage
-
-| Command | Description | Use Case |
-|---------|-------------|----------|
-| `cargo run --bin bench` | Default run (1000 iterations, text) | Development testing |
-| `cargo run --release --bin bench` | Optimized build | Better performance measurements |
-| `./target/release/bench.exe` | Direct binary execution | Scripts and automation |
+Runs all 28 predefined templates once with a single input size, providing a comprehensive performance overview.
 
 ```bash
-# 🚀 Development workflow
-cargo run --bin bench -- --iterations 100  # Quick test
+# Default: runs all templates with 10000 paths
+cargo run --release --bin bench-throughput
 
-# 🔄 More thorough testing
-cargo build --release --bin bench
-./target/release/bench --iterations 5000 --format json > results.json
+# Custom size and output location
+cargo run --release --bin bench-throughput -- \
+  --size 50000 \
+  --output results.json
+
+# Verbose mode shows per-template details
+cargo run --release --bin bench-throughput -- \
+  --size 10000 \
+  --verbose
 ```
 
-### Command Line Options
+**Output:**
+- Progress bar during execution
+- Summary table sorted by throughput (fastest first)
+- JSON export with all results
+- Parse time and format time for each template
+- Throughput (paths/second) metrics
+
+### Mode 2: Specific Template (Hyperfine Integration)
+
+Executes a single template without internal timing, designed to be orchestrated by hyperfine for statistical analysis.
+
+```bash
+# Direct execution (runs once, no statistics)
+cargo run --release --bin bench-throughput -- \
+  --template "{split:/:-1}" \
+  --size 10000
+
+# With hyperfine for statistical benchmarking
+hyperfine --warmup 10 --runs 100 \
+  'cargo run --release --bin bench-throughput -- \
+    --template "{split:/:-1}" --size 10000'
+```
+
+**Use cases:**
+- Detailed performance analysis of a single template
+- Comparing template variations
+- Profiling specific operations
+- Version-to-version performance regression testing
+
+## Command Line Options
 
 | Option | Short | Default | Description |
 |--------|-------|---------|-------------|
-| `--iterations` | `-n` | `1000` | Number of iterations per benchmark |
-| `--format` | `-f` | `text` | Output format: `text` or `json` |
-| `--help` | `-h` | - | Show help information |
-| `--version` | `-V` | - | Show version information |
+| `--template` | `-t` | `all` | Template: `all` for predefined set, or template string |
+| `--size` | `-s` | `10000` | Number of paths to process |
+| `--output` | `-o` | auto | JSON output file (all templates mode only) |
+| `--verbose` | `-v` | false | Show detailed per-template results (all templates mode only) |
+| `--list-templates` | | | List available predefined templates and exit |
+
+**Note:** `--output` defaults to `$XDG_DATA_HOME/string-pipeline/benchmarks/bench-<timestamp>.json`
+
+## Templates Tested
+
+The benchmark suite includes 28 predefined templates covering:
+
+### Core Operations
+- **split**: `{split:/:..}`, `{split:/:-1}`
+- **join**: `{split:/:..|join:/}`
+- **Case transforms**: `{upper}`, `{lower}`
+- **String operations**: `{trim}`, `{reverse}`, `{substring:0..10}`
+- **Replace**: `{replace:s/\\.txt$/.md/}`, `{replace:s/\\/\\/+/\\//g}`
+- **Collections**: `{filter:^[a-z]}`, `{sort}`, `{unique}`
+- **Formatting**: `{pad:50: :right}`, `{strip_ansi}`
+
+### Path Manipulation (Real-world Television Use Cases)
+- Extract filename: `{split:/:-1}`
+- Extract directory: `{split:/:0..-1|join:/}`
+- Basename without extension: `{split:/:-1|split:.:0}`
+- File extension: `{split:/:-1|split:.:-1}`
+- Regex extraction: `{regex_extract:[^/]+$}`
+
+### Complex Chains
+- Uppercase components: `{split:/:..|map:{upper}|join:/}`
+- Remove hidden dirs: `{split:/:..|filter_not:^\\.|join:/}`
+- Normalize filename: `{split:/:-1|trim|lower}`
+- Slug generation: `{replace:s/ /_/g|lower}`
+- Multi-operation chains: `{split:/:..|map:{trim|lower|replace:s/_/-/g}|join:/}`
+
+## Test Data
+
+The benchmark generates realistic absolute file paths with:
+- Varying depths (2-10 directory levels)
+- Common directory names (home, usr, var, projects, src, etc.)
+- Realistic filenames and extensions
+- Deterministic generation for reproducibility
+
+Example paths:
+```
+/home/usr/var/projects/src/main.rs
+/opt/workspace/repos/tests/docs/config/utils/test.json
+```
+
+## Metrics
+
+For each template (in all templates mode):
+
+- **Parse time**: Time to parse the template
+- **Total format time**: Time to format all paths
+- **Average per path**: Total time divided by input size
+- **Throughput**: Paths processed per second
+
+## Comparing Results
+
+### Quick Overall Check
+
+For rapid feedback on overall performance:
+
+```bash
+# Quick smoke test (single run, no statistics)
+cargo run --release --bin bench-throughput -- --template all --size 10000
+
+# Statistical check with hyperfine
+hyperfine --warmup 5 --runs 50 \
+  'cargo run --release --bin bench-throughput -- --template all --size 10000 --output /dev/null'
+```
+
+### Comparing Two Versions
+
+For comparing performance across git commits:
+
+```bash
+# 1. Compile both versions
+./scripts/compile_benchmark_versions.sh abc1234 def5678
+
+# 2. Quick overall comparison
+./scripts/compare_benchmark_versions.sh abc1234 def5678 --all
+
+# 3. If regression detected, detailed per-template analysis
+./scripts/analyze_all_templates.sh abc1234 def5678 --runs 100
+```
+
+**Output from analyze_all_templates.sh:**
+- Statistical confidence for each of 28 templates
+- Mean, min, max, stddev for every template
+- Regression/improvement highlighting
+- Comprehensive markdown report
+
+### Analyzing Specific Templates
+
+For targeted performance analysis:
+
+```bash
+# Compare a specific template across versions
+hyperfine --warmup 10 --runs 100 \
+  'cargo run --release --bin bench-throughput -- \
+    --template "{split:/:-1}" --size 10000' \
+  'cargo run --release --bin bench-throughput -- \
+    --template "{split:/:-1|upper}" --size 10000'
+
+# Export results for further analysis
+hyperfine --warmup 10 --runs 100 --export-json results.json \
+  'cargo run --release --bin bench-throughput -- \
+    --template "{split:/:-1}" --size 10000'
+```
+
+### Version-to-Version Comparison
+
+Using the helper scripts:
+
+```bash
+# Compile benchmark binaries for different commits
+./scripts/compile_benchmark_versions.sh --start 78594af --end HEAD
+
+# Compare two versions with hyperfine
+./scripts/compare_benchmark_versions.sh 78594af dc06069
+
+# Compare specific template
+./scripts/compare_benchmark_versions.sh 78594af dc06069 \
+  --template "{split:/:-1|upper}" --warmup 10 --runs 100
+
+# Compare all templates mode
+./scripts/compare_benchmark_versions.sh 78594af dc06069 --all
+```
+
+## CI/CD Integration
+
+### On-Demand Comparisons
+
+Repository owners can trigger benchmark comparisons via PR comments:
+
+```
+/bench <ref1> <ref2> [size] [warmup] [runs]
+```
+
+**Parameters:**
+- `ref1`, `ref2` (required): Git references to compare (commits, branches, or tags)
+- `size` (optional): Number of paths to process per run (default: 10000)
+- `warmup` (optional): Number of warmup runs (default: 5)
+- `runs` (optional): Number of measurement runs (default: 50)
 
 **Examples:**
 
-```bash
-# 📊 Better accuracy (more iterations)
-cargo run --bin bench -- --iterations 2000
+```
+# Basic comparison with defaults
+/bench main HEAD
 
-# 🤖 Machine processing (JSON output)
-cargo run --bin bench -- --format json
+# Compare with custom size
+/bench v0.13.0 main 50000
 
-# 🚀 Quick development test
-cargo run --bin bench -- --iterations 50 --format text
-
-# 🔍 Help and version info
-cargo run --bin bench -- --help
-cargo run --bin bench -- --version
+# Full custom parameters
+/bench abc123 def456 50000 10 100
 ```
 
-### Output Formats
+**How it works:**
 
-#### 📄 Text Output (Default)
+1. Validates both refs exist and contain the benchmark tool
+2. Automatically determines which ref is older (baseline) and newer (current) by commit timestamp
+3. Builds the benchmark tool for both refs
+4. Runs hyperfine with all 28 templates on both versions
+5. Posts a detailed report with statistical comparison as a PR comment
 
-Good for **reading results** and **development workflows**:
+**Note:** The CI workflow uses all templates mode for comprehensive regression testing. For detailed per-template analysis with full statistical confidence, use the local `analyze_all_templates.sh` script.
 
-- ✅ **Progress indicators** during execution with real-time feedback
-- ✅ **Formatted tables** with aligned columns and readable timing units
-- ✅ **Performance summary** by category with fastest/slowest identification
-- ✅ **Basic statistics** including total execution time and outlier counts
-- ✅ **Color-coded** output (when terminal supports it)
+## Advanced Usage
 
-```text
-🔸 Running single operation benchmarks...
-  Single: upper ... ✓ avg: 295ns
-  Single: lower ... ✓ avg: 149ns
+### Benchmarking Template Variations
 
-📊 Summary:
-• Total benchmarks run: 33
-• Total execution time: 392.17ms
-```
-
-#### 🤖 JSON Output
-
-Good for **automation**, **scripts**, and **data processing**:
-
-- ✅ **Machine-readable** structured data
-- ✅ **Timestamps** and version information for tracking
-- ✅ **Timing metrics** for each benchmark
-- ✅ **Categorized results** for easier filtering
-- ✅ **Works well** with tools like `jq`, `python`, etc.
-
-```json
-{
-  "summary": {
-    "total_benchmarks": 33,
-    "total_execution_time_ns": 392170000,
-    "iterations_per_benchmark": 1000
-  },
-  "categories": {
-    "single_operations": [...],
-    "map_operations": [...]
-  },
-  "timestamp": "2024-01-15T10:30:45Z",
-  "version": "0.13.0"
-}
-```
-
-## 🧪 Benchmark Categories
-
-The benchmark suite is organized into **four distinct categories** that test different aspects of the pipeline system, from basic operations to complex nested transformations.
-
-### 1. 🔧 Single Operations
-
-Tests **individual pipeline operations** to establish baseline performance:
-
-| Operation | Template | Purpose | Expected Performance |
-|-----------|----------|---------|---------------------|
-| `split` | `{split:,:..\|join:,}` | Text splitting capability | ~3-4μs |
-| `upper` | `{upper}` | Case conversion | ~200-300ns |
-| `lower` | `{lower}` | Case conversion | ~150-200ns |
-| `trim` | `{trim}` | Whitespace removal | ~100-150ns |
-| `reverse` | `{reverse}` | String/list reversal | ~600-700ns |
-| `sort` | `{split:,:..\|sort\|join:,}` | Alphabetical sorting | ~3-4μs |
-| `unique` | `{split:,:..\|unique\|join:,}` | Duplicate removal | ~5-6μs |
-| `replace` | `{replace:s/a/A/g}` | Pattern replacement | ~2-3μs |
-| `filter` | `{split:,:..\|filter:^[a-m]\|join:,}` | Pattern filtering | ~14-16μs |
-
-> 💡 **Baseline Importance:** These measurements establish the **fundamental performance characteristics** of each operation and serve as building blocks for understanding more complex pipeline performance.
-
-### 2. 🔗 Multiple Simple Operations
-
-Tests **chains of basic operations** to measure composition overhead:
-
-| Pipeline | Template | Purpose | Performance Range |
-|----------|----------|---------|------------------|
-| Split + Join | `{split:,:..\|join: }` | Basic transformation | ~3μs |
-| Split + Sort + Join | `{split:,:..\|sort\|join:;}` | Sorting pipeline | ~3-4μs |
-| Split + Unique + Join | `{split:,:..\|unique\|join:,}` | Deduplication | ~5-6μs |
-| Split + Reverse + Join | `{split:,:..\|reverse\|join:-}` | Reversal pipeline | ~3μs |
-| Split + Filter + Join | `{split:,:..\|filter:^[a-m]\|join:,}` | Filtering pipeline | ~16-17μs |
-| Split + Slice + Join | `{split:,:..\|slice:0..5\|join:&}` | Range extraction | ~4μs |
-| Upper + Trim + Replace | `{upper\|trim\|replace:s/,/ /g}` | String transformations | ~3-4μs |
-| Split + Sort + Unique + Join | `{split:,:..\|sort\|unique\|join:+}` | Multi-step processing | ~5-6μs |
-
-> 🎯 **Composition Analysis:** These tests reveal how **operation chaining affects performance** and whether there are significant overhead costs in pipeline composition.
-
-### 3. 🗺️ Map Operations
-
-Tests **operations applied to each list item** via the map function:
-
-| Operation Type | Template | Purpose | Performance Range |
-|----------------|----------|---------|------------------|
-| Map(Upper) | `{split:,:..\|map:{upper}\|join:,}` | Case conversion mapping | ~8-9μs |
-| Map(Trim+Upper) | `{split:,:..\|map:{trim\|upper}\|join: }` | Chained operations in map | ~9-10μs |
-| Map(Prepend) | `{split:,:..\|map:{prepend:item}\|join:,}` | Text prefix addition | ~9-10μs |
-| Map(Append) | `{split:,:..\|map:{append:-fruit}\|join:;}` | Text suffix addition | ~10-11μs |
-| Map(Reverse) | `{split:,:..\|map:{reverse}\|join:,}` | String reversal per item | ~8-9μs |
-| Map(Substring) | `{split:,:..\|map:{substring:0..3}\|join: }` | Text extraction per item | ~8-9μs |
-| Map(Pad) | `{split:,:..\|map:{pad:10:_}\|join:,}` | Text padding per item | ~10-11μs |
-| Map(Replace) | `{split:,:..\|map:{replace:s/e/E/g}\|join:,}` | Pattern replacement per item | ~49-60μs |
-
-> 🔍 **Map Performance:** Map operations show **scaling behavior** based on list size and the complexity of the inner operation. Replace operations are notably slower due to regex processing.
-
-### 4. 🚀 Complex Operations
-
-Tests **sophisticated nested operations** and real-world transformation scenarios:
-
-| Complexity Level | Template | Purpose | Performance Range |
-|------------------|----------|---------|------------------|
-| Nested Split+Join | `{split:,:..\|map:{split:_:..\|join:-}\|join: }` | Multi-level parsing | ~15-16μs |
-| Combined Transform | `{split:,:..\|map:{upper\|substring:0..5}\|join:,}` | Chained transformations | ~10μs |
-| Filter+Map Chain | `{split:,:..\|filter:^[a-m]\|map:{reverse}\|join:&}` | Conditional processing | ~16-17μs |
-| Replace+Transform | `{split:,:..\|map:{upper\|replace:s/A/a/g}\|join:;}` | Pattern + transformation | ~50-60μs |
-| Unique+Map | `{split:,:..\|unique\|map:{upper}\|join:,}` | Dedup + transformation | ~10-11μs |
-| Multi-Replace | `{split:,:..\|map:{replace:s/a/A/g\|upper}\|join:,}` | Complex pattern work | ~51-60μs |
-| Substring+Pad | `{split:,:..\|map:{substring:0..3\|pad:5:_}\|join:+}` | Text formatting pipeline | ~10-11μs |
-| Multi-Level Filter | `{split:,:..\|filter:^[a-z]\|map:{upper}\|sort\|join: }` | Comprehensive processing | ~17-18μs |
-
-> 🏆 **Real-World Scenarios:** Complex operations represent **typical production use cases** and help identify performance bottlenecks in sophisticated data transformation pipelines.
-
-## 📊 Test Data & Methodology
-
-### 🍎 Test Dataset
-
-The benchmark uses a **carefully designed test dataset** that provides realistic performance characteristics:
-
-| Property | Value | Purpose |
-|----------|-------|---------|
-| **Content** | Comma-separated fruit names | Real-world data structure |
-| **Length** | 208 characters | Moderate size for consistent timing |
-| **Items** | 26 distinct fruits | Good sample size |
-| **Unicode** | ASCII + Unicode safe | Comprehensive character handling |
-| **Separators** | Commas, underscores, pipes | Multiple parsing scenarios |
-
-**Actual Test Data:**
-
-```text
-"apple,banana,cherry,date,elderberry,fig,grape,honeydew,ice_fruit,jackfruit,kiwi,lemon,mango,nectarine,orange,papaya,quince,raspberry,strawberry,tomato,ugli_fruit,vanilla,watermelon,xigua,yellow_apple,zucchini"
-```
-
-> 🎯 **Why This Dataset?** This data provides **realistic performance characteristics** without being too large to cause timing inconsistencies or too small to provide meaningful measurements.
-
-## 📈 Performance Analysis
-
-### Basic Methods
-
-#### 🏋️ Warmup Phase
-
-The benchmark includes a **warmup phase** to help get more consistent measurements by reducing cold-start effects:
-
-| Step | Process | Rationale |
-|------|---------|-----------|
-| 1. **Warmup Calculation** | Calculate 10% of measurement iterations | Proportional to test size |
-| 2. **Cache Warming** | Run operations without timing measurement | Prime CPU caches and memory |
-| 3. **System Stabilization** | Allow CPU frequency scaling to settle | More consistent conditions |
-| 4. **Memory Allocation** | Pre-allocate common data structures | Reduce allocation overhead |
-
-```rust
-// Warmup phase implementation
-fn benchmark_template(&self, name: &str, template_str: &str) -> BenchmarkResult {
-    let template = Template::parse(template_str)?;
-
-    // Warmup phase - run operations without timing
-    for _ in 0..self.warmup_iterations {
-        let _ = template.format(&self.test_data)?;
-    }
-
-    // Actual measurement phase begins here...
-}
-```
-
-> 🎯 **Warmup Benefits:** Helps reduce timing variations by reducing cold cache effects and system instability.
-
-#### 🎯 Outlier Removal
-
-The benchmark uses a **simple approach** to reduce measurement noise:
-
-| Step | Process | Rationale |
-|------|---------|-----------|
-| 1. **Data Collection** | Collect all timing measurements | Raw performance data |
-| 2. **Sorting** | Sort measurements by duration | Prepare for filtering |
-| 3. **Filtering** | Remove top & bottom 5% | Remove timing outliers |
-| 4. **Average Calculation** | Calculate mean of remaining 90% | More stable average |
-| 5. **Reporting** | Report outliers removed count | Show what was filtered |
-
-```rust
-// Simplified outlier removal algorithm
-fn remove_outliers(mut times: Vec<Duration>) -> (Vec<Duration>, usize) {
-    times.sort();
-    let len = times.len();
-    let outlier_count = (len as f64 * 0.05).ceil() as usize;
-
-    let start_idx = outlier_count;
-    let end_idx = len - outlier_count;
-
-    let filtered = times[start_idx..end_idx].to_vec();
-    let outliers_removed = times.len() - filtered.len();
-
-    (filtered, outliers_removed)
-}
-```
-
-> 📊 **Simple Approach:** This basic filtering helps reduce noise in timing measurements, similar to what other benchmarking tools do.
-
-### Timing Precision
-
-#### ⚡ Timing Details
-
-| Feature | Implementation | Benefit |
-|---------|----------------|---------|
-| **Resolution** | Nanosecond precision via `std::time::Instant` | Good for fast operations |
-| **Overhead** | Small timing overhead (~10-20ns) | Minimal impact on results |
-| **Platform** | Cross-platform timing support | Works across systems |
-| **Formatting** | Automatic unit selection (ns/μs/ms/s) | Easy to read output |
-
-#### 📏 Unit Formatting Algorithm
-
-```rust
-fn format_duration(duration: Duration) -> String {
-    let nanos = duration.as_nanos();
-    if nanos < 1_000 {
-        format!("{}ns", nanos)
-    } else if nanos < 1_000_000 {
-        format!("{:.2}μs", nanos as f64 / 1_000.0)
-    } else if nanos < 1_000_000_000 {
-        format!("{:.2}ms", nanos as f64 / 1_000_000.0)
-    } else {
-        format!("{:.2}s", duration.as_secs_f64())
-    }
-}
-```
-
-### Metrics Explanation
-
-#### 📊 Core Metrics
-
-| Metric | Description | Interpretation |
-|--------|-------------|----------------|
-| **Average** | Mean time after outlier removal | Main performance indicator |
-| **Min** | Fastest measurement after outlier removal | Best-case timing |
-| **Max** | Slowest measurement after outlier removal | Worst-case timing |
-| **Iterations** | Number of measurement runs performed | How many times we measured |
-| **Warmup** | Number of pre-measurement runs | System preparation cycles |
-
-#### 🎯 Performance Ranges
-
-| Performance Level | Time Range | Operations |
-|------------------|------------|------------|
-| **Ultra Fast** | < 1μs | `upper`, `lower`, `trim` |
-| **Fast** | 1-10μs | `split`, `join`, `sort`, basic chains |
-| **Moderate** | 10-50μs | `map` operations, complex chains |
-| **Intensive** | > 50μs | `replace` operations, regex processing |
-
-> 💡 **Iteration Guidelines:**
->
-> - **Development**: 50-100 iterations for quick feedback
-> - **Automation**: 500-1000 iterations for better reliability
-> - **Thorough testing**: 2000-5000 iterations for more stable results
-
-## 📋 Example Results
-
-### 📊 Text Output Sample
-
-```text
-🔸 Running single operation benchmarks...
-  Single: split ... ✓ avg: 3.53μs
-  Single: upper ... ✓ avg: 295ns
-  Single: lower ... ✓ avg: 149ns
-
-🔸 Running multiple simple operations benchmarks...
-  Multi: split + join ... ✓ avg: 3.12μs
-  Multi: split + sort + join ... ✓ avg: 3.47μs
-
-================================================================================
-                          BENCHMARK RESULTS
-================================================================================
-
-📊 Summary:
-• Total benchmarks run: 33
-• Total execution time: 392.17ms
-• Measurement iterations per benchmark: 1000
-• Warmup iterations per benchmark: 100 (10% of measurements)
-
-📈 Detailed Results:
-Benchmark                                               Average          Min          Max
-----------------------------------------------------------------------------------------
-Single: upper                                             295ns        200ns       380ns
-Single: lower                                             149ns        120ns       180ns
-Map: split + map(replace) + join                        49.16μs      42.90μs      55.80μs
-
-📋 Performance by Category:
-🔹 Single Operations (9 tests)
-   Average: 3.31μs | Fastest: 136ns (trim) | Slowest: 14.03μs (filter)
-
-🔹 Map Operations (8 tests)
-   Average: 14.22μs | Fastest: 8.35μs (map(upper)) | Slowest: 49.16μs (map(replace))
-```
-
-### 🤖 JSON Output Sample
-
-```json
-{
-  "summary": {
-    "total_benchmarks": 33,
-    "total_execution_time_ns": 392170000,
-    "total_execution_time_formatted": "392.17ms",
-    "iterations_per_benchmark": 1000,
-    "outlier_removal_method": "Top and bottom 5% removed",
-    "warmup_iterations_per_benchmark": 100
-  },
-  "categories": {
-    "single_operations": [
-      {
-        "name": "Single: upper",
-        "iterations": 1000,
-        "average_time_ns": 295000,
-        "average_time_formatted": "295ns",
-        "min_time_ns": 200000,
-        "min_time_formatted": "200ns",
-        "max_time_ns": 9100000,
-        "max_time_formatted": "9.10μs",
-        "outliers_removed": 100,
-        "total_raw_measurements": 1000
-      }
-    ]
-  },
-  "timestamp": "2024-01-15T10:30:45Z",
-  "version": "0.13.0"
-}
-```
-
-## 💼 Automated Usage
-
-### Script Integration
-
-#### 🚀 GitHub Actions Example
-
-```yaml
-name: Performance Benchmarks
-on: [push, pull_request]
-
-jobs:
-  benchmark:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Build benchmark tool
-        run: cargo build --release --bin bench
-      - name: Run benchmarks
-        run: |
-          ./target/release/bench --iterations 5000 --format json > benchmark_results.json
-      - name: Upload results
-        uses: actions/upload-artifact@v4
-        with:
-          name: benchmark-results
-          path: benchmark_results.json
-```
-
-#### 🔍 Processing Results with jq
+Compare different approaches to the same task:
 
 ```bash
-# Extract summary information
-cat benchmark_results.json | jq '.summary'
-
-# Get average times for single operations
-cat benchmark_results.json | jq '.categories.single_operations[].average_time_formatted'
-
-# Find slowest operations
-cat benchmark_results.json | jq -r '.categories[] | .[] | "\(.name): \(.average_time_formatted)"' | sort -V
-
-# Performance alerts (fail if any operation > 100μs)
-SLOW_OPS=$(cat benchmark_results.json | jq '.categories[][] | select(.average_time_ns > 100000000)')
-if [ ! -z "$SLOW_OPS" ]; then
-  echo "Performance regression detected!"
-  exit 1
-fi
+hyperfine --warmup 10 --runs 100 \
+  'cargo run --release --bin bench-throughput -- \
+    --template "{split:/:-1|split:.:0}" --size 10000' \
+  'cargo run --release --bin bench-throughput -- \
+    --template "{regex_extract:^(.+)\\.[^.]+$}" --size 10000'
 ```
 
-### Performance Comparison
-
-#### 📊 Simple Comparison Script
+### Profiling with Different Input Sizes
 
 ```bash
-#!/bin/bash
-# compare_benchmarks.sh
-
-BASELINE="baseline.json"
-CURRENT="current.json"
-THRESHOLD=1.1  # 10% regression threshold
-
-# Run current benchmark
-./target/release/bench --format json > "$CURRENT"
-
-# Compare with baseline (if exists)
-if [ -f "$BASELINE" ]; then
-  echo "🔍 Checking for performance changes..."
-
-  # Extract and compare key metrics
-  jq -r '.categories[][] | "\(.name) \(.average_time_ns)"' "$BASELINE" > baseline_times.txt
-  jq -r '.categories[][] | "\(.name) \(.average_time_ns)"' "$CURRENT" > current_times.txt
-
-  # Performance regression analysis
-  python3 << 'EOF'
-import json
-import sys
-
-with open('baseline.json') as f:
-    baseline = json.load(f)
-with open('current.json') as f:
-    current = json.load(f)
-
-threshold = 1.1
-regressions = []
-
-for category in baseline['categories']:
-    for i, bench in enumerate(baseline['categories'][category]):
-        current_bench = current['categories'][category][i]
-        ratio = current_bench['average_time_ns'] / bench['average_time_ns']
-
-        if ratio > threshold:
-            regressions.append({
-                'name': bench['name'],
-                'baseline': bench['average_time_formatted'],
-                'current': current_bench['average_time_formatted'],
-                'ratio': f"{ratio:.2f}x"
-            })
-
-if regressions:
-    print("⚠️  Performance changes detected:")
-    for reg in regressions:
-        print(f"  {reg['name']}: {reg['baseline']} → {reg['current']} ({reg['ratio']})")
-    sys.exit(1)
-else:
-    print("✅ No significant performance changes")
-EOF
-else
-  echo "📁 No baseline found, creating baseline from current run..."
-  cp "$CURRENT" "$BASELINE"
-fi
+for size in 1000 10000 100000; do
+  hyperfine --warmup 5 --runs 50 \
+    --export-json "results_${size}.json" \
+    "cargo run --release --bin bench-throughput -- \
+      --template '{split:/:-1}' --size $size"
+done
 ```
 
-## 🔧 Development Guide
-
-### Adding New Benchmarks
-
-#### 📝 Step-by-Step Process
-
-1. **🎯 Identify the Operation Category**
-
-   ```rust
-   // Choose the appropriate method in src/bin/bench.rs
-   fn run_single_operation_benchmarks()     // Individual operations
-   fn run_multiple_simple_benchmarks()     // Operation chains
-   fn run_multiple_map_benchmarks()        // Map operations
-   fn run_complex_benchmarks()             // Complex scenarios
-   ```
-
-2. **✍️ Follow the Naming Convention**
-
-   ```rust
-   // Pattern: "Category: descriptive_name"
-   ("Single: operation_name", "{template}")
-   ("Multi: operation1 + operation2", "{template}")
-   ("Map: split + map(operation)", "{template}")
-   ("Complex: detailed_description", "{template}")
-   ```
-
-3. **🧪 Create Valid Templates**
-
-   ```rust
-   // ✅ Good examples
-   ("Single: upper", "{upper}"),
-   ("Multi: split + sort + join", "{split:,:..|sort|join:,}"),
-   ("Map: split + map(trim)", "{split:,:..|map:{trim}|join:,}"),
-
-   // ❌ Avoid these patterns
-   ("Single: split", "{split:,}"),  // Missing range/join
-   ("Map: nested", "{split:,:..|map:{map:{upper}}}"),  // Nested maps not supported
-   ```
-
-4. **🔍 Test with Small Iterations**
-
-   ```bash
-   # Test new benchmarks first
-   cargo run --bin bench -- --iterations 10
-   ```
-
-### Performance Considerations
-
-#### ⚡ Basic Guidelines
-
-| Consideration | Impact | Recommendation |
-|---------------|--------|----------------|
-| **Build Mode** | 3-10x performance difference | Use `--release` for better measurements |
-| **Iteration Count** | Result stability | 1000+ for automation, 2000+ for comparison |
-| **Data Size** | Timing consistency | Current 208-char dataset works well |
-| **System Load** | Measurement variance | Run on quiet systems when possible |
-| **Memory** | Allocation overhead | Consider memory usage for intensive operations |
-
-#### 🏗️ Architecture Insights
-
-```rust
-// Performance-critical path in benchmark execution
-fn benchmark_template(&self, name: &str, template_str: &str) -> BenchmarkResult {
-    // 1. Template compilation (one-time cost)
-    let template = Template::parse(template_str, None).unwrap();
-
-    // 2. Hot loop (measured operations)
-    for _ in 0..self.iterations {
-        let start = Instant::now();
-        let _ = template.format(&self.test_data).unwrap();  // Core measurement
-        let duration = start.elapsed();
-        times.push(duration);
-    }
-
-    // 3. Basic analysis (post-processing)
-    BenchmarkResult::new(name.to_string(), times)
-}
-```
-
-### Best Practices
-
-#### ✅ Do's
-
-1. **🏭 Use Release Builds for Better Measurements**
-
-   ```bash
-   # Development/testing
-   cargo run --bin bench -- --iterations 100
-
-   # More accurate benchmarks
-   cargo build --release --bin bench
-   ./target/release/bench --iterations 2000
-   ```
-
-2. **📊 Choose Appropriate Iteration Counts**
-
-   ```bash
-   # Quick development feedback (30-60 seconds)
-   --iterations 50
-
-   # Automated scripts (2-5 minutes)
-   --iterations 1000
-
-   # Thorough analysis (5-15 minutes)
-   --iterations 5000
-   ```
-
-3. **🔍 Validate Templates Before Adding**
-
-   ```bash
-   # Test individual templates
-   cargo run --bin string-pipeline -- "{new_template}" "test_data"
-   ```
-
-4. **📈 Monitor Trends, Not Just Absolutes**
-
-   ```bash
-   # Track performance over time
-   git log --oneline | head -10 | while read commit; do
-     git checkout $commit
-     ./target/release/bench --format json >> performance_history.jsonl
-   done
-   ```
-
-#### ❌ Don'ts
-
-1. **🚫 Don't Mix Debug and Release Results**
-
-   ```bash
-   # Wrong: Comparing different build modes
-   cargo run --bin bench > debug_results.txt
-   cargo run --release --bin bench > release_results.txt
-   # These results are not comparable!
-   ```
-
-2. **🚫 Don't Ignore System Conditions**
-
-   ```bash
-   # Wrong: Running during high system load
-   # Make sure system is idle before benchmarking
-
-   # Right: Check system load
-   top -bn1 | grep "load average"
-   ```
-
-3. **🚫 Don't Skip Outlier Analysis**
-
-   ```bash
-   # Wrong: Assuming outliers are always noise
-   # High outlier counts may indicate:
-   # - System interference
-   # - Memory allocation issues
-   # - Template complexity problems
-   ```
-
-## ⚠️ Troubleshooting
-
-### Common Issues
-
-#### 🐛 Build Problems
-
-**Problem:** `error: failed to remove file benchmark.exe`
+### Batch Benchmarking Multiple Templates
 
 ```bash
-# Solution: Process is still running
-taskkill /F /IM bench.exe  # Windows
-killall bench             # Linux/macOS
-
-# Wait a moment, then rebuild
-cargo build --release --bin bench
+for template in "Split last index" "Extract filename" "Join"; do
+  hyperfine --warmup 5 --runs 50 \
+    --export-json "results_${template// /_}.json" \
+    "cargo run --release --bin bench-throughput -- \
+      --template '$template' --size 10000"
+done
 ```
 
-**Problem:** `Parse error: Expected operation`
+## Interpreting Results
 
-```bash
-# Check template syntax
-cargo run --bin string-pipeline -- "{your_template}" "test"
+### Throughput Metrics
 
-# Common fixes:
-"{split:,}"          → "{split:,:..|join:,}"
-"{map:{map:{upper}}}" → "{split:,:..|map:{upper}}"
-```
+Higher is better for paths/second:
+- **>1M/s**: Excellent - very fast operations
+- **100K-1M/s**: Good - efficient processing
+- **10K-100K/s**: Fair - moderate complexity
+- **<10K/s**: Slow - complex or inefficient operations
 
-#### ⚡ Performance Issues
+### Parse Time vs Format Time
 
-**Problem:** Benchmarks taking too long
+Parse time represents one-time template compilation cost. For batch processing:
+- Low parse percentage (<5%): Parse overhead is negligible
+- High parse percentage (>20%): Consider caching parsed templates
 
-```bash
-# Reduce iterations for development
-cargo run --bin bench -- --iterations 100
+### Comparing Templates
 
-# Check system resources
-htop  # Linux/macOS
-taskmgr  # Windows
-```
+In the summary table:
+- **Green**: Fastest template
+- **Yellow**: Slowest template
+- Use this to identify optimization opportunities
 
-**Problem:** Inconsistent results
+## Best Practices
 
-```bash
-# Possible causes and solutions:
-# 1. System load → Run on idle system
-# 2. Debug build → Use --release
-# 3. Too few iterations → Increase --iterations
-# 4. Background processes → Close unnecessary applications
-```
+1. **Always use `--release` builds** for meaningful benchmarks
+2. **Run on a quiet system** to reduce noise in measurements
+3. **Use consistent input sizes** when comparing results
+4. **Use hyperfine** for statistical significance in specific template tests
+5. **Use all templates mode** for comprehensive regression testing
+6. **Check parse time** if you're running templates many times
 
-#### 📊 Data Analysis Issues
+## Architecture
 
-**Problem:** JSON parsing errors
+### Design Philosophy
 
-```bash
-# Validate JSON output
-./target/release/bench --format json | jq '.'
+**Version 1.x (Old)**: bench-throughput mimicked hyperfine with internal iterations, warmup, and statistics.
 
-# Check for truncated output
-./target/release/bench --format json > results.json
-jq '.' results.json  # Should not error
-```
+**Version 2.0 (Current)**: bench-throughput is a workload executor, hyperfine handles benchmarking orchestration.
 
-**Problem:** Unexpected performance patterns
+**Benefits:**
+- No code duplication with hyperfine
+- Professional statistical analysis via hyperfine
+- Simpler, focused codebase
+- Flexible - works with any benchmark orchestrator
+- Clear separation of concerns
 
-```bash
-# Debug with template analysis
-cargo run --bin string-pipeline -- "{!your_template}" "test_data"
+### Tool Responsibilities
 
-# Profile memory usage
-valgrind --tool=massif ./target/release/bench --iterations 100
-```
+**bench-throughput:**
+- Parse templates
+- Generate realistic test data
+- Execute template operations
+- (In all templates mode) Time and report results
 
-> 💡 **Need More Help?**
->
-> 🔍 **Template Issues**: Check the [Template System Documentation](template-system.md) for syntax help
->
-> 🐛 **Debug Mode**: Use `{!template}` syntax to see step-by-step execution
->
-> 📊 **Performance Analysis**: Consider using `cargo flamegraph` for detailed profiling
+**hyperfine:**
+- Warmup runs
+- Multiple iterations
+- Statistical analysis (mean, stddev, min, max, percentiles)
+- Comparison between runs
+- Export formats (JSON, CSV, Markdown)
+
+## Notes
+
+- Results will vary based on system load and hardware
+- The tool uses realistic data patterns to reflect production usage
+- Template parsing is done once per execution (not per path)
+- All templates are tested with the same generated paths for fairness
