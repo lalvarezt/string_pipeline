@@ -434,18 +434,6 @@ fn print_section_header(text: &str) {
     );
 }
 
-fn print_success(msg: &str) {
-    let mut stdout = io::stdout();
-    let _ = execute!(
-        stdout,
-        SetForegroundColor(Color::Green),
-        Print("✓ "),
-        ResetColor,
-        Print(msg),
-        Print("\n")
-    );
-}
-
 fn print_error(msg: &str) {
     let mut stdout = io::stdout();
     let _ = execute!(
@@ -636,21 +624,28 @@ fn print_template_results(template_name: &str, results: &[BenchmarkResult]) {
             } else {
                 println!(" (high - jittery)");
             }
-
-            // Formulas note
-            println!("\n   Note: Latency statistics calculated from {} iteration samples", stats.sample_count);
-            println!("   Each sample = average time per path for one complete iteration");
-            println!("   - Percentiles: Nearest-rank method on sorted iteration averages");
-            println!("     p50 = value at index ceil(n × 0.50) - 1");
-            println!("     p95 = value at index ceil(n × 0.95) - 1");
-            println!("     p99 = value at index ceil(n × 0.99) - 1");
-            println!("   - Consistency: p99/p50 ratio (lower = more predictable)");
-            println!("   - Variance: (stddev/p50) × 100% (lower = more stable)");
-            println!("   - Stddev: √(Σ(x - mean)² / n) over iteration samples");
         }
 
         println!();
     }
+}
+
+fn print_statistics_explanation(sample_count: usize) {
+    print_header("📖 LATENCY STATISTICS METHODOLOGY");
+
+    println!("   Latency statistics calculated from {} iteration samples", sample_count);
+    println!("   Each sample = average time per path for one complete iteration");
+    println!();
+    println!("   Statistical Methods:");
+    println!("   - Percentiles: Nearest-rank method on sorted iteration averages");
+    println!("     • p50 = value at index ceil(n × 0.50) - 1");
+    println!("     • p95 = value at index ceil(n × 0.95) - 1");
+    println!("     • p99 = value at index ceil(n × 0.99) - 1");
+    println!();
+    println!("   - Consistency: p99/p50 ratio (lower = more predictable)");
+    println!("   - Variance: (stddev/p50) × 100% (lower = more stable)");
+    println!("   - Stddev: √(Σ(x - mean)² / n) over iteration samples");
+    println!();
 }
 
 fn print_summary(all_results: &[(&str, Vec<BenchmarkResult>)]) {
@@ -806,11 +801,11 @@ fn main() {
                 .help("Output file path (for JSON format)"),
         )
         .arg(
-            Arg::new("quiet")
-                .short('q')
-                .long("quiet")
+            Arg::new("verbose")
+                .short('v')
+                .long("verbose")
                 .action(clap::ArgAction::SetTrue)
-                .help("Minimal output (only show benchmark progress lines)"),
+                .help("Show detailed output for each template (default shows only summary)"),
         )
         .get_matches();
 
@@ -833,50 +828,49 @@ fn main() {
 
     let format = matches.get_one::<String>("format").unwrap();
     let output_path = matches.get_one::<String>("output");
-    let quiet = matches.get_flag("quiet");
+    let verbose = matches.get_flag("verbose");
 
     if sizes.is_empty() {
         eprintln!("Error: At least one input size is required");
         std::process::exit(1);
     }
 
-    if !quiet {
-        print_header("String Pipeline Throughput Benchmark v0.13.0");
-        let mut stdout = io::stdout();
-        let _ = execute!(
-            stdout,
-            Print("Measuring batch processing performance with varying input sizes\n"),
-            Print("Pattern: Parse and format N paths with M iterations for stability\n\n"),
-            SetForegroundColor(Color::Cyan),
-            Print("Input sizes: "),
-            ResetColor,
-            Print(format!(
-                "{:?}\n",
-                sizes.iter().map(|s| format_size(*s)).collect::<Vec<_>>()
-            )),
-            SetForegroundColor(Color::Cyan),
-            Print("Measurement iterations: "),
-            ResetColor,
-            Print(format!("{}\n", iterations)),
-            SetForegroundColor(Color::Cyan),
-            Print("Output format: "),
-            ResetColor,
-            Print(format!("{}\n", format))
-        );
-    }
+    // Always show header
+    print_header("String Pipeline Throughput Benchmark v0.13.0");
+    let mut stdout = io::stdout();
+    let _ = execute!(
+        stdout,
+        Print("Measuring batch processing performance with varying input sizes\n"),
+        Print("Pattern: Parse and format N paths with M iterations for stability\n\n"),
+        SetForegroundColor(Color::Cyan),
+        Print("Input sizes: "),
+        ResetColor,
+        Print(format!(
+            "{:?}\n",
+            sizes.iter().map(|s| format_size(*s)).collect::<Vec<_>>()
+        )),
+        SetForegroundColor(Color::Cyan),
+        Print("Measurement iterations: "),
+        ResetColor,
+        Print(format!("{}\n", iterations)),
+        SetForegroundColor(Color::Cyan),
+        Print("Output format: "),
+        ResetColor,
+        Print(format!("{}\n", format))
+    );
 
     let templates = TemplateSet::get_templates();
     let mut all_results = Vec::new();
     let total_templates = templates.len();
 
     for (idx, (template_name, template_str)) in templates.iter().enumerate() {
-        if !quiet {
+        if verbose {
             print_progress_bar(idx + 1, total_templates, template_name);
         }
 
         match benchmark_template(template_name, template_str, &sizes, iterations) {
             Ok(results) => {
-                if !quiet {
+                if verbose {
                     let mut stdout = io::stdout();
                     let _ = execute!(
                         stdout,
@@ -884,13 +878,11 @@ fn main() {
                         Clear(ClearType::CurrentLine)
                     );
                     print_template_results(template_name, &results);
-                } else {
-                    print_success(&format!("Benchmarking '{}'", template_name));
                 }
                 all_results.push((*template_name, results));
             }
             Err(e) => {
-                if !quiet {
+                if verbose {
                     let mut stdout = io::stdout();
                     let _ = execute!(
                         stdout,
@@ -903,9 +895,16 @@ fn main() {
         }
     }
 
-    if !quiet {
-        print_summary(&all_results);
-    }
+    // Get iteration count from first template for statistics explanation
+    let sample_count = if !all_results.is_empty() && !all_results[0].1.is_empty() {
+        all_results[0].1[0].latency_stats.sample_count
+    } else {
+        iterations
+    };
+
+    // Always show statistics explanation and summary
+    print_statistics_explanation(sample_count);
+    print_summary(&all_results);
 
     if format == "json"
         && let Err(e) = output_json(&all_results, output_path.map(|s| s.as_str()))
@@ -914,14 +913,13 @@ fn main() {
         std::process::exit(1);
     }
 
-    if !quiet {
-        let mut stdout = io::stdout();
-        let _ = execute!(
-            stdout,
-            SetForegroundColor(Color::Green),
-            SetAttribute(Attribute::Bold),
-            Print("✓ Benchmark complete!\n"),
-            ResetColor
-        );
-    }
+    // Always show completion message
+    let mut stdout = io::stdout();
+    let _ = execute!(
+        stdout,
+        SetForegroundColor(Color::Green),
+        SetAttribute(Attribute::Bold),
+        Print("✓ Benchmark complete!\n"),
+        ResetColor
+    );
 }
