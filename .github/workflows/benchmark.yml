@@ -42,7 +42,7 @@ jobs:
         continue-on-error: true
         uses: dawidd6/action-download-artifact@v3
         with:
-          workflow: benchmark.yml
+          workflow: update-baseline.yml
           branch: main
           name: benchmark-baseline
           path: baseline
