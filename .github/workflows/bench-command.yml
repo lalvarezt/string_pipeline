@@ -10,6 +10,11 @@ on:
   issue_comment:
     types: [created]
 
+# Prevent concurrent benchmark runs on the same PR
+concurrency:
+  group: bench-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
 jobs:
   check-permission:
     name: Check Command Permission
@@ -18,6 +23,9 @@ jobs:
       github.event.issue.pull_request &&
       startsWith(github.event.comment.body, '/bench ')
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
     outputs:
       authorized: ${{ steps.check.outputs.authorized }}
       ref1: ${{ steps.parse.outputs.ref1 }}
@@ -66,7 +74,9 @@ jobs:
       - name: Parse benchmark command
         id: parse
         if: steps.check.outputs.authorized == 'true'
+        continue-on-error: true
         run: |
+          set -euo pipefail
           COMMENT="${{ github.event.comment.body }}"
 
           # Parse command: /bench ref1 ref2 [iterations] [sizes]
@@ -81,7 +91,8 @@ jobs:
 
           # Validate required parameters
           if [ -z "$REF1" ] || [ -z "$REF2" ]; then
-            echo "❌ Invalid format. Usage: /bench <ref1> <ref2> [iterations] [sizes]"
+            echo "error=Invalid format. Missing required parameters." >> $GITHUB_OUTPUT
+            echo "parse_failed=true" >> $GITHUB_OUTPUT
             exit 1
           fi
 
@@ -96,7 +107,8 @@ jobs:
 
           # Validate sizes format (comma-separated numbers)
           if ! echo "$SIZES" | grep -qE '^[0-9]+(,[0-9]+)*$'; then
-            echo "❌ Invalid sizes format. Use comma-separated numbers like: 1000,5000,10000"
+            echo "error=Invalid sizes format: $SIZES" >> $GITHUB_OUTPUT
+            echo "parse_failed=true" >> $GITHUB_OUTPUT
             exit 1
           fi
 
@@ -104,6 +116,7 @@ jobs:
           echo "ref2=$REF2" >> $GITHUB_OUTPUT
           echo "iterations=$ITERATIONS" >> $GITHUB_OUTPUT
           echo "sizes=$SIZES" >> $GITHUB_OUTPUT
+          echo "parse_failed=false" >> $GITHUB_OUTPUT
 
           echo "Parsed parameters:"
           echo "  ref1: $REF1"
@@ -111,8 +124,41 @@ jobs:
           echo "  iterations: $ITERATIONS"
           echo "  sizes: $SIZES"
 
+      - name: Post parse error
+        if: steps.check.outputs.authorized == 'true' && steps.parse.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'confused'
+            });
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `❌ **Invalid command format**
+
+**Usage:** \`/bench <ref1> <ref2> [iterations] [sizes]\`
+
+**Examples:**
+\`\`\`
+/bench main v0.13.0
+/bench abc123 def456 100 1000,5000,10000
+\`\`\`
+
+**Parameters:**
+- \`ref1\` (required): Baseline git reference
+- \`ref2\` (required): Current git reference
+- \`iterations\` (optional): Number of iterations (default: 100)
+- \`sizes\` (optional): Comma-separated sizes (default: 1000,5000,10000)`
+            });
+
       - name: Post acknowledgment
-        if: steps.check.outputs.authorized == 'true'
+        if: steps.check.outputs.authorized == 'true' && steps.parse.outcome == 'success'
         uses: actions/github-script@v7
         with:
           script: |
@@ -141,7 +187,7 @@ Results will be posted here when complete...`
   run-benchmarks:
     name: Run Benchmark Comparison
     needs: check-permission
-    if: needs.check-permission.outputs.authorized == 'true'
+    if: needs.check-permission.outputs.authorized == 'true' && needs.check-permission.outputs.ref1 != ''
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -160,9 +206,25 @@ Results will be posted here when complete...`
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
 
+      - name: Fetch refs from remote
+        run: |
+          set -euo pipefail
+          REF1="${{ needs.check-permission.outputs.ref1 }}"
+          REF2="${{ needs.check-permission.outputs.ref2 }}"
+
+          echo "Fetching ref1: $REF1"
+          git fetch origin "$REF1" || git fetch origin "refs/tags/$REF1" || git fetch origin "refs/heads/$REF1" || true
+
+          echo "Fetching ref2: $REF2"
+          git fetch origin "$REF2" || git fetch origin "refs/tags/$REF2" || git fetch origin "refs/heads/$REF2" || true
+
+          # Update remote refs
+          git fetch origin --tags
+
       - name: Validate refs exist
         id: validate
         run: |
+          set -euo pipefail
           REF1="${{ needs.check-permission.outputs.ref1 }}"
           REF2="${{ needs.check-permission.outputs.ref2 }}"
 
@@ -182,6 +244,7 @@ Results will be posted here when complete...`
       - name: Check benchmark tool exists in ref1
         id: check_ref1_tool
         run: |
+          set -euo pipefail
           REF1="${{ needs.check-permission.outputs.ref1 }}"
           echo "Checking out $REF1..."
           git checkout "$REF1"
@@ -206,6 +269,7 @@ Results will be posted here when complete...`
       - name: Check benchmark tool exists in ref2
         id: check_ref2_tool
         run: |
+          set -euo pipefail
           REF2="${{ needs.check-permission.outputs.ref2 }}"
           echo "Checking out $REF2..."
           git checkout "$REF2"
@@ -271,6 +335,7 @@ Results will be posted here when complete...`
       - name: Benchmark ref1 (baseline)
         if: steps.check_ref1_tool.outputs.exists == 'true' && steps.check_ref2_tool.outputs.exists == 'true'
         run: |
+          set -euo pipefail
           REF1="${{ needs.check-permission.outputs.ref1 }}"
           ITERATIONS="${{ needs.check-permission.outputs.iterations }}"
           SIZES="${{ needs.check-permission.outputs.sizes }}"
@@ -294,6 +359,7 @@ Results will be posted here when complete...`
       - name: Benchmark ref2 (current)
         if: steps.check_ref1_tool.outputs.exists == 'true' && steps.check_ref2_tool.outputs.exists == 'true'
         run: |
+          set -euo pipefail
           REF2="${{ needs.check-permission.outputs.ref2 }}"
           ITERATIONS="${{ needs.check-permission.outputs.iterations }}"
           SIZES="${{ needs.check-permission.outputs.sizes }}"
@@ -318,6 +384,7 @@ Results will be posted here when complete...`
       - name: Compare results
         if: steps.check_ref1_tool.outputs.exists == 'true' && steps.check_ref2_tool.outputs.exists == 'true'
         run: |
+          set -euo pipefail
           # Use the comparison script from ref2 (current)
           if [ -f scripts/compare_benchmarks.py ]; then
             python3 scripts/compare_benchmarks.py \
