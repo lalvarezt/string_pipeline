@@ -4,12 +4,84 @@ This directory contains scripts used by the GitHub Actions CI/CD pipeline to tra
 
 ## Overview
 
-The benchmark CI/CD system automatically:
-1. Runs performance benchmarks on every push to `main` and on pull requests
-2. Compares results against the baseline (last `main` branch results)
-3. Generates a detailed comparison report
-4. Comments on PRs with performance changes
-5. Warns about significant performance regressions
+The benchmark system uses an **on-demand approach** triggered via PR comments. There are no automatic benchmark runs - all comparisons are triggered manually by the repository owner using the `/bench` command.
+
+## The `/bench` Command
+
+### Command Syntax
+
+```bash
+/bench <ref1> <ref2> [iterations] [sizes]
+```
+
+**Parameters:**
+- `ref1` (required): Baseline git reference (commit, branch, or tag)
+- `ref2` (required): Current git reference to compare against baseline
+- `iterations` (optional): Number of benchmark iterations (default: 100)
+- `sizes` (optional): Comma-separated input sizes (default: 1000,5000,10000)
+
+### Examples
+
+```bash
+# Basic comparison with defaults (100 iterations, sizes: 1000,5000,10000)
+/bench main v0.13.0
+
+# Compare two commits
+/bench abc123 def456
+
+# Custom iterations
+/bench main HEAD 200
+
+# Custom iterations and sizes
+/bench v0.12.0 v0.13.0 100 1000,5000,10000,50000
+
+# Compare feature branch vs main
+/bench feature-branch main
+```
+
+### Security
+
+- ⚠️ **Owner-only**: Only the repository owner can trigger benchmarks
+- ✅ **PR-only**: Works only on pull request comments (not regular issues)
+- ✅ **Safe**: No arbitrary code execution - only validated git refs
+
+### Workflow
+
+1. **Post command** in a PR comment: `/bench main HEAD`
+2. **Bot acknowledges** with 👀 reaction and status message
+3. **Validation** checks:
+   - User is repository owner
+   - Both refs exist
+   - Benchmark tool exists in both refs
+   - Parameters are valid
+4. **Benchmarks run** on both refs
+5. **Results posted** as PR comment with detailed comparison
+6. **Success reaction** 🚀 (or 😕 on failure)
+7. **Artifacts uploaded** for 30 days
+
+### Error Handling
+
+The workflow handles several error cases gracefully:
+
+**Missing benchmark tool:**
+```
+❌ Benchmark comparison failed
+
+Reason: The benchmark tool (bench_throughput) does not exist in ref: v0.10.0
+
+Solution: The benchmark tool was added in commit d264124.
+Please use refs that include this commit or later.
+
+Example: /bench main HEAD (if both include the benchmark tool)
+```
+
+**Invalid parameters:**
+```
+❌ Invalid format. Usage: /bench <ref1> <ref2> [iterations] [sizes]
+```
+
+**Build failures:**
+The workflow will report build errors with logs attached as artifacts.
 
 ## Files
 
@@ -25,7 +97,7 @@ python3 scripts/compare_benchmarks.py baseline.json current.json > report.md
 **Features:**
 - Detects performance regressions (>5% slower)
 - Highlights improvements (>5% faster)
-- Compares avg/path latency, p99, and throughput
+- Compares avg/path latency, p95, p99, and throughput
 - Color-coded indicators:
   - 🟢 Significant improvement (>5% faster)
   - ✅ Improvement (2-5% faster)
@@ -36,33 +108,30 @@ python3 scripts/compare_benchmarks.py baseline.json current.json > report.md
 
 ## GitHub Actions Workflow
 
-The benchmark workflow (`.github/workflows/benchmark.yml`) runs automatically on:
-- Pushes to `main` branch
-- Pull requests
+### Benchmark Command (`.github/workflows/bench-command.yml`)
 
-### Workflow Steps
+The single workflow that handles all benchmark comparisons.
 
-1. **Build** - Compiles the `bench_throughput` tool in release mode
-2. **Run Benchmarks** - Executes benchmarks with multiple input sizes (100, 1K, 10K paths)
-3. **Download Baseline** - Fetches the last benchmark from `main` branch
-4. **Compare** - Runs the comparison script
-5. **Comment on PR** - Posts results as a comment on pull requests
-6. **Upload Artifacts** - Stores results for historical tracking
-7. **Update Baseline** - Saves results as new baseline (main branch only)
-8. **Check Regressions** - Warns if significant regressions detected
+**Triggers:**
+- PR comments starting with `/bench`
+- Owner-only access control
 
-### Artifacts
+**What it does:**
+1. **Validates** user permissions and parameters
+2. **Checks** both refs for benchmark tool existence
+3. **Builds** the benchmark tool for each ref
+4. **Runs** benchmarks with specified parameters
+5. **Compares** results using `compare_benchmarks.py`
+6. **Posts** detailed report to PR
+7. **Uploads** artifacts (results + build logs)
 
-The workflow stores three artifacts:
+**Artifacts:**
 
-1. **benchmark-current** - Current run results (JSON, text, comparison)
-   - Retained for 30 days
-   - Available for download from workflow runs
-
-2. **benchmark-baseline** - Baseline for comparison
-   - Updated only on `main` branch pushes
-   - Retained for 90 days
-   - Used for comparing future PRs
+- **benchmark-comparison-<comment_id>**
+  - Both benchmark JSON files
+  - Comparison markdown report
+  - Build logs for debugging
+  - Retained for 30 days
 
 ## Running Benchmarks Locally
 
@@ -71,8 +140,8 @@ The workflow stores three artifacts:
 cargo build --release --bin bench_throughput
 
 ./target/release/bench_throughput \
-  --sizes 100,1000,10000 \
-  --iterations 50 \
+  --sizes 1000,5000,10000 \
+  --iterations 100 \
   --format json \
   --output my_benchmark.json
 ```
@@ -91,18 +160,18 @@ cat comparison.md
 
 ### Benchmark Parameters
 
-Default parameters in the CI workflow:
-- **Input sizes:** 100, 1,000, 10,000 paths
-- **Iterations:** 50 (per size)
-- **Output format:** JSON + human-readable text
+Default parameters:
+- **Input sizes:** 1,000, 5,000, 10,000 paths
+- **Iterations:** 100 (per size)
+- **Output format:** JSON
 
-To change these, edit `.github/workflows/benchmark.yml`:
-```yaml
-./target/release/bench_throughput \
-  --sizes 100,1000,10000,100000 \  # Add more sizes
-  --iterations 100 \                # More iterations = more stable results
-  --format json \
-  --output benchmark_results.json
+These can be overridden per-command:
+```bash
+# Use different sizes for larger datasets
+/bench main HEAD 100 10000,50000,100000
+
+# More iterations for stable results
+/bench v0.12.0 v0.13.0 500 1000,5000,10000
 ```
 
 ### Regression Thresholds
@@ -130,24 +199,42 @@ def calculate_change(baseline: float, current: float):
         ...
 ```
 
-### Failing on Regressions
+## Use Cases
 
-By default, the workflow **warns** about regressions but doesn't fail the build.
-
-To fail on regressions, uncomment this line in `.github/workflows/benchmark.yml`:
-```yaml
-- name: Fail if significant performance regression
-  run: |
-    if grep -q "⚠️ PERFORMANCE REGRESSION" comparison.md; then
-      echo "::warning::Performance regression detected."
-      exit 1  # Uncomment this line
-    fi
+### 1. Compare Feature Branch vs Main
+```bash
+/bench main feature-optimize-parsing
 ```
+Use this to see if your optimization actually improves performance.
+
+### 2. Validate Release Performance
+```bash
+/bench v0.12.0 v0.13.0
+```
+Compare performance between releases to ensure no regressions.
+
+### 3. Debug Performance Issues
+```bash
+/bench abc123 def456
+```
+Bisect between two commits to find which one introduced a regression.
+
+### 4. Stress Test with Large Datasets
+```bash
+/bench main HEAD 100 10000,50000,100000,500000
+```
+Test how your code scales with larger input sizes.
+
+### 5. High-Precision Comparison
+```bash
+/bench main feature-branch 1000 1000,5000,10000
+```
+Use more iterations for more stable and reliable results.
 
 ## Troubleshooting
 
-### No baseline found
-On the first run, there's no baseline for comparison. The first successful run on `main` will establish the baseline.
+### No benchmark tool found
+The benchmark tool (`bench_throughput`) was added in commit `d264124`. If you're comparing older commits, you'll get an error. Solution: Only compare refs that include the benchmark tool.
 
 ### Benchmark variance
 Benchmarks can vary due to:
@@ -156,30 +243,42 @@ Benchmarks can vary due to:
 - Network conditions
 
 The 2% noise threshold accounts for normal variance. For more stable results:
-1. Increase iteration count
-2. Run benchmarks multiple times
-3. Use larger input sizes (less affected by noise)
+1. Increase iteration count: `/bench main HEAD 500`
+2. Use larger input sizes (less affected by noise)
+3. Run benchmarks multiple times and compare
 
 ### Permission errors
-The workflow needs these permissions (already configured):
-```yaml
-permissions:
-  contents: write
-  pull-requests: write
-```
+Only the repository owner can trigger benchmarks. Other users will receive a permission denied message.
+
+### Build failures
+If the code doesn't compile at one of the refs, the workflow will fail. Check the workflow run logs for build errors. Artifacts include `build_ref1.log` and `build_ref2.log` for debugging.
 
 ## Example Report
 
+When you run `/bench main HEAD`, you'll get a report like this:
+
 ```markdown
+## 🔬 Benchmark Comparison Report
+
+**Requested by:** @username
+
+**Comparison:**
+- **Baseline**: `main` (abc123)
+- **Current**: `HEAD` (def456)
+
+**Parameters:**
+- **Iterations**: 100
+- **Sizes**: 1000,5000,10000
+
+---
+
 # 📊 Benchmark Comparison Report
 
 **Input Size:** 10,000 paths
-**Baseline Timestamp:** 1699123456
-**Current Timestamp:** 1699123789
 
 ## Performance Comparison
 
-| Template | Avg/Path | Change | p99 | Change | Throughput | Change |
+| Template | Avg/Path | Change | p95 | Change | Throughput | Change |
 |----------|----------|--------|-----|--------|------------|--------|
 | Strip ANSI | 304ns | ✅ -3.2% | 327ns | ➖ -1.1% | 3.29M/s | ✅ +3.3% |
 | Split all | 519ns | 🔴 +12.5% | 838ns | ⚠️ +8.2% | 1.93M/s | 🔴 -11.1% |
@@ -194,6 +293,14 @@ permissions:
 ### ⚠️ PERFORMANCE REGRESSIONS
 
 - **Split all**: +12.5% slower
+
+### ✨ Performance Improvements
+
+- **Strip ANSI**: 3.2% faster
+
+---
+
+<sub>Triggered by [/bench command](https://github.com/...)</sub>
 ```
 
 ## Further Reading
