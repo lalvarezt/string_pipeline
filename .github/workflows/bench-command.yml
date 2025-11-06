@@ -1,0 +1,258 @@
+name: Benchmark Command
+# Trigger on-demand benchmarks via PR comments: /bench <ref1> <ref2>
+# Only repository owner can trigger this command
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  check-permission:
+    name: Check Command Permission
+    # Only run on PR comments (not regular issues)
+    if: |
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/bench ')
+    runs-on: ubuntu-latest
+    outputs:
+      authorized: ${{ steps.check.outputs.authorized }}
+      ref1: ${{ steps.parse.outputs.ref1 }}
+      ref2: ${{ steps.parse.outputs.ref2 }}
+    steps:
+      - name: Check if commenter is repo owner
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const commenter = context.payload.comment.user.login;
+            const owner = context.payload.repository.owner.login;
+            const isOwner = commenter === owner;
+
+            console.log(`Commenter: ${commenter}`);
+            console.log(`Repository owner: ${owner}`);
+            console.log(`Is owner: ${isOwner}`);
+
+            if (!isOwner) {
+              await github.rest.reactions.createForIssueComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: context.payload.comment.id,
+                content: '-1'
+              });
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `❌ **Permission denied**: Only @${owner} can trigger benchmark comparisons.`
+              });
+            } else {
+              await github.rest.reactions.createForIssueComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: context.payload.comment.id,
+                content: 'eyes'
+              });
+            }
+
+            core.setOutput('authorized', isOwner);
+
+      - name: Parse benchmark command
+        id: parse
+        if: steps.check.outputs.authorized == 'true'
+        run: |
+          COMMENT="${{ github.event.comment.body }}"
+          # Extract refs from "/bench ref1 ref2"
+          REFS=$(echo "$COMMENT" | sed -n 's|^/bench \+\([^ ]\+\) \+\([^ ]\+\).*|\1 \2|p')
+
+          if [ -z "$REFS" ]; then
+            echo "error=Invalid format. Use: /bench <ref1> <ref2>" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+          REF1=$(echo "$REFS" | awk '{print $1}')
+          REF2=$(echo "$REFS" | awk '{print $2}')
+
+          echo "ref1=$REF1" >> $GITHUB_OUTPUT
+          echo "ref2=$REF2" >> $GITHUB_OUTPUT
+          echo "Parsed refs: $REF1 vs $REF2"
+
+      - name: Post acknowledgment
+        if: steps.check.outputs.authorized == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ref1 = '${{ steps.parse.outputs.ref1 }}';
+            const ref2 = '${{ steps.parse.outputs.ref2 }}';
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `🚀 **Benchmark comparison started**\n\nComparing:\n- **Baseline**: \`${ref1}\`\n- **Current**: \`${ref2}\`\n\nResults will be posted here when complete...`
+            });
+
+  run-benchmarks:
+    name: Run Benchmark Comparison
+    needs: check-permission
+    if: needs.check-permission.outputs.authorized == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history to access all refs
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Validate refs exist
+        id: validate
+        run: |
+          REF1="${{ needs.check-permission.outputs.ref1 }}"
+          REF2="${{ needs.check-permission.outputs.ref2 }}"
+
+          if ! git rev-parse --verify "$REF1" >/dev/null 2>&1; then
+            echo "error=Ref '$REF1' not found" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+          if ! git rev-parse --verify "$REF2" >/dev/null 2>&1; then
+            echo "error=Ref '$REF2' not found" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+          echo "ref1_sha=$(git rev-parse --short $REF1)" >> $GITHUB_OUTPUT
+          echo "ref2_sha=$(git rev-parse --short $REF2)" >> $GITHUB_OUTPUT
+
+      - name: Benchmark ref1 (baseline)
+        run: |
+          REF1="${{ needs.check-permission.outputs.ref1 }}"
+          echo "Checking out $REF1..."
+          git checkout "$REF1"
+
+          echo "Building benchmark tool..."
+          cargo build --release --bin bench_throughput
+
+          echo "Running benchmarks..."
+          ./target/release/bench_throughput \
+            --sizes 1000,5000,10000 \
+            --iterations 100 \
+            --format json \
+            --output benchmark_ref1.json
+
+      - name: Benchmark ref2 (current)
+        run: |
+          REF2="${{ needs.check-permission.outputs.ref2 }}"
+          echo "Checking out $REF2..."
+          git checkout "$REF2"
+
+          # Rebuild in case dependencies changed
+          echo "Building benchmark tool..."
+          cargo build --release --bin bench_throughput
+
+          echo "Running benchmarks..."
+          ./target/release/bench_throughput \
+            --sizes 1000,5000,10000 \
+            --iterations 100 \
+            --format json \
+            --output benchmark_ref2.json
+
+      - name: Compare results
+        run: |
+          # Checkout to get the comparison script (use ref2 version)
+          python3 scripts/compare_benchmarks.py \
+            benchmark_ref1.json \
+            benchmark_ref2.json > comparison.md
+
+      - name: Post results to PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const comparison = fs.readFileSync('comparison.md', 'utf8');
+            const ref1 = '${{ needs.check-permission.outputs.ref1 }}';
+            const ref2 = '${{ needs.check-permission.outputs.ref2 }}';
+            const ref1_sha = '${{ steps.validate.outputs.ref1_sha }}';
+            const ref2_sha = '${{ steps.validate.outputs.ref2_sha }}';
+
+            const body = `## 🔬 On-Demand Benchmark Comparison
+
+            **Requested by:** @${{ github.event.comment.user.login }}
+
+            **Comparison:**
+            - **Baseline:** \`${ref1}\` (${ref1_sha})
+            - **Current:** \`${ref2}\` (${ref2_sha})
+
+            ---
+
+            ${comparison}
+
+            ---
+
+            <sub>Triggered by [/bench command](${{ github.event.comment.html_url }})</sub>`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+
+      - name: Upload benchmark artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-comparison-${{ github.event.comment.id }}
+          path: |
+            benchmark_ref1.json
+            benchmark_ref2.json
+            comparison.md
+          retention-days: 30
+
+      - name: Add success reaction
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: ${{ github.event.comment.id }},
+              content: 'rocket'
+            });
+
+  handle-error:
+    name: Handle Errors
+    needs: [check-permission, run-benchmarks]
+    if: failure() && needs.check-permission.outputs.authorized == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Post error message
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ref1 = '${{ needs.check-permission.outputs.ref1 }}';
+            const ref2 = '${{ needs.check-permission.outputs.ref2 }}';
+
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: ${{ github.event.comment.id }},
+              content: 'confused'
+            });
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `❌ **Benchmark comparison failed**\n\nFailed to compare \`${ref1}\` and \`${ref2}\`.\n\nPlease check:\n- Both refs exist\n- Refs are valid git references (branches, tags, or commits)\n- The code at those refs compiles successfully\n\nSee the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.`
+            });

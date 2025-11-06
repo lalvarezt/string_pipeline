@@ -34,35 +34,99 @@ python3 scripts/compare_benchmarks.py baseline.json current.json > report.md
   - ⚠️ Warning (5-10% slower)
   - 🔴 Regression (>10% slower)
 
-## GitHub Actions Workflow
+## GitHub Actions Workflows
 
-The benchmark workflow (`.github/workflows/benchmark.yml`) runs automatically on:
+### Automatic Benchmarks (`.github/workflows/benchmark.yml`)
+
+Runs automatically on:
 - Pushes to `main` branch
 - Pull requests
 
-### Workflow Steps
+**Workflow Steps:**
 
 1. **Build** - Compiles the `bench_throughput` tool in release mode
-2. **Run Benchmarks** - Executes benchmarks with multiple input sizes (100, 1K, 10K paths)
-3. **Download Baseline** - Fetches the last benchmark from `main` branch
+2. **Run Benchmarks** - Executes benchmarks with multiple input sizes (1K, 5K, 10K paths)
+3. **Download Baseline** - Fetches the baseline from manual update workflow
 4. **Compare** - Runs the comparison script
 5. **Comment on PR** - Posts results as a comment on pull requests
-6. **Upload Artifacts** - Stores results for historical tracking
-7. **Update Baseline** - Saves results as new baseline (main branch only)
-8. **Check Regressions** - Warns if significant regressions detected
+6. **Upload Artifacts** - Stores current results for historical tracking
+7. **Check Regressions** - Warns if significant regressions detected
+
+**Note:** This workflow does NOT update the baseline. Baselines are updated manually (see below).
+
+### Manual Baseline Update (`.github/workflows/update-baseline.yml`)
+
+Manual workflow to establish a new performance baseline.
+
+**How to trigger:**
+1. Go to Actions tab in GitHub
+2. Select "Update Benchmark Baseline" workflow
+3. Click "Run workflow"
+4. Specify:
+   - **ref**: Branch, tag, or commit to benchmark (e.g., `main`, `v0.13.0`)
+   - **iterations**: Number of iterations (default: 100)
+
+**When to update baseline:**
+- After merging performance improvements
+- After releasing a new version
+- When establishing a new performance standard
+
+**Why manual?**
+Prevents random commits from becoming baselines. Only vetted, intentional versions should be promoted.
+
+### On-Demand Comparison (`.github/workflows/bench-command.yml`)
+
+Compare any two refs (commits, branches, tags) via PR comment command.
+
+**Command syntax:**
+```
+/bench <ref1> <ref2>
+```
+
+**Examples:**
+```
+/bench main v0.13.0          # Compare main branch vs release tag
+/bench abc123 def456         # Compare two commits
+/bench feature-branch main   # Compare feature branch vs main
+```
+
+**Security:**
+- ⚠️ **Owner-only**: Only the repository owner can trigger this command
+- ✅ Works only on pull request comments (not regular issues)
+- ✅ No arbitrary code execution - only git refs
+
+**Workflow:**
+1. Post `/bench <ref1> <ref2>` as a PR comment
+2. Bot reacts with 👀 and posts acknowledgment
+3. Runs benchmarks on both refs
+4. Posts detailed comparison report to PR
+5. Reacts with 🚀 on success or 😕 on failure
+
+**Use cases:**
+- Compare feature branch performance vs stable release
+- Validate optimization between two specific commits
+- Test performance across version boundaries
+- Ad-hoc performance debugging
 
 ### Artifacts
 
-The workflow stores three artifacts:
+The workflows store these artifacts:
 
-1. **benchmark-current** - Current run results (JSON, text, comparison)
+1. **benchmark-current** (from `benchmark.yml`)
+   - Current run results (JSON + comparison)
    - Retained for 30 days
    - Available for download from workflow runs
 
-2. **benchmark-baseline** - Baseline for comparison
-   - Updated only on `main` branch pushes
+2. **benchmark-baseline** (from `update-baseline.yml`)
+   - Baseline for comparison
+   - Updated only manually via update-baseline workflow
    - Retained for 90 days
-   - Used for comparing future PRs
+   - Used by benchmark.yml for comparing PRs
+
+3. **benchmark-comparison-<comment_id>** (from `bench-command.yml`)
+   - On-demand comparison results
+   - Retained for 30 days
+   - Includes both refs and comparison report
 
 ## Running Benchmarks Locally
 
@@ -91,19 +155,25 @@ cat comparison.md
 
 ### Benchmark Parameters
 
-Default parameters in the CI workflow:
-- **Input sizes:** 100, 1,000, 10,000 paths
-- **Iterations:** 50 (per size)
-- **Output format:** JSON + human-readable text
+Default parameters in the CI workflows:
+- **Input sizes:** 1,000, 5,000, 10,000 paths
+- **Iterations:** 100 (per size)
+- **Output format:** JSON
 
-To change these, edit `.github/workflows/benchmark.yml`:
+To change these, edit the respective workflow files:
+- `.github/workflows/benchmark.yml` - Automatic benchmarks
+- `.github/workflows/update-baseline.yml` - Baseline updates
+- `.github/workflows/bench-command.yml` - On-demand comparisons
+
 ```yaml
 ./target/release/bench_throughput \
-  --sizes 100,1000,10000,100000 \  # Add more sizes
-  --iterations 100 \                # More iterations = more stable results
+  --sizes 1000,5000,10000,50000 \   # Add more sizes
+  --iterations 200 \                 # More iterations = more stable results
   --format json \
   --output benchmark_results.json
 ```
+
+**Note:** Keep parameters consistent across all three workflows for valid comparisons.
 
 ### Regression Thresholds
 
