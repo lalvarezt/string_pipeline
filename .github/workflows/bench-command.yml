@@ -13,7 +13,7 @@ on:
 # Prevent concurrent benchmark runs on the same PR
 concurrency:
   group: bench-${{ github.event.issue.number }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   check-permission:
@@ -136,25 +136,29 @@ jobs:
               content: 'confused'
             });
 
+            const errorMessage = [
+              '❌ **Invalid command format**',
+              '',
+              '**Usage:** `/bench <ref1> <ref2> [iterations] [sizes]`',
+              '',
+              '**Examples:**',
+              '```',
+              '/bench main v0.13.0',
+              '/bench abc123 def456 100 1000,5000,10000',
+              '```',
+              '',
+              '**Parameters:**',
+              '- `ref1` (required): Baseline git reference',
+              '- `ref2` (required): Current git reference',
+              '- `iterations` (optional): Number of iterations (default: 100)',
+              '- `sizes` (optional): Comma-separated sizes (default: 1000,5000,10000)'
+            ].join('\n');
+
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `❌ **Invalid command format**
-
-**Usage:** \`/bench <ref1> <ref2> [iterations] [sizes]\`
-
-**Examples:**
-\`\`\`
-/bench main v0.13.0
-/bench abc123 def456 100 1000,5000,10000
-\`\`\`
-
-**Parameters:**
-- \`ref1\` (required): Baseline git reference
-- \`ref2\` (required): Current git reference
-- \`iterations\` (optional): Number of iterations (default: 100)
-- \`sizes\` (optional): Comma-separated sizes (default: 1000,5000,10000)`
+              body: errorMessage
             });
 
       - name: Post acknowledgment
@@ -167,21 +171,25 @@ jobs:
             const iterations = '${{ steps.parse.outputs.iterations }}';
             const sizes = '${{ steps.parse.outputs.sizes }}';
 
+            const message = [
+              '🚀 **Benchmark comparison started**',
+              '',
+              '**Comparing:**',
+              `- **Baseline**: \`${ref1}\``,
+              `- **Current**: \`${ref2}\``,
+              '',
+              '**Parameters:**',
+              `- **Iterations**: ${iterations}`,
+              `- **Sizes**: ${sizes}`,
+              '',
+              'Results will be posted here when complete...'
+            ].join('\n');
+
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `🚀 **Benchmark comparison started**
-
-**Comparing:**
-- **Baseline**: \`${ref1}\`
-- **Current**: \`${ref2}\`
-
-**Parameters:**
-- **Iterations**: ${iterations}
-- **Sizes**: ${sizes}
-
-Results will be posted here when complete...`
+              body: message
             });
 
   run-benchmarks:
@@ -329,9 +337,6 @@ Results will be posted here when complete...`
               body: message
             });
 
-            // Exit workflow gracefully
-            process.exit(78);  // Neutral exit code
-
       - name: Benchmark ref1 (baseline)
         if: steps.check_ref1_tool.outputs.exists == 'true' && steps.check_ref2_tool.outputs.exists == 'true'
         run: |
@@ -409,25 +414,27 @@ Results will be posted here when complete...`
             const iterations = '${{ needs.check-permission.outputs.iterations }}';
             const sizes = '${{ needs.check-permission.outputs.sizes }}';
 
-            const body = `## 🔬 Benchmark Comparison Report
-
-**Requested by:** @${{ github.event.comment.user.login }}
-
-**Comparison:**
-- **Baseline**: \`${ref1}\` (${ref1_sha})
-- **Current**: \`${ref2}\` (${ref2_sha})
-
-**Parameters:**
-- **Iterations**: ${iterations}
-- **Sizes**: ${sizes}
-
----
-
-${comparison}
-
----
-
-<sub>Triggered by [/bench command](${{ github.event.comment.html_url }})</sub>`;
+            const body = [
+              '## 🔬 Benchmark Comparison Report',
+              '',
+              '**Requested by:** @${{ github.event.comment.user.login }}',
+              '',
+              '**Comparison:**',
+              `- **Baseline**: \`${ref1}\` (${ref1_sha})`,
+              `- **Current**: \`${ref2}\` (${ref2_sha})`,
+              '',
+              '**Parameters:**',
+              `- **Iterations**: ${iterations}`,
+              `- **Sizes**: ${sizes}`,
+              '',
+              '---',
+              '',
+              comparison,
+              '',
+              '---',
+              '',
+              '<sub>Triggered by [/bench command](${{ github.event.comment.html_url }})</sub>'
+            ].join('\n');
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
@@ -483,19 +490,23 @@ ${comparison}
               content: 'confused'
             });
 
+            const errorBody = [
+              '❌ **Benchmark comparison failed**',
+              '',
+              `Failed to compare \`${ref1}\` and \`${ref2}\`.`,
+              '',
+              '**Please check:**',
+              '- Both refs exist and are valid git references (branches, tags, or commits)',
+              '- The benchmark tool exists in both refs',
+              '- The code at those refs compiles successfully',
+              '- Parameters are in correct format: `/bench <ref1> <ref2> [iterations] [sizes]`',
+              '',
+              '**See the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.**'
+            ].join('\n');
+
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `❌ **Benchmark comparison failed**
-
-Failed to compare \`${ref1}\` and \`${ref2}\`.
-
-**Please check:**
-- Both refs exist and are valid git references (branches, tags, or commits)
-- The benchmark tool exists in both refs
-- The code at those refs compiles successfully
-- Parameters are in correct format: \`/bench <ref1> <ref2> [iterations] [sizes]\`
-
-**See the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.**`
+              body: errorBody
             });
