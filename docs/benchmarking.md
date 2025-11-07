@@ -36,14 +36,16 @@ A simple benchmarking tool that helps measure performance of string pipeline ope
 
 ```bash
 # Run with default settings (1000 iterations, text output)
-cargo run --bin bench
+cargo run --bin string-pipeline-bench
 
 # Run in release mode for better performance
-cargo run --release --bin bench
+cargo run --release --bin string-pipeline-bench
 
 # Quick test with fewer iterations
-cargo run --bin bench -- --iterations 100
+cargo run --bin string-pipeline-bench -- --iterations 100
 ```
+
+> 📝 **Note:** There is also a `bench_throughput` binary available for specialized throughput benchmarking. Build with `cargo build --release --bin bench_throughput`. This tool is designed for advanced performance analysis and is separate from the main benchmarking suite.
 
 ## ✨ Features Overview
 
@@ -63,17 +65,17 @@ cargo run --bin bench -- --iterations 100
 
 | Command | Description | Use Case |
 |---------|-------------|----------|
-| `cargo run --bin bench` | Default run (1000 iterations, text) | Development testing |
-| `cargo run --release --bin bench` | Optimized build | Better performance measurements |
-| `./target/release/bench.exe` | Direct binary execution | Scripts and automation |
+| `cargo run --bin string-pipeline-bench` | Default run (1000 iterations, text) | Development testing |
+| `cargo run --release --bin string-pipeline-bench` | Optimized build | Better performance measurements |
+| `./target/release/string-pipeline-bench` | Direct binary execution | Scripts and automation |
 
 ```bash
 # 🚀 Development workflow
-cargo run --bin bench -- --iterations 100  # Quick test
+cargo run --bin string-pipeline-bench -- --iterations 100  # Quick test
 
 # 🔄 More thorough testing
-cargo build --release --bin bench
-./target/release/bench --iterations 5000 --format json > results.json
+cargo build --release --bin string-pipeline-bench
+./target/release/string-pipeline-bench --iterations 5000 --format json > results.json
 ```
 
 ### Command Line Options
@@ -89,17 +91,17 @@ cargo build --release --bin bench
 
 ```bash
 # 📊 Better accuracy (more iterations)
-cargo run --bin bench -- --iterations 2000
+cargo run --bin string-pipeline-bench -- --iterations 2000
 
 # 🤖 Machine processing (JSON output)
-cargo run --bin bench -- --format json
+cargo run --bin string-pipeline-bench -- --format json
 
 # 🚀 Quick development test
-cargo run --bin bench -- --iterations 50 --format text
+cargo run --bin string-pipeline-bench -- --iterations 50 --format text
 
 # 🔍 Help and version info
-cargo run --bin bench -- --help
-cargo run --bin bench -- --version
+cargo run --bin string-pipeline-bench -- --help
+cargo run --bin string-pipeline-bench -- --version
 ```
 
 ### Output Formats
@@ -451,10 +453,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Build benchmark tool
-        run: cargo build --release --bin bench
+        run: cargo build --release --bin string-pipeline-bench
       - name: Run benchmarks
         run: |
-          ./target/release/bench --iterations 5000 --format json > benchmark_results.json
+          ./target/release/string-pipeline-bench --iterations 5000 --format json > benchmark_results.json
       - name: Upload results
         uses: actions/upload-artifact@v4
         with:
@@ -495,7 +497,7 @@ CURRENT="current.json"
 THRESHOLD=1.1  # 10% regression threshold
 
 # Run current benchmark
-./target/release/bench --format json > "$CURRENT"
+./target/release/string-pipeline-bench --format json > "$CURRENT"
 
 # Compare with baseline (if exists)
 if [ -f "$BASELINE" ]; then
@@ -588,7 +590,7 @@ fi
 
    ```bash
    # Test new benchmarks first
-   cargo run --bin bench -- --iterations 10
+   cargo run --bin string-pipeline-bench -- --iterations 10
    ```
 
 ### Performance Considerations
@@ -632,11 +634,11 @@ fn benchmark_template(&self, name: &str, template_str: &str) -> BenchmarkResult 
 
    ```bash
    # Development/testing
-   cargo run --bin bench -- --iterations 100
+   cargo run --bin string-pipeline-bench -- --iterations 100
 
    # More accurate benchmarks
-   cargo build --release --bin bench
-   ./target/release/bench --iterations 2000
+   cargo build --release --bin string-pipeline-bench
+   ./target/release/string-pipeline-bench --iterations 2000
    ```
 
 2. **📊 Choose Appropriate Iteration Counts**
@@ -675,8 +677,8 @@ fn benchmark_template(&self, name: &str, template_str: &str) -> BenchmarkResult 
 
    ```bash
    # Wrong: Comparing different build modes
-   cargo run --bin bench > debug_results.txt
-   cargo run --release --bin bench > release_results.txt
+   cargo run --bin string-pipeline-bench > debug_results.txt
+   cargo run --release --bin string-pipeline-bench > release_results.txt
    # These results are not comparable!
    ```
 
@@ -710,11 +712,11 @@ fn benchmark_template(&self, name: &str, template_str: &str) -> BenchmarkResult 
 
 ```bash
 # Solution: Process is still running
-taskkill /F /IM bench.exe  # Windows
-killall bench             # Linux/macOS
+taskkill /F /IM string-pipeline-bench.exe  # Windows
+killall string-pipeline-bench               # Linux/macOS
 
 # Wait a moment, then rebuild
-cargo build --release --bin bench
+cargo build --release --bin string-pipeline-bench
 ```
 
 **Problem:** `Parse error: Expected operation`
@@ -734,7 +736,7 @@ cargo run --bin string-pipeline -- "{your_template}" "test"
 
 ```bash
 # Reduce iterations for development
-cargo run --bin bench -- --iterations 100
+cargo run --bin string-pipeline-bench -- --iterations 100
 
 # Check system resources
 htop  # Linux/macOS
@@ -757,10 +759,10 @@ taskmgr  # Windows
 
 ```bash
 # Validate JSON output
-./target/release/bench --format json | jq '.'
+./target/release/string-pipeline-bench --format json | jq '.'
 
 # Check for truncated output
-./target/release/bench --format json > results.json
+./target/release/string-pipeline-bench --format json > results.json
 jq '.' results.json  # Should not error
 ```
 
@@ -771,7 +773,7 @@ jq '.' results.json  # Should not error
 cargo run --bin string-pipeline -- "{!your_template}" "test_data"
 
 # Profile memory usage
-valgrind --tool=massif ./target/release/bench --iterations 100
+valgrind --tool=massif ./target/release/string-pipeline-bench --iterations 100
 ```
 
 > 💡 **Need More Help?**

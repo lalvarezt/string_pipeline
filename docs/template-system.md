@@ -32,6 +32,7 @@ A powerful string processing template system with support for splitting, transfo
   - [🔡 Lower](#-lower) - Convert to lowercase
   - [➡️ Append](#️-append) - Add text to end
   - [⬅️ Prepend](#️-prepend) - Add text to beginning
+  - [🔲 Surround](#-surround) - Add text to both ends
   - [⚡ Replace](#-replace) - Find and replace with regex
   - [🎯 Regex Extract](#-regex-extract) - Extract with regex pattern
   - [🗂️ Sort](#️-sort) - Sort items alphabetically
@@ -355,6 +356,7 @@ Understanding how operations handle different input types is crucial for buildin
 | **Substring** | ✅ | ❌ | ✅ | ❌ | String-only operation |
 | **Append** | ✅ | ❌ | ✅ | ❌ | String-only operation |
 | **Prepend** | ✅ | ❌ | ✅ | ❌ | String-only operation |
+| **Surround** | ✅ | ❌ | ✅ | ❌ | String-only operation |
 | **StripAnsi** | ✅ | ❌ | ✅ | ❌ | String-only operation |
 | **Pad** | ✅ | ❌ | ✅ | ❌ | String-only operation |
 | **RegexExtract** | ✅ | ❌ | ✅ | ❌ | String-only operation |
@@ -368,11 +370,11 @@ Understanding how operations handle different input types is crucial for buildin
 
 #### 🏗️ Type Categories
 
-**🔤 String-to-String Operations** (10 operations)
+**🔤 String-to-String Operations** (11 operations)
 Work exclusively with strings, provide clear error messages when applied to lists:
 
 - `replace`, `upper`, `lower`, `trim`, `substring`
-- `append`, `prepend`, `strip_ansi`, `pad`, `regex_extract`
+- `append`, `prepend`, `surround`, `strip_ansi`, `pad`, `regex_extract`
 
 ```text
 # ✅ Correct usage
@@ -714,6 +716,25 @@ Adds text to the beginning of each string.
 {split:,:..|map:{prepend:- }}    # "a,b,c" → "- a,- b,- c"
 ```
 
+### 🔲 Surround
+
+Adds characters to both the beginning and end of each string.
+
+**Syntax:** `surround:CHARS`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| CHARS     | string | ✅ | Character(s) to add to both ends of each string |
+
+**Examples:**
+
+```text
+{surround:"}                     # "hello" → "\"hello\""
+{surround:*}                     # "text" → "*text*"
+{split:,:..|map:{surround:'}}    # "a,b,c" → "'a','b','c'"
+{surround:[]}                    # "item" → "[item]"
+```
+
 ### ⚡ Replace
 
 Performs regex-based find and replace using sed-like syntax.
@@ -944,6 +965,25 @@ The range system includes robust edge case handling:
 
 Different argument types have different escaping requirements:
 
+### Shell Variable Exception
+
+**Important:** The sequence `${...}` is treated as a special exception and will **not** be interpreted as a template. This allows shell variable expansion in scripts without conflicts.
+
+```bash
+# ✅ Shell variables pass through unchanged
+echo "hello" | string-pipeline "{upper} ${USER}"
+# Template processes "{upper}" but "${USER}" is left for shell expansion
+
+# ✅ Use in scripts
+RESULT=$(echo "$DATA" | string-pipeline "{split:,:..|map:{upper}}" "${INPUT_FILE}")
+```
+
+**When you need literal `${` text:**
+
+```text
+{replace:s/\$\{/LITERAL/g}   # Escape both $ and { to match literal ${
+```
+
 ### Simple Arguments (append, prepend, join, etc.)
 
 | Character | Escape | Reason                |
@@ -1021,7 +1061,7 @@ map:{operation1|operation2|...}
 Apply to each item individually (item treated as string):
 
 - **🔤 Case:** `upper`, `lower`
-- **✂️ Modify:** `trim`, `append`, `prepend`, `substring`, `pad`
+- **✂️ Modify:** `trim`, `append`, `prepend`, `surround`, `substring`, `pad`
 - **🔍 Extract/Replace:** `replace`, `regex_extract`
 - **🎨 Format:** `reverse`, `strip_ansi`
 
@@ -1403,6 +1443,46 @@ string-pipeline '{split:,:..|map:{prepend:• |append: ✓}}' 'First item,Second
 # ✅ Use appropriate operations for data types
 {split:,:..|sort}           # Correct: list operation on list
 {split:,:..|map:{upper}}    # Correct: string operation via map
+```
+
+#### 💾 Caching Behavior
+
+The pipeline system uses global caches for performance optimization:
+
+**🔍 Regex Pattern Cache**
+- **Size:** Unbounded (grows as needed)
+- **Scope:** Global across all templates
+- **Thread-Safety:** Thread-safe with double-checked locking
+- **Content:** Compiled regex patterns for `replace`, `filter`, `regex_extract`
+- **Lifetime:** Patterns cached for entire program execution
+- **Best Practice:** Reuse the same patterns across templates for cache hits
+
+**🔪 Split Operation Cache**
+- **Size:** Limited by input constraints
+- **Limits:**
+  - Maximum input size: 10,000 characters
+  - Maximum result items: 1,000 items
+- **Scope:** Global across all templates
+- **Thread-Safety:** Thread-safe with concurrent hashmap
+- **Key:** Hash of input + separator
+- **Best Practice:** Splitting the same data multiple times is nearly free
+
+**🎯 Separator Interning**
+- **Pre-allocated separators:** space, comma, newline, tab, colon, semicolon, pipe, hyphen, underscore, empty string
+- **Benefit:** Reduces memory allocations for common separators
+- **Automatic:** No configuration needed
+
+**Performance Impact Example:**
+
+```bash
+# First execution: Compiles regex and caches result
+{replace:s/foo/bar/g}  # ~2-3μs (includes regex compilation)
+
+# Subsequent executions: Uses cached regex
+{replace:s/foo/bar/g}  # ~1-2μs (cache hit, no compilation)
+
+# Split caching in multi-template
+"Name: {split:,:0} Age: {split:,:1}"  # Input split only once, cached for both uses
 ```
 
 #### ❌ Common Mistakes to Avoid

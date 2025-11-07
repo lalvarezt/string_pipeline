@@ -221,6 +221,18 @@ string-pipeline -o json '{upper}' 'hello'
 
 Suppress debug output and validation messages with `--quiet` or `-q`.
 
+**What Quiet Mode Suppresses:**
+
+| Output Type | Normal Mode | Quiet Mode |
+|-------------|-------------|------------|
+| **Debug messages** | Shown on stderr | Suppressed |
+| **Validation success messages** | "Template syntax is valid" | Silent (exit code 0) |
+| **Inline debug `{!...}`** | Full debug output | Suppressed |
+| **Processing result** | Always shown | Always shown |
+| **Error messages** | Shown on stderr | Still shown (not suppressed) |
+
+**Exit Code Behavior:** Quiet mode does **not** change exit codes - successful operations return 0, errors return 1, regardless of quiet mode.
+
 ```bash
 # 🔊 Normal debug mode (shows detailed step-by-step processing)
 string-pipeline -d '{split:,:..|map:{upper}}' "hello,world"
@@ -233,7 +245,16 @@ string-pipeline -d -q '{split:,:..|map:{upper}}' 'a,b,c'
 
 # 🤫 Quiet validation (silent success)
 string-pipeline -q --validate '{split:,:..|upper}'
-# (no output if template is valid)
+# (no output if template is valid, exit code 0)
+
+# 🤫 Quiet mode with inline debug (suppresses the inline debug too)
+string-pipeline -q '{!split:,:..|map:{upper}}' 'a,b,c'
+# A,B,C (inline debug suppressed by -q flag)
+
+# ⚠️ Errors still shown even in quiet mode
+string-pipeline -q '{invalid}' 'input'
+# Error: Parse error: Unknown operation: invalid
+# (exit code 1)
 ```
 
 ## 🐛 Debug & Validation

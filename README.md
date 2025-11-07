@@ -62,6 +62,10 @@ string-pipeline '{split:,:..|map:{trim|upper|append:!}}' "  john  , jane , bob  
 # Extract numbers and pad with zeros
 string-pipeline '{split:,:..|map:{regex_extract:\d+|pad:3:0:left}}' "item1,thing22,stuff333"
 # Output: "001,022,333"
+
+# Surround items with quotes
+string-pipeline '{split:,:..|map:{surround:"}}' "apple,banana,cherry"
+# Output: "\"apple\",\"banana\",\"cherry\""
 ```
 
 ### 🧠 Advanced Processing
@@ -208,16 +212,16 @@ String Pipeline includes simple benchmarking tools for measuring performance:
 
 ```bash
 # Build the benchmark tool
-cargo build --release --bin bench
+cargo build --release --bin string-pipeline-bench
 
 # Run benchmarks (1000 iterations)
-./target/release/bench
+./target/release/string-pipeline-bench
 
 # Quick performance check (100 iterations)
-./target/release/bench --iterations 100
+./target/release/string-pipeline-bench --iterations 100
 
 # Generate JSON for scripts
-./target/release/bench --format json > benchmark_results.json
+./target/release/string-pipeline-bench --format json > benchmark_results.json
 ```
 
 ## 📚 Documentation
