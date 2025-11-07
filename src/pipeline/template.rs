@@ -991,7 +991,7 @@ impl MultiTemplate {
             return Ok(None);
         }
 
-        // Safe to treat as single template block.
+        // Safe to treat as template-only block (no literal text).
         let (ops, dbg_flag) = parser::parse_template(template)?;
         let sections = vec![TemplateSection::Template(ops)];
         Ok(Some(Self::new(template.to_string(), sections, dbg_flag)))

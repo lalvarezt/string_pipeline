@@ -46,14 +46,14 @@ impl DebugTracer {
         }
     }
 
-    /// Logs the start of a session (template or multi-template processing).
+    /// Logs the start of a template processing session.
     ///
     /// This marks the beginning of a complete processing session, showing
     /// the session type, template string, input data, and optional additional information.
     ///
     /// # Arguments
     ///
-    /// * `session_type` - Type of session (e.g., "SINGLE TEMPLATE", "MULTI TEMPLATE")
+    /// * `session_type` - Label for the session type in debug output (e.g., "MULTI-TEMPLATE")
     /// * `template` - The template string being processed
     /// * `input` - The input data to be processed
     /// * `info` - Optional additional information to display
@@ -78,14 +78,14 @@ impl DebugTracer {
         self.separator();
     }
 
-    /// Logs the end of a session with results and timing information.
+    /// Logs the end of a template processing session with results and timing information.
     ///
     /// This marks the completion of a processing session, showing the final result,
     /// execution time, and cache statistics.
     ///
     /// # Arguments
     ///
-    /// * `session_type` - Type of session that completed
+    /// * `session_type` - Label for the session type in debug output (e.g., "MULTI-TEMPLATE")
     /// * `result` - The final processed result
     /// * `elapsed` - Total execution time for the session
     pub fn session_end(&self, session_type: &str, result: &str, elapsed: Duration) {

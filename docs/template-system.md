@@ -163,7 +163,7 @@ some literal text {operation1} more text {operation2|operation3}
 ### 🎨 Basic Syntax
 
 ```text
-# Single template section
+# One template section
 Hello {upper} World!
 
 # Multiple template sections
@@ -251,36 +251,36 @@ The caching system optimizes these patterns:
 "Original: {split:,:..|map:{upper}} Sorted: {split:,:..|map:{upper}|sort}"
 ```
 
-### 🎛️ Template Detection
+### 🎛️ Template Flexibility
 
-String Pipeline automatically detects multi-templates vs single templates:
+String Pipeline templates can be simple or complex:
 
-| Template Type | Detection Rule | Example |
-|---------------|----------------|---------|
-| **Single Template** | Starts with `{`, ends with `}`, single template section | `{split:,:0|upper}` |
-| **Multi-Template** | Has literal text outside braces OR multiple template sections | `Hello {upper}` or `{upper} and {lower}` |
+| Template Style | Description | Example |
+|----------------|-------------|---------|
+| **Template only** | Just template operations, no literal text | `{split:,:0|upper}` |
+| **Mixed content** | Literal text combined with template sections | `Hello {upper}` or `{upper} and {lower}` |
 
 ### 💡 Best Practices
 
-#### ✅ Effective Multi-Template Usage
+#### ✅ Effective Template Usage
 
 ```bash
-# ✅ Use multi-templates for mixed content
+# ✅ Use templates with literal text for mixed content
 "Status: {split:,:1|upper} for user {split:,:0}"
 
 # ✅ Leverage caching for repeated operations
 "Name: {split: :0} Email: {regex_extract:@.*} Name again: {split: :0}"
 
-# ✅ Combine with single templates for complex workflows
+# ✅ Combine literal text with operations for complex workflows
 echo "John Doe john@example.com" | string-pipeline "User: {split: :0..1|join: } Contact: {regex_extract:\\w+@\\w+\\.\\w+}"
 ```
 
 #### ❌ Common Mistakes
 
 ```bash
-# ❌ Don't use multi-templates when single templates suffice
+# ❌ Don't add unnecessary literal text
 "Hello {upper} World" → input: "test"  # Outputs: "Hello TEST World"
-# Better: Use it when you actually need the literal text
+# Better: Use literal text only when you actually need it
 
 # ❌ Don't over-complicate when simple operations work
 "Result: {split:,:0|append:!|prepend:->}"

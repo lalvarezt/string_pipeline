@@ -153,8 +153,8 @@ The debug system uses a tree-based hierarchical structure to organize execution 
 #### Level 1: Template Session Container
 
 ```text
-DEBUG: 📂 Single Template
-DEBUG: ├── 🏁 SINGLE TEMPLATE START
+DEBUG: 📂 MULTI-TEMPLATE
+DEBUG: ├── 🏁 MULTI-TEMPLATE START
 DEBUG: ├── Template: "{!split:,:..|map:{upper}}"
 DEBUG: ├── ➡️ Input: "hello,world"
 DEBUG: │

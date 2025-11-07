@@ -34,7 +34,7 @@ echo "john.doe@email.com,jane.smith@company.org" | \
   sort | \
   tr '\n' ','
 
-# String Pipeline (single template)
+# String Pipeline
 string-pipeline "{split:,:..|map:{regex_extract:@(.+):1}|sort}" "john.doe@email.com,jane.smith@company.org"
 # Output: "company.org,email.com"
 ```
