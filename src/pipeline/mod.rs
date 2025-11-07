@@ -1354,21 +1354,69 @@ fn apply_single_operation(
             apply_list_operation(val, |list| apply_range(&list, range), "Slice")
         }
         StringOp::Filter { pattern } => {
-            let re = get_cached_regex(pattern)?;
+            // Fast path for literal string matching (no regex metacharacters)
+            let is_literal = !pattern.contains([
+                '\\', '.', '*', '+', '?', '^', '$', '|', '[', ']', '(', ')', '{', '}',
+            ]);
+
             match val {
-                Value::List(list) => Ok(Value::List(
-                    list.into_iter().filter(|s| re.is_match(s)).collect(),
-                )),
-                Value::Str(s) => Ok(Value::Str(if re.is_match(&s) { s } else { String::new() })),
+                Value::List(list) => {
+                    if is_literal {
+                        Ok(Value::List(
+                            list.into_iter().filter(|s| s.contains(pattern)).collect(),
+                        ))
+                    } else {
+                        let re = get_cached_regex(pattern)?;
+                        Ok(Value::List(
+                            list.into_iter().filter(|s| re.is_match(s)).collect(),
+                        ))
+                    }
+                }
+                Value::Str(s) => {
+                    if is_literal {
+                        Ok(Value::Str(if s.contains(pattern) {
+                            s
+                        } else {
+                            String::new()
+                        }))
+                    } else {
+                        let re = get_cached_regex(pattern)?;
+                        Ok(Value::Str(if re.is_match(&s) { s } else { String::new() }))
+                    }
+                }
             }
         }
         StringOp::FilterNot { pattern } => {
-            let re = get_cached_regex(pattern)?;
+            // Fast path for literal string matching (no regex metacharacters)
+            let is_literal = !pattern.contains([
+                '\\', '.', '*', '+', '?', '^', '$', '|', '[', ']', '(', ')', '{', '}',
+            ]);
+
             match val {
-                Value::List(list) => Ok(Value::List(
-                    list.into_iter().filter(|s| !re.is_match(s)).collect(),
-                )),
-                Value::Str(s) => Ok(Value::Str(if re.is_match(&s) { String::new() } else { s })),
+                Value::List(list) => {
+                    if is_literal {
+                        Ok(Value::List(
+                            list.into_iter().filter(|s| !s.contains(pattern)).collect(),
+                        ))
+                    } else {
+                        let re = get_cached_regex(pattern)?;
+                        Ok(Value::List(
+                            list.into_iter().filter(|s| !re.is_match(s)).collect(),
+                        ))
+                    }
+                }
+                Value::Str(s) => {
+                    if is_literal {
+                        Ok(Value::Str(if s.contains(pattern) {
+                            String::new()
+                        } else {
+                            s
+                        }))
+                    } else {
+                        let re = get_cached_regex(pattern)?;
+                        Ok(Value::Str(if re.is_match(&s) { String::new() } else { s }))
+                    }
+                }
             }
         }
         StringOp::Sort { direction } => {
@@ -1429,16 +1477,24 @@ fn apply_single_operation(
             flags,
         } => {
             if let Value::Str(s) = val {
-                // Early exit for simple string patterns (not regex)
-                if !flags.contains('g')
-                    && !pattern.contains([
-                        '\\', '.', '*', '+', '?', '^', '$', '|', '[', ']', '(', ')', '{', '}',
-                    ])
-                    && !s.contains(pattern)
-                {
-                    return Ok(Value::Str(s));
+                // Fast path for literal string replacement (no regex metacharacters or special flags)
+                let is_literal = !pattern.contains([
+                    '\\', '.', '*', '+', '?', '^', '$', '|', '[', ']', '(', ')', '{', '}',
+                ]);
+
+                // Only use fast path if no special regex flags (case-insensitive, multiline, etc.)
+                let has_special_flags = flags.chars().any(|c| c != 'g');
+
+                if is_literal && !has_special_flags {
+                    let result = if flags.contains('g') {
+                        s.replace(pattern, replacement)
+                    } else {
+                        s.replacen(pattern, replacement, 1)
+                    };
+                    return Ok(Value::Str(result));
                 }
 
+                // Regex path for complex patterns
                 let pattern_to_use = if flags.is_empty() {
                     pattern.clone()
                 } else {
