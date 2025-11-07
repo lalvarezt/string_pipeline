@@ -4,30 +4,31 @@ debug_flag = @{ "!" }
 
 operation_list = { operation ~ ("|" ~ operation)* }
 
+// Ordered by frequency based on benchmark usage patterns
 operation = {
     shorthand_range
   | shorthand_index
   | split
+  | join
   | upper
   | lower
   | trim
+  | substring
+  | reverse
+  | replace
+  | filter
+  | filter_not
+  | sort
+  | unique
+  | map
+  | slice
   | append
   | prepend
   | surround
   | quote
-  | join
-  | substring
-  | replace
-  | map
-  | filter
-  | filter_not
-  | slice
-  | sort
-  | reverse
-  | unique
+  | pad
   | regex_extract
   | strip_ansi
-  | pad
 }
 
 shorthand_index = { number }
@@ -76,27 +77,28 @@ pad_char       = @{ argument }
 // Map operation
 map_operation       = { "{" ~ map_operation_list ~ "}" }
 map_operation_list  = { map_inner_operation ~ ("|" ~ map_inner_operation)* }
+// Ordered by frequency for map operations
 map_inner_operation = {
-    strip_ansi
+    upper
+  | lower
+  | trim
   | substring
+  | reverse
   | replace
+  | map_split
+  | map_join
   | append
   | prepend
   | surround
   | quote
-  | upper
-  | lower
-  | trim
   | pad
-  | reverse
-  | map_split
-  | map_join
   | map_slice
   | map_sort
   | map_unique
   | map_filter
   | map_filter_not
   | map_regex_extract
+  | strip_ansi
 }
 
 // Map-specific operations that need special handling
