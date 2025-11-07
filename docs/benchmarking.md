@@ -160,17 +160,17 @@ The benchmark suite is organized into **four distinct categories** that test dif
 
 Tests **individual pipeline operations** to establish baseline performance:
 
-| Operation | Template | Purpose | Expected Performance |
-|-----------|----------|---------|---------------------|
-| `split` | `{split:,:..\|join:,}` | Text splitting capability | ~3-4μs |
-| `upper` | `{upper}` | Case conversion | ~200-300ns |
-| `lower` | `{lower}` | Case conversion | ~150-200ns |
-| `trim` | `{trim}` | Whitespace removal | ~100-150ns |
-| `reverse` | `{reverse}` | String/list reversal | ~600-700ns |
-| `sort` | `{split:,:..\|sort\|join:,}` | Alphabetical sorting | ~3-4μs |
-| `unique` | `{split:,:..\|unique\|join:,}` | Duplicate removal | ~5-6μs |
-| `replace` | `{replace:s/a/A/g}` | Pattern replacement | ~2-3μs |
-| `filter` | `{split:,:..\|filter:^[a-m]\|join:,}` | Pattern filtering | ~14-16μs |
+| Operation | Template | Purpose |
+|-----------|----------|---------|
+| `split` | `{split:,:..\|join:,}` | Text splitting capability |
+| `upper` | `{upper}` | Case conversion |
+| `lower` | `{lower}` | Case conversion |
+| `trim` | `{trim}` | Whitespace removal |
+| `reverse` | `{reverse}` | String/list reversal |
+| `sort` | `{split:,:..\|sort\|join:,}` | Alphabetical sorting |
+| `unique` | `{split:,:..\|unique\|join:,}` | Duplicate removal |
+| `replace` | `{replace:s/a/A/g}` | Pattern replacement |
+| `filter` | `{split:,:..\|filter:^[a-m]\|join:,}` | Pattern filtering |
 
 > 💡 **Baseline Importance:** These measurements establish the **fundamental performance characteristics** of each operation and serve as building blocks for understanding more complex pipeline performance.
 
@@ -178,16 +178,16 @@ Tests **individual pipeline operations** to establish baseline performance:
 
 Tests **chains of basic operations** to measure composition overhead:
 
-| Pipeline | Template | Purpose | Performance Range |
-|----------|----------|---------|------------------|
-| Split + Join | `{split:,:..\|join: }` | Basic transformation | ~3μs |
-| Split + Sort + Join | `{split:,:..\|sort\|join:;}` | Sorting pipeline | ~3-4μs |
-| Split + Unique + Join | `{split:,:..\|unique\|join:,}` | Deduplication | ~5-6μs |
-| Split + Reverse + Join | `{split:,:..\|reverse\|join:-}` | Reversal pipeline | ~3μs |
-| Split + Filter + Join | `{split:,:..\|filter:^[a-m]\|join:,}` | Filtering pipeline | ~16-17μs |
-| Split + Slice + Join | `{split:,:..\|slice:0..5\|join:&}` | Range extraction | ~4μs |
-| Upper + Trim + Replace | `{upper\|trim\|replace:s/,/ /g}` | String transformations | ~3-4μs |
-| Split + Sort + Unique + Join | `{split:,:..\|sort\|unique\|join:+}` | Multi-step processing | ~5-6μs |
+| Pipeline | Template | Purpose |
+|----------|----------|---------|
+| Split + Join | `{split:,:..\|join: }` | Basic transformation |
+| Split + Sort + Join | `{split:,:..\|sort\|join:;}` | Sorting pipeline |
+| Split + Unique + Join | `{split:,:..\|unique\|join:,}` | Deduplication |
+| Split + Reverse + Join | `{split:,:..\|reverse\|join:-}` | Reversal pipeline |
+| Split + Filter + Join | `{split:,:..\|filter:^[a-m]\|join:,}` | Filtering pipeline |
+| Split + Slice + Join | `{split:,:..\|slice:0..5\|join:&}` | Range extraction |
+| Upper + Trim + Replace | `{upper\|trim\|replace:s/,/ /g}` | String transformations |
+| Split + Sort + Unique + Join | `{split:,:..\|sort\|unique\|join:+}` | Multi-step processing |
 
 > 🎯 **Composition Analysis:** These tests reveal how **operation chaining affects performance** and whether there are significant overhead costs in pipeline composition.
 
@@ -195,16 +195,16 @@ Tests **chains of basic operations** to measure composition overhead:
 
 Tests **operations applied to each list item** via the map function:
 
-| Operation Type | Template | Purpose | Performance Range |
-|----------------|----------|---------|------------------|
-| Map(Upper) | `{split:,:..\|map:{upper}\|join:,}` | Case conversion mapping | ~8-9μs |
-| Map(Trim+Upper) | `{split:,:..\|map:{trim\|upper}\|join: }` | Chained operations in map | ~9-10μs |
-| Map(Prepend) | `{split:,:..\|map:{prepend:item}\|join:,}` | Text prefix addition | ~9-10μs |
-| Map(Append) | `{split:,:..\|map:{append:-fruit}\|join:;}` | Text suffix addition | ~10-11μs |
-| Map(Reverse) | `{split:,:..\|map:{reverse}\|join:,}` | String reversal per item | ~8-9μs |
-| Map(Substring) | `{split:,:..\|map:{substring:0..3}\|join: }` | Text extraction per item | ~8-9μs |
-| Map(Pad) | `{split:,:..\|map:{pad:10:_}\|join:,}` | Text padding per item | ~10-11μs |
-| Map(Replace) | `{split:,:..\|map:{replace:s/e/E/g}\|join:,}` | Pattern replacement per item | ~49-60μs |
+| Operation Type | Template | Purpose |
+|----------------|----------|---------|
+| Map(Upper) | `{split:,:..\|map:{upper}\|join:,}` | Case conversion mapping |
+| Map(Trim+Upper) | `{split:,:..\|map:{trim\|upper}\|join: }` | Chained operations in map |
+| Map(Prepend) | `{split:,:..\|map:{prepend:item}\|join:,}` | Text prefix addition |
+| Map(Append) | `{split:,:..\|map:{append:-fruit}\|join:;}` | Text suffix addition |
+| Map(Reverse) | `{split:,:..\|map:{reverse}\|join:,}` | String reversal per item |
+| Map(Substring) | `{split:,:..\|map:{substring:0..3}\|join: }` | Text extraction per item |
+| Map(Pad) | `{split:,:..\|map:{pad:10:_}\|join:,}` | Text padding per item |
+| Map(Replace) | `{split:,:..\|map:{replace:s/e/E/g}\|join:,}` | Pattern replacement per item |
 
 > 🔍 **Map Performance:** Map operations show **scaling behavior** based on list size and the complexity of the inner operation. Replace operations are notably slower due to regex processing.
 
@@ -212,16 +212,16 @@ Tests **operations applied to each list item** via the map function:
 
 Tests **sophisticated nested operations** and real-world transformation scenarios:
 
-| Complexity Level | Template | Purpose | Performance Range |
-|------------------|----------|---------|------------------|
-| Nested Split+Join | `{split:,:..\|map:{split:_:..\|join:-}\|join: }` | Multi-level parsing | ~15-16μs |
-| Combined Transform | `{split:,:..\|map:{upper\|substring:0..5}\|join:,}` | Chained transformations | ~10μs |
-| Filter+Map Chain | `{split:,:..\|filter:^[a-m]\|map:{reverse}\|join:&}` | Conditional processing | ~16-17μs |
-| Replace+Transform | `{split:,:..\|map:{upper\|replace:s/A/a/g}\|join:;}` | Pattern + transformation | ~50-60μs |
-| Unique+Map | `{split:,:..\|unique\|map:{upper}\|join:,}` | Dedup + transformation | ~10-11μs |
-| Multi-Replace | `{split:,:..\|map:{replace:s/a/A/g\|upper}\|join:,}` | Complex pattern work | ~51-60μs |
-| Substring+Pad | `{split:,:..\|map:{substring:0..3\|pad:5:_}\|join:+}` | Text formatting pipeline | ~10-11μs |
-| Multi-Level Filter | `{split:,:..\|filter:^[a-z]\|map:{upper}\|sort\|join: }` | Comprehensive processing | ~17-18μs |
+| Complexity Level | Template | Purpose |
+|------------------|----------|---------|
+| Nested Split+Join | `{split:,:..\|map:{split:_:..\|join:-}\|join: }` | Multi-level parsing |
+| Combined Transform | `{split:,:..\|map:{upper\|substring:0..5}\|join:,}` | Chained transformations |
+| Filter+Map Chain | `{split:,:..\|filter:^[a-m]\|map:{reverse}\|join:&}` | Conditional processing |
+| Replace+Transform | `{split:,:..\|map:{upper\|replace:s/A/a/g}\|join:;}` | Pattern + transformation |
+| Unique+Map | `{split:,:..\|unique\|map:{upper}\|join:,}` | Dedup + transformation |
+| Multi-Replace | `{split:,:..\|map:{replace:s/a/A/g\|upper}\|join:,}` | Complex pattern work |
+| Substring+Pad | `{split:,:..\|map:{substring:0..3\|pad:5:_}\|join:+}` | Text formatting pipeline |
+| Multi-Level Filter | `{split:,:..\|filter:^[a-z]\|map:{upper}\|sort\|join: }` | Comprehensive processing |
 
 > 🏆 **Real-World Scenarios:** Complex operations represent **typical production use cases** and help identify performance bottlenecks in sophisticated data transformation pipelines.
 
@@ -316,7 +316,7 @@ fn remove_outliers(mut times: Vec<Duration>) -> (Vec<Duration>, usize) {
 | Feature | Implementation | Benefit |
 |---------|----------------|---------|
 | **Resolution** | Nanosecond precision via `std::time::Instant` | Good for fast operations |
-| **Overhead** | Small timing overhead (~10-20ns) | Minimal impact on results |
+| **Overhead** | Small timing overhead | Minimal impact on results |
 | **Platform** | Cross-platform timing support | Works across systems |
 | **Formatting** | Automatic unit selection (ns/μs/ms/s) | Easy to read output |
 
@@ -349,14 +349,14 @@ fn format_duration(duration: Duration) -> String {
 | **Iterations** | Number of measurement runs performed | How many times we measured |
 | **Warmup** | Number of pre-measurement runs | System preparation cycles |
 
-#### 🎯 Performance Ranges
+#### 🎯 Performance Categories
 
-| Performance Level | Time Range | Operations |
-|------------------|------------|------------|
-| **Ultra Fast** | < 1μs | `upper`, `lower`, `trim` |
-| **Fast** | 1-10μs | `split`, `join`, `sort`, basic chains |
-| **Moderate** | 10-50μs | `map` operations, complex chains |
-| **Intensive** | > 50μs | `replace` operations, regex processing |
+| Performance Level | Operations |
+|------------------|------------|
+| **Ultra Fast** | `upper`, `lower`, `trim` |
+| **Fast** | `split`, `join`, `sort`, basic chains |
+| **Moderate** | `map` operations, complex chains |
+| **Intensive** | `replace` operations, regex processing |
 
 > 💡 **Iteration Guidelines:**
 >

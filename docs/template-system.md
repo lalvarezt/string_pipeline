@@ -1476,10 +1476,10 @@ The pipeline system uses global caches for performance optimization:
 
 ```bash
 # First execution: Compiles regex and caches result
-{replace:s/foo/bar/g}  # ~2-3μs (includes regex compilation)
+{replace:s/foo/bar/g}
 
 # Subsequent executions: Uses cached regex
-{replace:s/foo/bar/g}  # ~1-2μs (cache hit, no compilation)
+{replace:s/foo/bar/g}
 
 # Split caching in multi-template
 "Name: {split:,:0} Age: {split:,:1}"  # Input split only once, cached for both uses
