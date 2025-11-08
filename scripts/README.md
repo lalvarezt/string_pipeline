@@ -138,6 +138,123 @@ python3 scripts/compare_benchmarks.py \
 cat comparison.md
 ```
 
+## Version Comparison Workflow
+
+For comparing performance across multiple commits (e.g., to find when a regression was introduced), use the `compile_benchmark_versions.sh` script.
+
+### `compile_benchmark_versions.sh`
+
+This script compiles the benchmark tool for every commit in a range, making it easy to run performance comparisons across different versions.
+
+**Features:**
+
+- **Idempotent**: Only compiles versions that don't already exist
+- **Safe**: Uses git worktrees in temporary directories (doesn't affect your working directory)
+- **Convenient**: Stores binaries with commit SHA for easy identification
+- **Non-intrusive**: Works even with uncommitted changes in your main working directory
+- **Storage**: Uses `$XDG_DATA_HOME/string_pipeline/benchmarks/` (typically `~/.local/share/string_pipeline/benchmarks/`)
+
+**Usage:**
+
+```bash
+# Compile all versions from 78594af (stabilized benchmark tool v1.0.0) to HEAD
+./scripts/compile_benchmark_versions.sh
+
+# Compile specific range
+./scripts/compile_benchmark_versions.sh --start abc1234 --end def5678
+
+# See what would be compiled (dry run)
+./scripts/compile_benchmark_versions.sh --dry-run
+
+# List already compiled versions
+./scripts/compile_benchmark_versions.sh --list
+
+# Remove all compiled versions
+./scripts/compile_benchmark_versions.sh --clean
+
+# Verbose output for debugging
+./scripts/compile_benchmark_versions.sh --verbose
+```
+
+**Example Workflow - Finding a Performance Regression:**
+
+```bash
+# 1. Compile all versions
+./scripts/compile_benchmark_versions.sh
+
+# 2. Set up benchmark directory path
+BENCH_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/string_pipeline/benchmarks"
+
+# 3. Run benchmarks on two versions
+$BENCH_DIR/bench_throughput_abc1234 \
+  --sizes 10000 \
+  --iterations 100 \
+  --output before.json
+
+$BENCH_DIR/bench_throughput_def5678 \
+  --sizes 10000 \
+  --iterations 100 \
+  --output after.json
+
+# 4. Compare results
+python3 scripts/compare_benchmarks.py before.json after.json
+
+# 5. If regression found, bisect by testing commits in between
+$BENCH_DIR/bench_throughput_xyz9999 --sizes 10000 --iterations 100 --output middle.json
+python3 scripts/compare_benchmarks.py before.json middle.json
+```
+
+### `compare_benchmark_versions.sh`
+
+After compiling benchmark binaries, use this script to quickly compare performance between two versions using hyperfine.
+
+**Features:**
+
+- **Fast comparison**: Uses hyperfine for accurate benchmark timing
+- **Automatic validation**: Checks that both binaries exist before running
+- **Flexible parameters**: Customize warmup, runs, and sizes
+- **Clear output**: Shows which version is faster with statistical confidence
+
+**Requirements:**
+
+- hyperfine must be installed (`apt install hyperfine` or `brew install hyperfine`)
+
+**Usage:**
+
+```bash
+# Basic comparison with defaults
+./scripts/compare_benchmark_versions.sh 78594af c5a8a11
+
+# Custom warmup and runs for better accuracy
+./scripts/compare_benchmark_versions.sh 78594af c5a8a11 --warmup 5 --runs 20
+
+# Compare with specific benchmark parameters
+./scripts/compare_benchmark_versions.sh abc1234 def5678 --sizes 10000
+```
+
+**Example Workflow - Performance Comparison:**
+
+```bash
+# 1. Compile the versions you want to compare
+./scripts/compile_benchmark_versions.sh --start 78594af --end c5a8a11
+
+# 2. Run hyperfine comparison
+./scripts/compare_benchmark_versions.sh 78594af c5a8a11
+
+# Output shows:
+# - Mean execution time for each version
+# - Standard deviation
+# - Min/max range
+# - Relative speed comparison (e.g., "1.05x faster")
+```
+
+**Important Notes:**
+
+- This compares **execution time** of the entire benchmark run, not the benchmark throughput metrics
+- Both versions run with identical parameters for fair comparison
+- Hyperfine handles warmup runs and statistical analysis automatically
+- For more detailed performance analysis, use the benchmark JSON output with `compare_benchmarks.py`
+
 ## Configuration
 
 ### Benchmark Parameters
