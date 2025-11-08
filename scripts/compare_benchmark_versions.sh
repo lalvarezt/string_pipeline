@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # Script to compare two compiled benchmark binaries using hyperfine
-# This makes it easy to see performance differences between versions
+# Supports both "all templates" mode and specific template mode
 
 BENCH_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/string_pipeline/benchmarks"
 
@@ -18,6 +18,8 @@ NC='\033[0m' # No Color
 WARMUP=5
 RUNS=50
 SIZE="10000"
+TEMPLATE="{split:/:-1}"
+ALL_MODE=false
 
 # Usage information
 usage() {
@@ -25,9 +27,6 @@ usage() {
 Usage: $(basename "$0") <sha1> <sha2> [OPTIONS]
 
 Compare performance of two compiled benchmark binaries using hyperfine.
-
-The script will run both benchmark versions with the same parameters and
-use hyperfine to measure and compare their execution time.
 
 ARGUMENTS:
     <sha1>              Short SHA of first benchmark version (baseline)
@@ -37,23 +36,37 @@ OPTIONS:
     --warmup N          Number of warmup runs (default: $WARMUP)
     --runs N            Number of benchmark runs (default: $RUNS)
     --size SIZE         Input size (default: $SIZE)
+    --template TPL      Template to benchmark (default: "$TEMPLATE")
+    --all               Compare using all templates mode
     -h, --help          Show this help message
 
 EXAMPLES:
-    # Basic comparison with defaults
-    $(basename "$0") 78594af c5a8a11
+    # Compare specific template with hyperfine (default)
+    $(basename "$0") 78594af dc06069
 
-    # Custom warmup and runs
-    $(basename "$0") 78594af c5a8a11 --warmup 5 --runs 20
+    # Compare with custom template
+    $(basename "$0") 78594af dc06069 --template "{split:/:..|join:/}"
 
-    # Compare with specific size
-    $(basename "$0") abc1234 def5678 --size 50000
+    # Compare all templates mode (single run each, summary output)
+    $(basename "$0") 78594af dc06069 --all
+
+    # Custom settings for specific template
+    $(basename "$0") 78594af dc06069 --template "{upper}" --warmup 10 --runs 100 --size 50000
+
+MODES:
+    Specific template mode (default):
+        - Uses hyperfine to benchmark a single template
+        - Multiple runs with statistical analysis from hyperfine
+        - Best for detailed performance comparison of one template
+
+    All templates mode (--all):
+        - Runs all 26 predefined templates once
+        - Hyperfine measures total execution time
+        - Best for overall performance regression testing
 
 NOTES:
     - Binaries must be compiled first using compile_benchmark_versions.sh
-    - Both binaries will be run with the same benchmark parameters
     - hyperfine must be installed (https://github.com/sharkdp/hyperfine)
-    - Results show execution time comparison, not benchmark throughput
 EOF
 }
 
@@ -129,6 +142,14 @@ while [ $# -gt 0 ]; do
     SIZE="$2"
     shift 2
     ;;
+  --template)
+    TEMPLATE="$2"
+    shift 2
+    ;;
+  --all)
+    ALL_MODE=true
+    shift
+    ;;
   -h | --help)
     usage
     exit 0
@@ -150,12 +171,6 @@ check_binary "$SHA2"
 BINARY1="$BENCH_DIR/bench_throughput_$SHA1"
 BINARY2="$BENCH_DIR/bench_throughput_$SHA2"
 
-# Prepare hyperfine command
-HYPERFINE_ARGS=(
-  "--warmup" "$WARMUP"
-  "--runs" "$RUNS"
-)
-
 # Print comparison info
 echo ""
 log_info "Comparing benchmark versions using hyperfine"
@@ -163,21 +178,43 @@ echo ""
 echo "  Baseline: $SHA1"
 echo "  Current:  $SHA2"
 echo ""
-echo "Benchmark parameters:"
-echo "  Size:      $SIZE"
-echo ""
-echo "Hyperfine parameters:"
-echo "  Warmup runs:     $WARMUP"
-echo "  Benchmark runs:  $RUNS"
-echo ""
 
-# Run hyperfine comparison
-hyperfine \
-  "${HYPERFINE_ARGS[@]}" \
-  --command-name "$SHA1" \
-  "$BINARY1 --sizes $SIZE --output /dev/null" \
-  --command-name "$SHA2" \
-  "$BINARY2 --sizes $SIZE --output /dev/null"
+if [ "$ALL_MODE" = true ]; then
+  echo "Mode: All templates"
+  echo "  Size: $SIZE"
+  echo ""
+  echo "Hyperfine parameters:"
+  echo "  Warmup runs:     $WARMUP"
+  echo "  Benchmark runs:  $RUNS"
+  echo ""
+
+  # All templates mode - benchmark complete tool execution
+  hyperfine \
+    --warmup "$WARMUP" \
+    --runs "$RUNS" \
+    --command-name "$SHA1" \
+    "$BINARY1 --template all --size $SIZE --output /dev/null" \
+    --command-name "$SHA2" \
+    "$BINARY2 --template all --size $SIZE --output /dev/null"
+else
+  echo "Mode: Specific template"
+  echo "  Template: $TEMPLATE"
+  echo "  Size:     $SIZE"
+  echo ""
+  echo "Hyperfine parameters:"
+  echo "  Warmup runs:     $WARMUP"
+  echo "  Benchmark runs:  $RUNS"
+  echo ""
+
+  # Specific template mode - hyperfine orchestrates multiple runs
+  hyperfine \
+    --warmup "$WARMUP" \
+    --runs "$RUNS" \
+    --command-name "$SHA1" \
+    "$BINARY1 --template '$TEMPLATE' --size $SIZE" \
+    --command-name "$SHA2" \
+    "$BINARY2 --template '$TEMPLATE' --size $SIZE"
+fi
 
 echo ""
 log_success "Comparison complete!"
