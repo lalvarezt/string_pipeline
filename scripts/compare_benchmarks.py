@@ -6,7 +6,7 @@ Detects performance regressions and improvements.
 
 import json
 import sys
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
 from pathlib import Path
 
 
@@ -58,7 +58,7 @@ def calculate_change(baseline: float, current: float) -> Tuple[float, str]:
 
 def load_benchmark_results(filepath: str) -> Dict:
     """Load benchmark results from JSON file."""
-    with open(filepath, 'r') as f:
+    with open(filepath, "r") as f:
         return json.load(f)
 
 
@@ -69,17 +69,17 @@ def compare_benchmarks(baseline_path: str, current_path: str) -> str:
 
     # Build lookup dictionaries for easier comparison
     baseline_results = {}
-    for bench in baseline['benchmarks']:
-        template_name = bench['template_name']
+    for bench in baseline["benchmarks"]:
+        template_name = bench["template_name"]
         # Get the largest input size result
-        if bench['results']:
-            baseline_results[template_name] = bench['results'][-1]
+        if bench["results"]:
+            baseline_results[template_name] = bench["results"][-1]
 
     current_results = {}
-    for bench in current['benchmarks']:
-        template_name = bench['template_name']
-        if bench['results']:
-            current_results[template_name] = bench['results'][-1]
+    for bench in current["benchmarks"]:
+        template_name = bench["template_name"]
+        if bench["results"]:
+            current_results[template_name] = bench["results"][-1]
 
     # Generate report
     report = []
@@ -87,8 +87,8 @@ def compare_benchmarks(baseline_path: str, current_path: str) -> str:
 
     # Get input size from first template
     input_size = 0
-    if current['benchmarks'] and current['benchmarks'][0]['results']:
-        input_size = current['benchmarks'][0]['results'][-1]['input_size']
+    if current["benchmarks"] and current["benchmarks"][0]["results"]:
+        input_size = current["benchmarks"][0]["results"][-1]["input_size"]
 
     report.append(f"**Input Size:** {input_size:,} paths\n")
     report.append(f"**Baseline Timestamp:** {baseline.get('timestamp', 'unknown')}")
@@ -101,33 +101,42 @@ def compare_benchmarks(baseline_path: str, current_path: str) -> str:
 
     # Build comparison table
     report.append("## Performance Comparison\n")
-    report.append("| Template | Avg/Path | Change | p95 | Change | Throughput | Change |")
-    report.append("|----------|----------|--------|-----|--------|------------|--------|")
+    report.append(
+        "| Template | Avg/Path | Change | p95 | Change | Throughput | Change |"
+    )
+    report.append(
+        "|----------|----------|--------|-----|--------|------------|--------|"
+    )
 
     # Sort by template name for consistent ordering
     all_templates = sorted(set(baseline_results.keys()) | set(current_results.keys()))
 
     for template_name in all_templates:
-        if template_name not in baseline_results or template_name not in current_results:
+        if (
+            template_name not in baseline_results
+            or template_name not in current_results
+        ):
             continue  # Skip if not in both sets
 
         base = baseline_results[template_name]
         curr = current_results[template_name]
 
         # Compare avg time per path
-        base_avg_ns = base['avg_time_per_path']
-        curr_avg_ns = curr['avg_time_per_path']
+        base_avg_ns = base["avg_time_per_path"]
+        curr_avg_ns = curr["avg_time_per_path"]
         avg_change, avg_emoji = calculate_change(base_avg_ns, curr_avg_ns)
 
         # Compare p95
-        base_p95 = base['latency_stats']['p95']
-        curr_p95 = curr['latency_stats']['p95']
+        base_p95 = base["latency_stats"]["p95"]
+        curr_p95 = curr["latency_stats"]["p95"]
         p95_change, p95_emoji = calculate_change(base_p95, curr_p95)
 
         # Compare throughput (higher is better, so invert the change)
-        base_throughput = base['throughput_paths_per_sec']
-        curr_throughput = curr['throughput_paths_per_sec']
-        throughput_change = ((curr_throughput - base_throughput) / base_throughput) * 100
+        base_throughput = base["throughput_paths_per_sec"]
+        curr_throughput = curr["throughput_paths_per_sec"]
+        throughput_change = (
+            (curr_throughput - base_throughput) / base_throughput
+        ) * 100
         # Invert emoji logic for throughput
         if abs(throughput_change) < 2:
             throughput_emoji = "➖"
@@ -220,6 +229,7 @@ def main():
     except Exception as e:
         print(f"Error comparing benchmarks: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 
