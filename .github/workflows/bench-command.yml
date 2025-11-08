@@ -336,15 +336,15 @@ jobs:
           echo "Checking out $BASELINE_REF..."
           git checkout "$BASELINE_REF"
 
-          # Check if bench_throughput binary is defined in Cargo.toml
-          if ! grep -q 'name = "bench_throughput"' Cargo.toml 2>/dev/null; then
+          # Check if bench-throughput binary is defined in Cargo.toml
+          if ! grep -q 'name = "bench-throughput"' Cargo.toml 2>/dev/null; then
             echo "exists=false" >> $GITHUB_OUTPUT
-            echo "❌ Benchmark tool 'bench_throughput' not found in $BASELINE_REF"
+            echo "❌ Benchmark tool 'bench-throughput' not found in $BASELINE_REF"
             exit 0
           fi
 
           # Check if the source file exists
-          if ! grep -A 2 'name = "bench_throughput"' Cargo.toml | grep -q 'path.*='; then
+          if ! grep -A 2 'name = "bench-throughput"' Cargo.toml | grep -q 'path.*='; then
             echo "exists=false" >> $GITHUB_OUTPUT
             echo "❌ Benchmark tool source file not found in $BASELINE_REF"
             exit 0
@@ -362,15 +362,15 @@ jobs:
           echo "Checking out $CURRENT_REF..."
           git checkout "$CURRENT_REF"
 
-          # Check if bench_throughput binary is defined in Cargo.toml
-          if ! grep -q 'name = "bench_throughput"' Cargo.toml 2>/dev/null; then
+          # Check if bench-throughput binary is defined in Cargo.toml
+          if ! grep -q 'name = "bench-throughput"' Cargo.toml 2>/dev/null; then
             echo "exists=false" >> $GITHUB_OUTPUT
-            echo "❌ Benchmark tool 'bench_throughput' not found in $CURRENT_REF"
+            echo "❌ Benchmark tool 'bench-throughput' not found in $CURRENT_REF"
             exit 0
           fi
 
           # Check if the source file exists
-          if ! grep -A 2 'name = "bench_throughput"' Cargo.toml | grep -q 'path.*='; then
+          if ! grep -A 2 'name = "bench-throughput"' Cargo.toml | grep -q 'path.*='; then
             echo "exists=false" >> $GITHUB_OUTPUT
             echo "❌ Benchmark tool source file not found in $CURRENT_REF"
             exit 0
@@ -390,7 +390,7 @@ jobs:
             const current_exists = '${{ steps.check_current_tool.outputs.exists }}' === 'true';
 
             let message = '❌ **Benchmark comparison failed**\n\n';
-            message += '**Reason**: The benchmark tool (`bench_throughput`) does not exist in ';
+            message += '**Reason**: The benchmark tool (`bench-throughput`) does not exist in ';
 
             if (!baseline_exists && !current_exists) {
               message += `both refs:\n- \`${baseline_ref}\` (baseline/older)\n- \`${current_ref}\` (current/newer)`;
@@ -429,16 +429,15 @@ jobs:
           git checkout "$BASELINE_REF"
 
           echo "Building benchmark tool..."
-          if ! cargo build --release --bin bench_throughput 2>&1 | tee build_baseline.log; then
+          if ! cargo build --release --bin bench-throughput 2>&1 | tee build_baseline.log; then
             echo "❌ Failed to build benchmark tool for $BASELINE_REF"
             exit 1
           fi
 
           echo "Running benchmarks on baseline..."
-          ./target/release/bench_throughput \
+          ./target/release/bench-throughput \
             --sizes "$SIZES" \
             --iterations "$ITERATIONS" \
-            --format json \
             --output benchmark_baseline.json
 
       - name: Benchmark current (newer commit)
@@ -454,16 +453,15 @@ jobs:
 
           # Rebuild in case dependencies changed
           echo "Building benchmark tool..."
-          if ! cargo build --release --bin bench_throughput 2>&1 | tee build_current.log; then
+          if ! cargo build --release --bin bench-throughput 2>&1 | tee build_current.log; then
             echo "❌ Failed to build benchmark tool for $CURRENT_REF"
             exit 1
           fi
 
           echo "Running benchmarks on current..."
-          ./target/release/bench_throughput \
+          ./target/release/bench-throughput \
             --sizes "$SIZES" \
             --iterations "$ITERATIONS" \
-            --format json \
             --output benchmark_current.json
 
       - name: Compare results

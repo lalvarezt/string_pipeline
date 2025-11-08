@@ -6,26 +6,25 @@ String Pipeline includes a throughput-based benchmarking tool for measuring perf
 
 ```bash
 # Run with default settings
-cargo run --release --bin bench_throughput
+cargo run --release --bin bench-throughput
 
 # Specify input sizes and iterations
-cargo run --release --bin bench_throughput -- --sizes 1000,5000,10000 --iterations 100
+cargo run --release --bin bench-throughput -- --sizes 1000,5000,10000 --iterations 100
 
-# Generate JSON output for comparison
-cargo run --release --bin bench_throughput -- --format json --output results.json
+# Generate JSON output to custom location
+cargo run --release --bin bench-throughput -- --output results.json
 
 # Verbose mode shows per-template details
-cargo run --release --bin bench_throughput -- --verbose
+cargo run --release --bin bench-throughput -- --verbose
 ```
 
 ## Command Line Options
 
 | Option | Short | Default | Description |
 |--------|-------|---------|-------------|
-| `--sizes` | `-s` | `100,500,1000,5000,10000,50000,100000` | Comma-separated input sizes |
-| `--iterations` | `-i` | `50` | Number of iterations per size |
-| `--format` | `-f` | `console` | Output format: `console` or `json` |
-| `--output` | `-o` | - | Output file path (for JSON format) |
+| `--sizes` | `-s` | `10000` | Comma-separated input sizes |
+| `--iterations` | `-i` | `1` | Number of iterations per size |
+| `--output` | `-o` | `$XDG_DATA_HOME/string-pipeline/benchmarks/bench-<timestamp>.json` | Override default JSON output location |
 | `--verbose` | `-v` | false | Show detailed per-template results |
 
 ## Methodology
@@ -33,9 +32,11 @@ cargo run --release --bin bench_throughput -- --verbose
 The benchmark tool measures batch processing performance:
 
 1. **Parse Phase**: Template is parsed once and timed across multiple iterations
-2. **Warmup**: Each input size runs once without timing to stabilize caches
+2. **Warmup**: Each input size runs once without timing to stabilize caches (skipped when iterations = 1)
 3. **Measurement**: Multiple iterations are timed to calculate statistics
 4. **Analysis**: Results include average, percentiles (p50, p95, p99), and standard deviation
+
+The tool always outputs both a human-readable console report and JSON data for tracking over time.
 
 ### Test Data
 
@@ -69,12 +70,12 @@ Use the included Python script to compare two benchmark runs:
 
 ```bash
 # Run baseline benchmark
-cargo run --release --bin bench_throughput -- --format json --output baseline.json
+cargo run --release --bin bench-throughput -- --output baseline.json
 
 # Make changes to the code
 
 # Run current benchmark
-cargo run --release --bin bench_throughput -- --format json --output current.json
+cargo run --release --bin bench-throughput -- --output current.json
 
 # Compare results
 python3 scripts/compare_benchmarks.py baseline.json current.json

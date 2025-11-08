@@ -14,6 +14,8 @@ use std::time::{Duration, Instant};
 use string_pipeline::Template;
 use unicode_width::UnicodeWidthStr;
 
+const TOOL_VERSION: &str = "1.0.0";
+
 // Helper to serialize Duration as nanoseconds
 fn serialize_duration<S>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error>
 where
@@ -331,9 +333,11 @@ fn benchmark_template(
         // Generate N paths for this size
         let paths = generator.generate_paths(size);
 
-        // Warmup: format all paths once
-        for path in &paths {
-            let _ = template.format(path)?;
+        // Warmup: format all paths once (skip if iterations == 1)
+        if iterations > 1 {
+            for path in &paths {
+                let _ = template.format(path)?;
+            }
         }
 
         // Measure: time complete iterations, calculate avg per-path for each iteration
@@ -740,6 +744,7 @@ fn print_summary(all_results: &[(&str, Vec<BenchmarkResult>)]) {
 /// Output results in JSON format for tracking over time
 #[derive(Serialize)]
 struct BenchmarkOutput<'a> {
+    version: String,
     timestamp: u64,
     benchmarks: Vec<TemplateBenchmark<'a>>,
 }
@@ -767,6 +772,7 @@ fn output_json(
         .collect();
 
     let output = BenchmarkOutput {
+        version: TOOL_VERSION.to_string(),
         timestamp,
         benchmarks,
     };
@@ -791,9 +797,25 @@ fn output_json(
     Ok(())
 }
 
+fn get_default_output_path() -> Result<String, Box<dyn std::error::Error>> {
+    let data_home = std::env::var("XDG_DATA_HOME").unwrap_or_else(|_| {
+        let home = std::env::var("HOME").expect("HOME environment variable not set");
+        format!("{}/.local/share", home)
+    });
+
+    let benchmark_dir = format!("{}/string-pipeline/benchmarks", data_home);
+    std::fs::create_dir_all(&benchmark_dir)?;
+
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_secs();
+
+    Ok(format!("{}/bench-{}.json", benchmark_dir, timestamp))
+}
+
 fn main() {
     let matches = Command::new("String Pipeline Throughput Benchmark")
-        .version(env!("CARGO_PKG_VERSION"))
+        .version(TOOL_VERSION)
         .about("Benchmarks batch processing throughput with varying input sizes")
         .arg(
             Arg::new("sizes")
@@ -801,7 +823,7 @@ fn main() {
                 .long("sizes")
                 .value_name("COUNTS")
                 .help("Comma-separated input sizes (number of paths to process)")
-                .default_value("100,500,1000,5000,10000,50000,100000"),
+                .default_value("10000"),
         )
         .arg(
             Arg::new("iterations")
@@ -809,22 +831,14 @@ fn main() {
                 .long("iterations")
                 .value_name("COUNT")
                 .help("Number of measurement iterations per size for stability")
-                .default_value("50"),
-        )
-        .arg(
-            Arg::new("format")
-                .short('f')
-                .long("format")
-                .value_name("FORMAT")
-                .help("Output format: console or json")
-                .default_value("console"),
+                .default_value("1"),
         )
         .arg(
             Arg::new("output")
                 .short('o')
                 .long("output")
                 .value_name("FILE")
-                .help("Output file path (for JSON format)"),
+                .help("Override default JSON output location (default: $XDG_DATA_HOME/string-pipeline/benchmarks/bench-<timestamp>.json)"),
         )
         .arg(
             Arg::new("verbose")
@@ -852,8 +866,10 @@ fn main() {
         .parse()
         .expect("Invalid iteration count");
 
-    let format = matches.get_one::<String>("format").unwrap();
-    let output_path = matches.get_one::<String>("output");
+    let output_path = matches
+        .get_one::<String>("output")
+        .map(|s| s.to_string())
+        .or_else(|| get_default_output_path().ok());
     let verbose = matches.get_flag("verbose");
 
     if sizes.is_empty() {
@@ -862,7 +878,10 @@ fn main() {
     }
 
     // Always show header
-    print_header("String Pipeline Throughput Benchmark v0.13.0");
+    print_header(&format!(
+        "String Pipeline Throughput Benchmark {}",
+        TOOL_VERSION
+    ));
     let mut stdout = io::stdout();
     let _ = execute!(
         stdout,
@@ -878,11 +897,7 @@ fn main() {
         SetForegroundColor(Color::Cyan),
         Print("Measurement iterations: "),
         ResetColor,
-        Print(format!("{}\n", iterations)),
-        SetForegroundColor(Color::Cyan),
-        Print("Output format: "),
-        ResetColor,
-        Print(format!("{}\n", format))
+        Print(format!("{}\n", iterations))
     );
 
     let templates = TemplateSet::get_templates();
@@ -933,8 +948,9 @@ fn main() {
     // Always show summary
     print_summary(&all_results);
 
-    if format == "json"
-        && let Err(e) = output_json(&all_results, output_path.map(|s| s.as_str()))
+    // Always output JSON
+    if let Some(path) = output_path.as_ref()
+        && let Err(e) = output_json(&all_results, Some(path.as_str()))
     {
         eprintln!("Error writing JSON output: {}", e);
         std::process::exit(1);
