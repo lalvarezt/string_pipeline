@@ -2,6 +2,10 @@
 """
 Compare benchmark results and generate a markdown report.
 Detects performance regressions and improvements.
+
+Updated for bench-throughput v2.0.0:
+- Removed latency_stats (p95, p99, stddev) - no longer available
+- Simplified to compare avg_time_per_path and throughput only
 """
 
 import json
@@ -71,15 +75,17 @@ def compare_benchmarks(baseline_path: str, current_path: str) -> str:
     baseline_results = {}
     for bench in baseline["benchmarks"]:
         template_name = bench["template_name"]
-        # Get the largest input size result
-        if bench["results"]:
-            baseline_results[template_name] = bench["results"][-1]
+        # Get the result (v2.0.0 has single result, not array)
+        result = bench.get("result")
+        if result:
+            baseline_results[template_name] = result
 
     current_results = {}
     for bench in current["benchmarks"]:
         template_name = bench["template_name"]
-        if bench["results"]:
-            current_results[template_name] = bench["results"][-1]
+        result = bench.get("result")
+        if result:
+            current_results[template_name] = result
 
     # Generate report
     report = []
@@ -87,10 +93,12 @@ def compare_benchmarks(baseline_path: str, current_path: str) -> str:
 
     # Get input size from first template
     input_size = 0
-    if current["benchmarks"] and current["benchmarks"][0]["results"]:
-        input_size = current["benchmarks"][0]["results"][-1]["input_size"]
+    if current["benchmarks"] and current["benchmarks"][0].get("result"):
+        input_size = current["benchmarks"][0]["result"]["input_size"]
 
     report.append(f"**Input Size:** {input_size:,} paths\n")
+    report.append(f"**Baseline Version:** {baseline.get('version', 'unknown')}")
+    report.append(f"**Current Version:** {current.get('version', 'unknown')}")
     report.append(f"**Baseline Timestamp:** {baseline.get('timestamp', 'unknown')}")
     report.append(f"**Current Timestamp:** {current.get('timestamp', 'unknown')}\n")
 
@@ -102,10 +110,10 @@ def compare_benchmarks(baseline_path: str, current_path: str) -> str:
     # Build comparison table
     report.append("## Performance Comparison\n")
     report.append(
-        "| Template | Avg/Path | Change | p95 | Change | Throughput | Change |"
+        "| Template | Avg/Path | Change | Throughput | Change |"
     )
     report.append(
-        "|----------|----------|--------|-----|--------|------------|--------|"
+        "|----------|----------|--------|------------|--------|"
     )
 
     # Sort by template name for consistent ordering
@@ -125,11 +133,6 @@ def compare_benchmarks(baseline_path: str, current_path: str) -> str:
         base_avg_ns = base["avg_time_per_path"]
         curr_avg_ns = curr["avg_time_per_path"]
         avg_change, avg_emoji = calculate_change(base_avg_ns, curr_avg_ns)
-
-        # Compare p95
-        base_p95 = base["latency_stats"]["p95"]
-        curr_p95 = curr["latency_stats"]["p95"]
-        p95_change, p95_emoji = calculate_change(base_p95, curr_p95)
 
         # Compare throughput (higher is better, so invert the change)
         base_throughput = base["throughput_paths_per_sec"]
@@ -166,8 +169,6 @@ def compare_benchmarks(baseline_path: str, current_path: str) -> str:
             f"| {template_name} "
             f"| {format_duration_ns(curr_avg_ns)} "
             f"| {avg_emoji} {avg_change:+.1f}% "
-            f"| {format_duration_ns(curr_p95)} "
-            f"| {p95_emoji} {p95_change:+.1f}% "
             f"| {format_throughput(curr_throughput)} "
             f"| {throughput_emoji} {throughput_change:+.1f}% |"
         )
@@ -203,6 +204,13 @@ def compare_benchmarks(baseline_path: str, current_path: str) -> str:
     report.append("- 🟡 Caution (2-5% slower)")
     report.append("- ⚠️ Warning (5-10% slower)")
     report.append("- 🔴 Regression (>10% slower)")
+    report.append("")
+    report.append("---\n")
+    report.append("**Note:** This comparison uses single-run measurements from bench-throughput v2.0.0.")
+    report.append("For statistical analysis with confidence intervals, use hyperfine locally:")
+    report.append("```bash")
+    report.append("./scripts/compare_benchmark_versions.sh <baseline-sha> <current-sha> --template '{template}'")
+    report.append("```")
 
     return "\n".join(report)
 

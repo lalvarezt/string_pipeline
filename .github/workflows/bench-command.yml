@@ -1,9 +1,9 @@
 name: Benchmark Command
 # Trigger on-demand benchmarks via PR comments
-# Usage: /bench <ref1> <ref2> [iterations] [sizes]
+# Usage: /bench <ref1> <ref2> [size]
 # Examples:
 #   /bench main v0.13.0
-#   /bench abc123 def456 100 1000,5000,10000
+#   /bench abc123 def456 50000
 # Only repository owner can trigger this command
 
 on:
@@ -30,8 +30,7 @@ jobs:
       authorized: ${{ steps.check.outputs.authorized }}
       ref1: ${{ steps.parse.outputs.ref1 }}
       ref2: ${{ steps.parse.outputs.ref2 }}
-      iterations: ${{ steps.parse.outputs.iterations }}
-      sizes: ${{ steps.parse.outputs.sizes }}
+      size: ${{ steps.parse.outputs.size }}
     steps:
       - name: Check if commenter is repo owner
         id: check
@@ -79,15 +78,14 @@ jobs:
           set -euo pipefail
           COMMENT="${{ github.event.comment.body }}"
 
-          # Parse command: /bench ref1 ref2 [iterations] [sizes]
+          # Parse command: /bench ref1 ref2 [size]
           # Remove /bench prefix and extract parameters
           PARAMS=$(echo "$COMMENT" | sed 's|^/bench[[:space:]]*||')
 
           # Extract parameters
           REF1=$(echo "$PARAMS" | awk '{print $1}')
           REF2=$(echo "$PARAMS" | awk '{print $2}')
-          ITERATIONS=$(echo "$PARAMS" | awk '{print $3}')
-          SIZES=$(echo "$PARAMS" | awk '{print $4}')
+          SIZE=$(echo "$PARAMS" | awk '{print $3}')
 
           # Validate required parameters
           if [ -z "$REF1" ] || [ -z "$REF2" ]; then
@@ -96,33 +94,20 @@ jobs:
             exit 1
           fi
 
-          # Set defaults for optional parameters
-          if [ -z "$ITERATIONS" ] || ! [[ "$ITERATIONS" =~ ^[0-9]+$ ]]; then
-            ITERATIONS=100
-          fi
-
-          if [ -z "$SIZES" ]; then
-            SIZES="1000,5000,10000"
-          fi
-
-          # Validate sizes format (comma-separated numbers)
-          if ! echo "$SIZES" | grep -qE '^[0-9]+(,[0-9]+)*$'; then
-            echo "error=Invalid sizes format: $SIZES" >> $GITHUB_OUTPUT
-            echo "parse_failed=true" >> $GITHUB_OUTPUT
-            exit 1
+          # Set default for optional size parameter
+          if [ -z "$SIZE" ] || ! [[ "$SIZE" =~ ^[0-9]+$ ]]; then
+            SIZE=10000
           fi
 
           echo "ref1=$REF1" >> $GITHUB_OUTPUT
           echo "ref2=$REF2" >> $GITHUB_OUTPUT
-          echo "iterations=$ITERATIONS" >> $GITHUB_OUTPUT
-          echo "sizes=$SIZES" >> $GITHUB_OUTPUT
+          echo "size=$SIZE" >> $GITHUB_OUTPUT
           echo "parse_failed=false" >> $GITHUB_OUTPUT
 
           echo "Parsed parameters:"
           echo "  ref1: $REF1"
           echo "  ref2: $REF2"
-          echo "  iterations: $ITERATIONS"
-          echo "  sizes: $SIZES"
+          echo "  size: $SIZE"
 
       - name: Post parse error
         if: steps.check.outputs.authorized == 'true' && steps.parse.outcome == 'failure'
@@ -139,19 +124,22 @@ jobs:
             const errorMessage = [
               '❌ **Invalid command format**',
               '',
-              '**Usage:** `/bench <ref1> <ref2> [iterations] [sizes]`',
+              '**Usage:** `/bench <ref1> <ref2> [size]`',
               '',
               '**Examples:**',
               '```',
               '/bench main v0.13.0',
-              '/bench abc123 def456 100 1000,5000,10000',
+              '/bench abc123 def456',
+              '/bench main HEAD 50000',
               '```',
               '',
               '**Parameters:**',
               '- `ref1` (required): Baseline git reference',
               '- `ref2` (required): Current git reference',
-              '- `iterations` (optional): Number of iterations (default: 100)',
-              '- `sizes` (optional): Comma-separated sizes (default: 1000,5000,10000)'
+              '- `size` (optional): Input size (default: 10000)',
+              '',
+              '**Note:** This runs all 26 predefined templates with a single input size.',
+              'For detailed per-template analysis with hyperfine, use the local tools.'
             ].join('\n');
 
             await github.rest.issues.createComment({
@@ -168,8 +156,7 @@ jobs:
           script: |
             const ref1 = '${{ steps.parse.outputs.ref1 }}';
             const ref2 = '${{ steps.parse.outputs.ref2 }}';
-            const iterations = '${{ steps.parse.outputs.iterations }}';
-            const sizes = '${{ steps.parse.outputs.sizes }}';
+            const size = '${{ steps.parse.outputs.size }}';
 
             const message = [
               '🚀 **Benchmark comparison started**',
@@ -179,8 +166,8 @@ jobs:
               `- **Current**: \`${ref2}\``,
               '',
               '**Parameters:**',
-              `- **Iterations**: ${iterations}`,
-              `- **Sizes**: ${sizes}`,
+              `- **Size**: ${size} paths`,
+              `- **Templates**: All 26 predefined templates`,
               '',
               'Results will be posted here when complete...'
             ].join('\n');
@@ -213,6 +200,12 @@ jobs:
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
+
+      - name: Install hyperfine
+        run: |
+          wget https://github.com/sharkdp/hyperfine/releases/download/v1.18.0/hyperfine_1.18.0_amd64.deb
+          sudo dpkg -i hyperfine_1.18.0_amd64.deb
+          hyperfine --version
 
       - name: Fetch refs from remote
         run: |
@@ -417,13 +410,11 @@ jobs:
               body: message
             });
 
-      - name: Benchmark baseline (older commit)
+      - name: Build baseline benchmark tool
         if: steps.validate.outputs.same_commit == 'false' && steps.check_baseline_tool.outputs.exists == 'true' && steps.check_current_tool.outputs.exists == 'true'
         run: |
           set -euo pipefail
           BASELINE_REF="${{ steps.validate.outputs.baseline_ref }}"
-          ITERATIONS="${{ needs.check-permission.outputs.iterations }}"
-          SIZES="${{ needs.check-permission.outputs.sizes }}"
 
           echo "Checking out baseline: $BASELINE_REF..."
           git checkout "$BASELINE_REF"
@@ -434,19 +425,15 @@ jobs:
             exit 1
           fi
 
-          echo "Running benchmarks on baseline..."
-          ./target/release/bench-throughput \
-            --sizes "$SIZES" \
-            --iterations "$ITERATIONS" \
-            --output benchmark_baseline.json
+          # Save binary with unique name
+          cp target/release/bench-throughput bench-throughput-baseline
+          echo "✓ Built baseline benchmark tool"
 
-      - name: Benchmark current (newer commit)
+      - name: Build current benchmark tool
         if: steps.validate.outputs.same_commit == 'false' && steps.check_baseline_tool.outputs.exists == 'true' && steps.check_current_tool.outputs.exists == 'true'
         run: |
           set -euo pipefail
           CURRENT_REF="${{ steps.validate.outputs.current_ref }}"
-          ITERATIONS="${{ needs.check-permission.outputs.iterations }}"
-          SIZES="${{ needs.check-permission.outputs.sizes }}"
 
           echo "Checking out current: $CURRENT_REF..."
           git checkout "$CURRENT_REF"
@@ -458,13 +445,28 @@ jobs:
             exit 1
           fi
 
-          echo "Running benchmarks on current..."
-          ./target/release/bench-throughput \
-            --sizes "$SIZES" \
-            --iterations "$ITERATIONS" \
-            --output benchmark_current.json
+          # Save binary with unique name
+          cp target/release/bench-throughput bench-throughput-current
+          echo "✓ Built current benchmark tool"
 
-      - name: Compare results
+      - name: Run benchmarks with hyperfine
+        if: steps.validate.outputs.same_commit == 'false' && steps.check_baseline_tool.outputs.exists == 'true' && steps.check_current_tool.outputs.exists == 'true'
+        run: |
+          set -euo pipefail
+          SIZE="${{ needs.check-permission.outputs.size }}"
+
+          echo "Running hyperfine comparison..."
+          hyperfine --warmup 3 --runs 10 \
+            --export-json hyperfine_results.json \
+            --export-markdown hyperfine_results.md \
+            --command-name "baseline" \
+            "./bench-throughput-baseline --template all --size $SIZE --output benchmark_baseline.json" \
+            --command-name "current" \
+            "./bench-throughput-current --template all --size $SIZE --output benchmark_current.json"
+
+          echo "✓ Hyperfine comparison complete"
+
+      - name: Compare per-template results
         if: steps.validate.outputs.same_commit == 'false' && steps.check_baseline_tool.outputs.exists == 'true' && steps.check_current_tool.outputs.exists == 'true'
         run: |
           set -euo pipefail
@@ -472,7 +474,7 @@ jobs:
           if [ -f scripts/compare_benchmarks.py ]; then
             python3 scripts/compare_benchmarks.py \
               benchmark_baseline.json \
-              benchmark_current.json > comparison.md
+              benchmark_current.json > template_comparison.md
           else
             echo "❌ Comparison script not found"
             exit 1
@@ -484,13 +486,13 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const comparison = fs.readFileSync('comparison.md', 'utf8');
+            const template_comparison = fs.readFileSync('template_comparison.md', 'utf8');
+            const hyperfine_table = fs.readFileSync('hyperfine_results.md', 'utf8');
             const baseline_ref = '${{ steps.validate.outputs.baseline_ref }}';
             const current_ref = '${{ steps.validate.outputs.current_ref }}';
             const baseline_sha = '${{ steps.validate.outputs.baseline_sha }}';
             const current_sha = '${{ steps.validate.outputs.current_sha }}';
-            const iterations = '${{ needs.check-permission.outputs.iterations }}';
-            const sizes = '${{ needs.check-permission.outputs.sizes }}';
+            const size = '${{ needs.check-permission.outputs.size }}';
 
             const body = [
               '## 🔬 Benchmark Comparison Report',
@@ -502,12 +504,18 @@ jobs:
               `- **Current** (newer): \`${current_ref}\` (${current_sha})`,
               '',
               '**Parameters:**',
-              `- **Iterations**: ${iterations}`,
-              `- **Sizes**: ${sizes}`,
+              `- **Size**: ${size} paths`,
+              `- **Templates**: All 26 predefined templates`,
               '',
               '---',
               '',
-              comparison,
+              '### 📊 Overall Execution Time (via hyperfine)',
+              '',
+              hyperfine_table,
+              '',
+              '---',
+              '',
+              template_comparison,
               '',
               '---',
               '',
@@ -529,7 +537,9 @@ jobs:
           path: |
             benchmark_baseline.json
             benchmark_current.json
-            comparison.md
+            template_comparison.md
+            hyperfine_results.json
+            hyperfine_results.md
             build_baseline.log
             build_current.log
           retention-days: 30
@@ -577,7 +587,7 @@ jobs:
               '- Both refs exist and are valid git references (branches, tags, or commits)',
               '- The benchmark tool exists in both refs',
               '- The code at those refs compiles successfully',
-              '- Parameters are in correct format: `/bench <ref1> <ref2> [iterations] [sizes]`',
+              '- Parameters are in correct format: `/bench <ref1> <ref2> [size]`',
               '',
               '**See the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.**'
             ].join('\n');

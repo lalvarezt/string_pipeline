@@ -6,39 +6,44 @@ This directory contains scripts used by the GitHub Actions CI/CD pipeline to tra
 
 The benchmark system uses an **on-demand approach** triggered via PR comments. There are no automatic benchmark runs - all comparisons are triggered manually by the repository owner using the `/bench` command.
 
+**Updated for bench-throughput v2.0.0**: The tool has been simplified to focus on workload execution, with hyperfine handling statistical analysis.
+
 ## The `/bench` Command
 
 ### Command Syntax
 
 ```bash
-/bench <ref1> <ref2> [iterations] [sizes]
+/bench <ref1> <ref2> [size]
 ```
 
 **Parameters:**
 
 - `ref1` (required): Baseline git reference (commit, branch, or tag)
 - `ref2` (required): Current git reference to compare against baseline
-- `iterations` (optional): Number of benchmark iterations (default: 100)
-- `sizes` (optional): Comma-separated input sizes (default: 1000,5000,10000)
+- `size` (optional): Input size - number of paths to process (default: 10000)
 
 ### Examples
 
 ```bash
-# Basic comparison with defaults (100 iterations, sizes: 1000,5000,10000)
+# Basic comparison with default size (10000 paths)
 /bench main v0.13.0
 
 # Compare two commits
 /bench abc123 def456
 
-# Custom iterations
-/bench main HEAD 200
-
-# Custom iterations and sizes
-/bench v0.12.0 v0.13.0 100 1000,5000,10000,50000
+# Custom input size
+/bench main HEAD 50000
 
 # Compare feature branch vs main
 /bench feature-branch main
 ```
+
+### What Gets Benchmarked
+
+- **All 26 predefined templates** are tested
+- **Single input size** per run
+- **Hyperfine wraps execution** for statistical confidence (3 warmup + 10 runs)
+- **Per-template breakdown** from internal timing
 
 ### Security
 
@@ -55,16 +60,26 @@ The benchmark system uses an **on-demand approach** triggered via PR comments. T
    - Both refs exist
    - Benchmark tool exists in both refs
    - Parameters are valid
-4. **Benchmarks run** on both refs
-5. **Results posted** as PR comment with detailed comparison
-6. **Success reaction** 🚀 (or 😕 on failure)
-7. **Artifacts uploaded** for 30 days
+4. **Install hyperfine** in CI environment
+5. **Build** benchmark binaries for both refs
+6. **Run with hyperfine**:
+   - 3 warmup runs
+   - 10 measurement runs
+   - Statistical analysis of execution time
+7. **Compare results**:
+   - Hyperfine overall execution time comparison
+   - Per-template breakdown from JSON
+8. **Results posted** as PR comment with detailed comparison
+9. **Success reaction** 🚀 (or 😕 on failure)
+10. **Artifacts uploaded** for 30 days
 
 ## Files
 
 ### `compare_benchmarks.py`
 
 Python script that compares two benchmark JSON files and generates a markdown report.
+
+**Updated for v2.0.0**: Simplified to compare `avg_time_per_path` and `throughput` only (no more p95/p99/stddev).
 
 **Usage:**
 
@@ -74,9 +89,9 @@ python3 scripts/compare_benchmarks.py baseline.json current.json > report.md
 
 **Features:**
 
-- Detects performance regressions (>5% slower)
+- Detects performance regressions (>10% slower)
 - Highlights improvements (>5% faster)
-- Compares avg/path latency, p95, p99, and throughput
+- Compares avg/path latency and throughput
 - Color-coded indicators:
   - 🟢 Significant improvement (>5% faster)
   - ✅ Improvement (2-5% faster)
@@ -84,6 +99,8 @@ python3 scripts/compare_benchmarks.py baseline.json current.json > report.md
   - 🟡 Caution (2-5% slower)
   - ⚠️ Warning (5-10% slower)
   - 🔴 Regression (>10% slower)
+
+**Note:** For statistical confidence intervals, use hyperfine locally (see `compare_benchmark_versions.sh`).
 
 ## GitHub Actions Workflow
 
@@ -99,43 +116,68 @@ The single workflow that handles all benchmark comparisons.
 **What it does:**
 
 1. **Validates** user permissions and parameters
-2. **Checks** both refs for benchmark tool existence
-3. **Builds** the benchmark tool for each ref
-4. **Runs** benchmarks with specified parameters
-5. **Compares** results using `compare_benchmarks.py`
-6. **Posts** detailed report to PR
-7. **Uploads** artifacts (results + build logs)
+2. **Installs** hyperfine for statistical benchmarking
+3. **Checks** both refs for benchmark tool existence
+4. **Builds** the benchmark tool for each ref
+5. **Runs** benchmarks with hyperfine (3 warmup + 10 runs)
+6. **Compares** results using both:
+   - Hyperfine's overall execution time analysis
+   - Per-template comparison via `compare_benchmarks.py`
+7. **Posts** detailed report to PR
+8. **Uploads** artifacts (results + build logs)
 
 **Artifacts:**
 
 - **benchmark-comparison-<comment_id>**
-  - Both benchmark JSON files
-  - Comparison markdown report
+  - Both benchmark JSON files (per-template data)
+  - Hyperfine JSON results (statistical timing data)
+  - Hyperfine markdown table
+  - Per-template comparison markdown
   - Build logs for debugging
   - Retained for 30 days
 
 ## Running Benchmarks Locally
 
-### Run benchmarks and save to JSON
+### Quick All-Templates Run
 
 ```bash
 cargo build --release --bin bench-throughput
 
-./target/release/bench-throughput \
-  --sizes 1000,5000,10000 \
-  --iterations 100 \
-  --output my_benchmark.json
+# All templates, default size
+./target/release/bench-throughput --template all --size 10000
+
+# Custom size
+./target/release/bench-throughput --template all --size 50000 --output my_benchmark.json
 ```
 
-### Compare two benchmark runs
+###Compare two benchmark runs
+```bash
+# Run baseline
+./target/release/bench-throughput --template all --size 10000 --output baseline.json
+
+# Make code changes...
+
+# Run current
+./target/release/bench-throughput --template all --size 10000 --output current.json
+
+# Compare
+python3 scripts/compare_benchmarks.py baseline.json current.json
+```
+
+### Detailed Per-Template Analysis with Hyperfine
+
+For statistical confidence on specific templates:
 
 ```bash
-python3 scripts/compare_benchmarks.py \
-  baseline_benchmark.json \
-  my_benchmark.json > comparison.md
+# Single template with hyperfine
+hyperfine --warmup 10 --runs 100 \
+  'cargo run --release --bin bench-throughput -- \
+    --template "{split:/:-1}" --size 10000'
 
-# View the report
-cat comparison.md
+# Compare two versions of a specific template
+./scripts/compare_benchmark_versions.sh <sha1> <sha2> \
+  --template "{split:/:-1}" \
+  --warmup 10 --runs 100
 ```
 
 ## Version Comparison Workflow
@@ -185,34 +227,31 @@ This script compiles the benchmark tool for every commit in a range, making it e
 # 2. Set up benchmark directory path
 BENCH_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/string_pipeline/benchmarks"
 
-# 3. Run benchmarks on two versions
-$BENCH_DIR/bench_throughput_abc1234 \
-  --sizes 10000 \
-  --iterations 100 \
-  --output before.json
-
-$BENCH_DIR/bench_throughput_def5678 \
-  --sizes 10000 \
-  --iterations 100 \
-  --output after.json
+# 3. Run benchmarks on two versions (all templates mode)
+$BENCH_DIR/bench_throughput_abc1234 --template all --size 10000 --output before.json
+$BENCH_DIR/bench_throughput_def5678 --template all --size 10000 --output after.json
 
 # 4. Compare results
 python3 scripts/compare_benchmarks.py before.json after.json
 
-# 5. If regression found, bisect by testing commits in between
-$BENCH_DIR/bench_throughput_xyz9999 --sizes 10000 --iterations 100 --output middle.json
-python3 scripts/compare_benchmarks.py before.json middle.json
+# 5. If regression found in specific template, use hyperfine for detailed analysis
+hyperfine --warmup 10 --runs 100 \
+  "$BENCH_DIR/bench_throughput_abc1234 --template '{split:/:-1}' --size 10000" \
+  "$BENCH_DIR/bench_throughput_def5678 --template '{split:/:-1}' --size 10000"
 ```
 
 ### `compare_benchmark_versions.sh`
 
 After compiling benchmark binaries, use this script to quickly compare performance between two versions using hyperfine.
 
+**Updated for v2.0.0**: Supports both all-templates mode and specific template mode.
+
 **Features:**
 
 - **Fast comparison**: Uses hyperfine for accurate benchmark timing
 - **Automatic validation**: Checks that both binaries exist before running
-- **Flexible parameters**: Customize warmup, runs, and sizes
+- **Flexible parameters**: Customize warmup, runs, size, and template
+- **Two modes**: All templates or specific template
 - **Clear output**: Shows which version is faster with statistical confidence
 
 **Requirements:**
@@ -222,38 +261,107 @@ After compiling benchmark binaries, use this script to quickly compare performan
 **Usage:**
 
 ```bash
-# Basic comparison with defaults
-./scripts/compare_benchmark_versions.sh 78594af c5a8a11
+# Specific template mode (default)
+./scripts/compare_benchmark_versions.sh 78594af dc06069
 
-# Custom warmup and runs for better accuracy
-./scripts/compare_benchmark_versions.sh 78594af c5a8a11 --warmup 5 --runs 20
+# Custom template
+./scripts/compare_benchmark_versions.sh 78594af dc06069 --template "{upper}"
 
-# Compare with specific benchmark parameters
-./scripts/compare_benchmark_versions.sh abc1234 def5678 --sizes 10000
+# All templates mode
+./scripts/compare_benchmark_versions.sh 78594af dc06069 --all
+
+# Custom parameters
+./scripts/compare_benchmark_versions.sh abc1234 def5678 \
+  --template "{split:/:-1}" \
+  --warmup 10 --runs 100 --size 50000
 ```
 
 **Example Workflow - Performance Comparison:**
 
 ```bash
 # 1. Compile the versions you want to compare
-./scripts/compile_benchmark_versions.sh --start 78594af --end c5a8a11
+./scripts/compile_benchmark_versions.sh --start 78594af --end dc06069
 
-# 2. Run hyperfine comparison
-./scripts/compare_benchmark_versions.sh 78594af c5a8a11
+# 2. Run hyperfine comparison on specific template
+./scripts/compare_benchmark_versions.sh 78594af dc06069 \
+  --template "{split:/:-1}" \
+  --warmup 10 --runs 100
 
 # Output shows:
 # - Mean execution time for each version
 # - Standard deviation
 # - Min/max range
 # - Relative speed comparison (e.g., "1.05x faster")
+
+# 3. For comprehensive check, use all-templates mode
+./scripts/compare_benchmark_versions.sh 78594af dc06069 --all --runs 20
 ```
 
 **Important Notes:**
 
-- This compares **execution time** of the entire benchmark run, not the benchmark throughput metrics
+- In **specific template mode**: Hyperfine measures execution time with statistical confidence
+- In **all templates mode**: Hyperfine times the entire 26-template run
 - Both versions run with identical parameters for fair comparison
-- Hyperfine handles warmup runs and statistical analysis automatically
-- For more detailed performance analysis, use the benchmark JSON output with `compare_benchmarks.py`
+- For per-template breakdown, use the JSON output with `compare_benchmarks.py`
+
+## Architecture Changes (v2.0.0)
+
+### What Changed
+
+**Removed from bench-throughput:**
+- `--iterations` flag (hyperfine handles this)
+- `--sizes` plural (now `--size` singular)
+- Internal statistics calculation (p50, p95, p99, stddev)
+- Warmup phase
+- Iteration loops
+
+**Added:**
+- `--template` flag: `all` (default) or template string
+- Hyperfine integration in CI/CD
+- Two operating modes: all-templates and specific-template
+
+**Philosophy Shift:**
+- **Before**: bench-throughput mimicked hyperfine
+- **After**: bench-throughput executes workloads, hyperfine benchmarks them
+
+**Benefits:**
+- Simpler codebase (~30% code reduction)
+- Professional statistical analysis via hyperfine
+- No code duplication
+- Clear separation of concerns
+
+### Migration Guide
+
+**Old CI command:**
+```bash
+/bench main HEAD 100 1000,5000,10000
+```
+
+**New CI command:**
+```bash
+/bench main HEAD 10000
+```
+
+**Old local workflow:**
+```bash
+./target/release/bench-throughput \
+  --sizes 1000,5000,10000 \
+  --iterations 100 \
+  --output results.json
+```
+
+**New local workflow:**
+```bash
+# For all templates (single run, per-template data)
+./target/release/bench-throughput \
+  --template all --size 10000 \
+  --output results.json
+
+# For specific template with hyperfine (statistical confidence)
+hyperfine --warmup 10 --runs 100 \
+  './target/release/bench-throughput \
+    --template "{split:/:-1}" --size 10000'
+```
 
 ## Configuration
 
@@ -261,16 +369,41 @@ After compiling benchmark binaries, use this script to quickly compare performan
 
 Default parameters:
 
-- **Input sizes:** 1,000, 5,000, 10,000 paths
-- **Iterations:** 100 (per size)
-- **Output format:** JSON
+- **Input size:** 10,000 paths
+- **Templates:** All 26 predefined templates
+- **Hyperfine warmup:** 3 runs (CI only)
+- **Hyperfine runs:** 10 runs (CI only)
 
-These can be overridden per-command:
+These can be overridden:
 
 ```bash
-# Use different sizes for larger datasets
-/bench main HEAD 100 10000,50000,100000
+# Custom size
+/bench main HEAD 50000
 
-# More iterations for stable results
-/bench v0.12.0 v0.13.0 500 1000,5000,10000
+# Local: Custom hyperfine parameters
+hyperfine --warmup 20 --runs 200 \
+  './bench-throughput --template "{upper}" --size 100000'
 ```
+
+## Offline vs CI Benchmarking
+
+**CI/CD (Quick check):**
+- Uses hyperfine with 3 warmup + 10 runs
+- Tests all 26 templates at once
+- Provides overall execution time + per-template breakdown
+- Good for regression detection
+- Fast feedback (~3-5 minutes)
+
+**Offline (Comprehensive analysis):**
+- Use `compare_benchmark_versions.sh` locally
+- Full control over hyperfine parameters (warmup, runs)
+- Focus on specific templates
+- Statistical confidence with 50-200 runs
+- Export results in multiple formats
+- Ideal for performance investigation
+
+**Recommended workflow:**
+1. CI detects potential regression via `/bench`
+2. Investigate offline with hyperfine + specific templates
+3. Narrow down the problematic operation
+4. Fix and verify with both CI and offline tools
