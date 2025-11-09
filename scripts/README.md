@@ -42,7 +42,7 @@ The benchmark system uses an **on-demand approach** triggered via PR comments. T
 
 - **All 26 predefined templates** are tested
 - **Single input size** per run
-- **Hyperfine wraps execution** for statistical confidence (3 warmup + 10 runs)
+- **Hyperfine wraps execution** for statistical confidence (5 warmup + 50 runs)
 - **Per-template breakdown** from internal timing
 
 ### Security
@@ -63,8 +63,8 @@ The benchmark system uses an **on-demand approach** triggered via PR comments. T
 4. **Install hyperfine** in CI environment
 5. **Build** benchmark binaries for both refs
 6. **Run with hyperfine**:
-   - 3 warmup runs
-   - 10 measurement runs
+   - 5 warmup runs
+   - 50 measurement runs
    - Statistical analysis of execution time
 7. **Compare results**:
    - Hyperfine overall execution time comparison
@@ -119,7 +119,7 @@ The single workflow that handles all benchmark comparisons.
 2. **Installs** hyperfine for statistical benchmarking
 3. **Checks** both refs for benchmark tool existence
 4. **Builds** the benchmark tool for each ref
-5. **Runs** benchmarks with hyperfine (3 warmup + 10 runs)
+5. **Runs** benchmarks with hyperfine (5 warmup + 50 runs)
 6. **Compares** results using both:
    - Hyperfine's overall execution time analysis
    - Per-template comparison via `compare_benchmarks.py`
@@ -371,8 +371,8 @@ Default parameters:
 
 - **Input size:** 10,000 paths
 - **Templates:** All 26 predefined templates
-- **Hyperfine warmup:** 3 runs (CI only)
-- **Hyperfine runs:** 10 runs (CI only)
+- **Hyperfine warmup:** 5 runs (CI only)
+- **Hyperfine runs:** 50 runs (CI only)
 
 These can be overridden:
 
@@ -388,7 +388,7 @@ hyperfine --warmup 20 --runs 200 \
 ## Offline vs CI Benchmarking
 
 **CI/CD (Quick check):**
-- Uses hyperfine with 3 warmup + 10 runs
+- Uses hyperfine with 5 warmup + 50 runs
 - Tests all 26 templates at once
 - Provides overall execution time + per-template breakdown
 - Good for regression detection

@@ -1,9 +1,10 @@
 name: Benchmark Command
 # Trigger on-demand benchmarks via PR comments
-# Usage: /bench <ref1> <ref2> [size]
+# Usage: /bench <ref1> <ref2> [size] [warmup] [runs]
 # Examples:
 #   /bench main v0.13.0
 #   /bench abc123 def456 50000
+#   /bench main HEAD 50000 5 20
 # Only repository owner can trigger this command
 
 on:
@@ -32,6 +33,7 @@ jobs:
       ref2: ${{ steps.parse.outputs.ref2 }}
       size: ${{ steps.parse.outputs.size }}
       warmup: ${{ steps.parse.outputs.warmup }}
+      runs: ${{ steps.parse.outputs.runs }}
     steps:
       - name: Check if commenter is repo owner
         id: check
@@ -79,7 +81,7 @@ jobs:
           set -euo pipefail
           COMMENT="${{ github.event.comment.body }}"
 
-          # Parse command: /bench ref1 ref2 [size] [warmup]
+          # Parse command: /bench ref1 ref2 [size] [warmup] [runs]
           # Remove /bench prefix and extract parameters
           PARAMS=$(echo "$COMMENT" | sed 's|^/bench[[:space:]]*||')
 
@@ -88,6 +90,7 @@ jobs:
           REF2=$(echo "$PARAMS" | awk '{print $2}')
           SIZE=$(echo "$PARAMS" | awk '{print $3}')
           WARMUP=$(echo "$PARAMS" | awk '{print $4}')
+          RUNS=$(echo "$PARAMS" | awk '{print $5}')
 
           # Validate required parameters
           if [ -z "$REF1" ] || [ -z "$REF2" ]; then
@@ -102,13 +105,18 @@ jobs:
           fi
 
           if [ -z "$WARMUP" ] || ! [[ "$WARMUP" =~ ^[0-9]+$ ]]; then
-            WARMUP=3
+            WARMUP=5
+          fi
+
+          if [ -z "$RUNS" ] || ! [[ "$RUNS" =~ ^[0-9]+$ ]]; then
+            RUNS=50
           fi
 
           echo "ref1=$REF1" >> $GITHUB_OUTPUT
           echo "ref2=$REF2" >> $GITHUB_OUTPUT
           echo "size=$SIZE" >> $GITHUB_OUTPUT
           echo "warmup=$WARMUP" >> $GITHUB_OUTPUT
+          echo "runs=$RUNS" >> $GITHUB_OUTPUT
           echo "parse_failed=false" >> $GITHUB_OUTPUT
 
           echo "Parsed parameters:"
@@ -116,6 +124,7 @@ jobs:
           echo "  ref2: $REF2"
           echo "  size: $SIZE"
           echo "  warmup: $WARMUP"
+          echo "  runs: $RUNS"
 
       - name: Post parse error
         if: steps.check.outputs.authorized == 'true' && steps.parse.outcome == 'failure'
@@ -132,21 +141,22 @@ jobs:
             const errorMessage = [
               '❌ **Invalid command format**',
               '',
-              '**Usage:** `/bench <ref1> <ref2> [size] [warmup]`',
+              '**Usage:** `/bench <ref1> <ref2> [size] [warmup] [runs]`',
               '',
               '**Examples:**',
               '```',
               '/bench main v0.13.0',
-              '/bench abc123 def456',
-              '/bench main HEAD 50000',
+              '/bench abc123 def456 50000',
               '/bench main HEAD 50000 5',
+              '/bench main HEAD 50000 5 20',
               '```',
               '',
               '**Parameters:**',
               '- `ref1` (required): Baseline git reference',
               '- `ref2` (required): Current git reference',
               '- `size` (optional): Input size (default: 10000)',
-              '- `warmup` (optional): Warmup runs (default: 3)',
+              '- `warmup` (optional): Warmup runs (default: 5)',
+              '- `runs` (optional): Benchmark runs (default: 50)',
               '',
               '**Note:** This runs all 26 predefined templates with a single input size.',
               'For detailed per-template analysis with hyperfine, use the local tools.'
@@ -168,6 +178,7 @@ jobs:
             const ref2 = '${{ steps.parse.outputs.ref2 }}';
             const size = '${{ steps.parse.outputs.size }}';
             const warmup = '${{ steps.parse.outputs.warmup }}';
+            const runs = '${{ steps.parse.outputs.runs }}';
 
             const message = [
               '🚀 **Benchmark comparison started**',
@@ -179,7 +190,7 @@ jobs:
               '**Parameters:**',
               `- **Size**: ${size} paths`,
               `- **Warmup**: ${warmup} runs`,
-              `- **Runs**: 10 measurements`,
+              `- **Runs**: ${runs} measurements`,
               `- **Templates**: All 26 predefined templates`,
               '',
               'Results will be posted here when complete...'
@@ -468,6 +479,7 @@ jobs:
           set -euo pipefail
           SIZE="${{ needs.check-permission.outputs.size }}"
           WARMUP="${{ needs.check-permission.outputs.warmup }}"
+          RUNS="${{ needs.check-permission.outputs.runs }}"
           BASELINE_SHA="${{ steps.validate.outputs.baseline_sha }}"
           CURRENT_SHA="${{ steps.validate.outputs.current_sha }}"
           BENCH_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/string_pipeline/benchmarks"
@@ -484,7 +496,7 @@ jobs:
             --all \
             --size "$SIZE" \
             --warmup "$WARMUP" \
-            --runs 10 \
+            --runs "$RUNS" \
             --style basic \
             | tee comparison_output.txt
 
@@ -575,7 +587,7 @@ jobs:
               '- Both refs exist and are valid git references (branches, tags, or commits)',
               '- The benchmark tool exists in both refs',
               '- The code at those refs compiles successfully',
-              '- Parameters are in correct format: `/bench <ref1> <ref2> [size]`',
+              '- Parameters are in correct format: `/bench <ref1> <ref2> [size] [warmup] [runs]`',
               '',
               '**See the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.**'
             ].join('\n');
