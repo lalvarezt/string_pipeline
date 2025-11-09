@@ -133,30 +133,6 @@ Called automatically by `analyze_all_templates.sh` - you typically won't run thi
 - Highlights templates with high variance
 - Color-coded indicators based on change magnitude
 
-### `compare_benchmarks.py`
-
-**⚠️ DEPRECATED**: This script compares single-run JSON outputs from `bench-throughput`.
-
-**Why deprecated:**
-- Single-run measurements lack statistical confidence
-- Cannot distinguish noise from real performance changes
-- Superseded by `analyze_all_templates.sh` which uses hyperfine
-- Conflicts with v2.0.0 philosophy (hyperfine for benchmarking)
-
-**Migration:**
-```bash
-# Old approach (unreliable)
-bench-throughput --template all --output baseline.json
-bench-throughput --template all --output current.json
-python3 scripts/compare_benchmarks.py baseline.json current.json
-
-# New approach (statistically sound)
-./scripts/compile_benchmark_versions.sh baseline current
-./scripts/analyze_all_templates.sh baseline current
-```
-
-**Status:** Kept for backward compatibility but not recommended. May be removed in future versions.
-
 ## GitHub Actions Workflow
 
 ### Benchmark Command (`.github/workflows/bench-command.yml`)
@@ -298,17 +274,15 @@ This script compiles the benchmark tool for every commit in a range, making it e
 # 2. Set up benchmark directory path
 BENCH_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/string_pipeline/benchmarks"
 
-# 3. Run benchmarks on two versions (all templates mode)
-$BENCH_DIR/bench_throughput_abc1234 --template all --size 10000 --output before.json
-$BENCH_DIR/bench_throughput_def5678 --template all --size 10000 --output after.json
+# 3. Quick overall comparison with hyperfine
+./scripts/compare_benchmark_versions.sh abc1234 def5678 --all
 
-# 4. Compare results
-python3 scripts/compare_benchmarks.py before.json after.json
+# 4. If regression detected, run detailed per-template analysis
+./scripts/analyze_all_templates.sh abc1234 def5678 --runs 100
 
-# 5. If regression found in specific template, use hyperfine for detailed analysis
-hyperfine --warmup 10 --runs 100 \
-  "$BENCH_DIR/bench_throughput_abc1234 --template '{split:/:-1}' --size 10000" \
-  "$BENCH_DIR/bench_throughput_def5678 --template '{split:/:-1}' --size 10000"
+# 5. Or analyze a specific template with statistical confidence
+./scripts/compare_benchmark_versions.sh abc1234 def5678 \
+  --template "{split:/:-1}" --runs 100
 ```
 
 ### `compare_benchmark_versions.sh`
@@ -373,7 +347,7 @@ After compiling benchmark binaries, use this script to quickly compare performan
 - In **specific template mode**: Hyperfine measures execution time with statistical confidence
 - In **all templates mode**: Hyperfine times the entire 26-template run
 - Both versions run with identical parameters for fair comparison
-- For per-template breakdown, use the JSON output with `compare_benchmarks.py`
+- For detailed per-template breakdown with statistical confidence, use `analyze_all_templates.sh`
 
 ## Architecture Changes (v2.0.0)
 

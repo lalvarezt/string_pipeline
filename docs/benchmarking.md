@@ -131,29 +131,41 @@ For each template (in all templates mode):
 
 ## Comparing Results
 
-### Using the Python Comparison Script
+### Quick Overall Check
 
-For all templates mode, compare two benchmark runs:
+For rapid feedback on overall performance:
 
 ```bash
-# Run baseline benchmark
-cargo run --release --bin bench-throughput -- --output baseline.json
+# Quick smoke test (single run, no statistics)
+cargo run --release --bin bench-throughput -- --template all --size 10000
 
-# Make changes to the code
-
-# Run current benchmark
-cargo run --release --bin bench-throughput -- --output current.json
-
-# Compare results
-python3 scripts/compare_benchmarks.py baseline.json current.json
+# Statistical check with hyperfine
+hyperfine --warmup 5 --runs 50 \
+  'cargo run --release --bin bench-throughput -- --template all --size 10000 --output /dev/null'
 ```
 
-**Output:**
-- Performance changes for each template
-- Indicators for improvements (faster) and regressions (slower)
-- Summary of affected templates
+### Comparing Two Versions
 
-### Using hyperfine for Specific Templates
+For comparing performance across git commits:
+
+```bash
+# 1. Compile both versions
+./scripts/compile_benchmark_versions.sh abc1234 def5678
+
+# 2. Quick overall comparison
+./scripts/compare_benchmark_versions.sh abc1234 def5678 --all
+
+# 3. If regression detected, detailed per-template analysis
+./scripts/analyze_all_templates.sh abc1234 def5678 --runs 100
+```
+
+**Output from analyze_all_templates.sh:**
+- Statistical confidence for each of 26 templates
+- Mean, min, max, stddev for every template
+- Regression/improvement highlighting
+- Comprehensive markdown report
+
+### Analyzing Specific Templates
 
 For targeted performance analysis:
 

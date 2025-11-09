@@ -56,16 +56,15 @@ EXAMPLES:
     $(basename "$0") --clean
 
 USAGE AFTER COMPILATION:
-    # Run benchmark with specific version
-    \$XDG_DATA_HOME/string_pipeline/benchmarks/bench_throughput_abc1234 \\
-        --sizes 1000,5000,10000 \\
-        --iterations 100 \\
-        --output results.json
+    # Quick overall comparison with hyperfine
+    ./scripts/compare_benchmark_versions.sh abc1234 def5678 --all
 
-    # Compare two versions
-    ./bench_throughput_abc1234 [...] --output v1.json
-    ./bench_throughput_def5678 [...] --output v2.json
-    python3 scripts/compare_benchmarks.py v1.json v2.json
+    # Detailed per-template analysis with statistical confidence
+    ./scripts/analyze_all_templates.sh abc1234 def5678 --runs 100
+
+    # Analyze specific template
+    ./scripts/compare_benchmark_versions.sh abc1234 def5678 \\
+        --template "{split:/:-1}" --runs 100
 EOF
 }
 
