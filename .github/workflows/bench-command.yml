@@ -31,6 +31,7 @@ jobs:
       ref1: ${{ steps.parse.outputs.ref1 }}
       ref2: ${{ steps.parse.outputs.ref2 }}
       size: ${{ steps.parse.outputs.size }}
+      warmup: ${{ steps.parse.outputs.warmup }}
     steps:
       - name: Check if commenter is repo owner
         id: check
@@ -78,7 +79,7 @@ jobs:
           set -euo pipefail
           COMMENT="${{ github.event.comment.body }}"
 
-          # Parse command: /bench ref1 ref2 [size]
+          # Parse command: /bench ref1 ref2 [size] [warmup]
           # Remove /bench prefix and extract parameters
           PARAMS=$(echo "$COMMENT" | sed 's|^/bench[[:space:]]*||')
 
@@ -86,6 +87,7 @@ jobs:
           REF1=$(echo "$PARAMS" | awk '{print $1}')
           REF2=$(echo "$PARAMS" | awk '{print $2}')
           SIZE=$(echo "$PARAMS" | awk '{print $3}')
+          WARMUP=$(echo "$PARAMS" | awk '{print $4}')
 
           # Validate required parameters
           if [ -z "$REF1" ] || [ -z "$REF2" ]; then
@@ -94,20 +96,26 @@ jobs:
             exit 1
           fi
 
-          # Set default for optional size parameter
+          # Set defaults for optional parameters
           if [ -z "$SIZE" ] || ! [[ "$SIZE" =~ ^[0-9]+$ ]]; then
             SIZE=10000
+          fi
+
+          if [ -z "$WARMUP" ] || ! [[ "$WARMUP" =~ ^[0-9]+$ ]]; then
+            WARMUP=3
           fi
 
           echo "ref1=$REF1" >> $GITHUB_OUTPUT
           echo "ref2=$REF2" >> $GITHUB_OUTPUT
           echo "size=$SIZE" >> $GITHUB_OUTPUT
+          echo "warmup=$WARMUP" >> $GITHUB_OUTPUT
           echo "parse_failed=false" >> $GITHUB_OUTPUT
 
           echo "Parsed parameters:"
           echo "  ref1: $REF1"
           echo "  ref2: $REF2"
           echo "  size: $SIZE"
+          echo "  warmup: $WARMUP"
 
       - name: Post parse error
         if: steps.check.outputs.authorized == 'true' && steps.parse.outcome == 'failure'
@@ -124,19 +132,21 @@ jobs:
             const errorMessage = [
               '❌ **Invalid command format**',
               '',
-              '**Usage:** `/bench <ref1> <ref2> [size]`',
+              '**Usage:** `/bench <ref1> <ref2> [size] [warmup]`',
               '',
               '**Examples:**',
               '```',
               '/bench main v0.13.0',
               '/bench abc123 def456',
               '/bench main HEAD 50000',
+              '/bench main HEAD 50000 5',
               '```',
               '',
               '**Parameters:**',
               '- `ref1` (required): Baseline git reference',
               '- `ref2` (required): Current git reference',
               '- `size` (optional): Input size (default: 10000)',
+              '- `warmup` (optional): Warmup runs (default: 3)',
               '',
               '**Note:** This runs all 26 predefined templates with a single input size.',
               'For detailed per-template analysis with hyperfine, use the local tools.'
@@ -157,6 +167,7 @@ jobs:
             const ref1 = '${{ steps.parse.outputs.ref1 }}';
             const ref2 = '${{ steps.parse.outputs.ref2 }}';
             const size = '${{ steps.parse.outputs.size }}';
+            const warmup = '${{ steps.parse.outputs.warmup }}';
 
             const message = [
               '🚀 **Benchmark comparison started**',
@@ -167,6 +178,8 @@ jobs:
               '',
               '**Parameters:**',
               `- **Size**: ${size} paths`,
+              `- **Warmup**: ${warmup} runs`,
+              `- **Runs**: 10 measurements`,
               `- **Templates**: All 26 predefined templates`,
               '',
               'Results will be posted here when complete...'
@@ -449,36 +462,33 @@ jobs:
           cp target/release/bench-throughput bench-throughput-current
           echo "✓ Built current benchmark tool"
 
-      - name: Run benchmarks with hyperfine
+      - name: Run benchmarks with comparison script
         if: steps.validate.outputs.same_commit == 'false' && steps.check_baseline_tool.outputs.exists == 'true' && steps.check_current_tool.outputs.exists == 'true'
         run: |
           set -euo pipefail
           SIZE="${{ needs.check-permission.outputs.size }}"
+          WARMUP="${{ needs.check-permission.outputs.warmup }}"
+          BASELINE_SHA="${{ steps.validate.outputs.baseline_sha }}"
+          CURRENT_SHA="${{ steps.validate.outputs.current_sha }}"
+          BENCH_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/string_pipeline/benchmarks"
 
-          echo "Running hyperfine comparison..."
-          hyperfine --warmup 3 --runs 10 \
-            --export-json hyperfine_results.json \
-            --export-markdown hyperfine_results.md \
-            --command-name "baseline" \
-            "./bench-throughput-baseline --template all --size $SIZE --output benchmark_baseline.json" \
-            --command-name "current" \
-            "./bench-throughput-current --template all --size $SIZE --output benchmark_current.json"
+          # Create benchmark directory
+          mkdir -p "$BENCH_DIR"
 
-          echo "✓ Hyperfine comparison complete"
+          # Copy binaries to benchmark directory with proper names
+          cp bench-throughput-baseline "$BENCH_DIR/bench_throughput_$BASELINE_SHA"
+          cp bench-throughput-current "$BENCH_DIR/bench_throughput_$CURRENT_SHA"
 
-      - name: Compare per-template results
-        if: steps.validate.outputs.same_commit == 'false' && steps.check_baseline_tool.outputs.exists == 'true' && steps.check_current_tool.outputs.exists == 'true'
-        run: |
-          set -euo pipefail
-          # Use the comparison script from current (newer) commit
-          if [ -f scripts/compare_benchmarks.py ]; then
-            python3 scripts/compare_benchmarks.py \
-              benchmark_baseline.json \
-              benchmark_current.json > template_comparison.md
-          else
-            echo "❌ Comparison script not found"
-            exit 1
-          fi
+          # Run comparison script with --style basic for CI-friendly output
+          ./scripts/compare_benchmark_versions.sh "$BASELINE_SHA" "$CURRENT_SHA" \
+            --all \
+            --size "$SIZE" \
+            --warmup "$WARMUP" \
+            --runs 10 \
+            --style basic \
+            | tee comparison_output.txt
+
+          echo "✓ Benchmark comparison complete"
 
       - name: Post results to PR
         if: steps.validate.outputs.same_commit == 'false' && steps.check_baseline_tool.outputs.exists == 'true' && steps.check_current_tool.outputs.exists == 'true'
@@ -486,40 +496,22 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const template_comparison = fs.readFileSync('template_comparison.md', 'utf8');
-            const hyperfine_table = fs.readFileSync('hyperfine_results.md', 'utf8');
-            const baseline_ref = '${{ steps.validate.outputs.baseline_ref }}';
-            const current_ref = '${{ steps.validate.outputs.current_ref }}';
-            const baseline_sha = '${{ steps.validate.outputs.baseline_sha }}';
-            const current_sha = '${{ steps.validate.outputs.current_sha }}';
-            const size = '${{ needs.check-permission.outputs.size }}';
+            const comparison_output = fs.readFileSync('comparison_output.txt', 'utf8');
 
             const body = [
               '## 🔬 Benchmark Comparison Report',
               '',
               '**Requested by:** @${{ github.event.comment.user.login }}',
               '',
-              '**Comparison:**',
-              `- **Baseline** (older): \`${baseline_ref}\` (${baseline_sha})`,
-              `- **Current** (newer): \`${current_ref}\` (${current_sha})`,
-              '',
-              '**Parameters:**',
-              `- **Size**: ${size} paths`,
-              `- **Templates**: All 26 predefined templates`,
+              '```',
+              comparison_output.trim(),
+              '```',
               '',
               '---',
               '',
-              '### 📊 Overall Execution Time (via hyperfine)',
+              '<sub>Triggered by [/bench command](${{ github.event.comment.html_url }})</sub>',
               '',
-              hyperfine_table,
-              '',
-              '---',
-              '',
-              template_comparison,
-              '',
-              '---',
-              '',
-              '<sub>Triggered by [/bench command](${{ github.event.comment.html_url }})</sub>'
+              '**Note:** Detailed per-template JSON results are available in the [workflow artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).'
             ].join('\n');
 
             await github.rest.issues.createComment({
@@ -535,11 +527,7 @@ jobs:
         with:
           name: benchmark-comparison-${{ github.event.comment.id }}
           path: |
-            benchmark_baseline.json
-            benchmark_current.json
-            template_comparison.md
-            hyperfine_results.json
-            hyperfine_results.md
+            comparison_output.txt
             build_baseline.log
             build_current.log
           retention-days: 30

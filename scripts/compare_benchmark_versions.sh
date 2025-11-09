@@ -20,6 +20,7 @@ RUNS=50
 SIZE="10000"
 TEMPLATE="{split:/:-1}"
 ALL_MODE=false
+STYLE=""
 
 # Usage information
 usage() {
@@ -38,6 +39,7 @@ OPTIONS:
     --size SIZE         Input size (default: $SIZE)
     --template TPL      Template to benchmark (default: "$TEMPLATE")
     --all               Compare using all templates mode
+    --style STYLE       Hyperfine output style (basic|full|nocolor|color|none)
     -h, --help          Show this help message
 
 EXAMPLES:
@@ -150,6 +152,10 @@ while [ $# -gt 0 ]; do
     ALL_MODE=true
     shift
     ;;
+  --style)
+    STYLE="$2"
+    shift 2
+    ;;
   -h | --help)
     usage
     exit 0
@@ -189,9 +195,11 @@ if [ "$ALL_MODE" = true ]; then
   echo ""
 
   # All templates mode - benchmark complete tool execution
+  HYPERFINE_ARGS=(--warmup "$WARMUP" --runs "$RUNS")
+  [ -n "$STYLE" ] && HYPERFINE_ARGS+=(--style "$STYLE")
+
   hyperfine \
-    --warmup "$WARMUP" \
-    --runs "$RUNS" \
+    "${HYPERFINE_ARGS[@]}" \
     --command-name "$SHA1" \
     "$BINARY1 --template all --size $SIZE --output /dev/null" \
     --command-name "$SHA2" \
@@ -207,9 +215,11 @@ else
   echo ""
 
   # Specific template mode - hyperfine orchestrates multiple runs
+  HYPERFINE_ARGS=(--warmup "$WARMUP" --runs "$RUNS")
+  [ -n "$STYLE" ] && HYPERFINE_ARGS+=(--style "$STYLE")
+
   hyperfine \
-    --warmup "$WARMUP" \
-    --runs "$RUNS" \
+    "${HYPERFINE_ARGS[@]}" \
     --command-name "$SHA1" \
     "$BINARY1 --template '$TEMPLATE' --size $SIZE" \
     --command-name "$SHA2" \
