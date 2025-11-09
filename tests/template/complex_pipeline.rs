@@ -395,7 +395,7 @@ fn test_special_chars_pipeline() {
 
 #[test]
 fn test_escaped_pipes_pipeline() {
-    let result = process("test", r"{replace:s/test/a|b/|split:|:..|join:-}");
+    let result = process("test", r"{replace:s/test/a|b/|split:\|:..|join:-}");
     assert_eq!(result.unwrap(), "a-b");
 }
 

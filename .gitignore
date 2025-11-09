@@ -1,1 +1,7 @@
 /target
+
+# Benchmark results
+bench_results.json
+benchmark_results.json
+benchmark_results.txt
+comparison.md

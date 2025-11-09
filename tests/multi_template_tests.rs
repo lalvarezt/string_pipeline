@@ -55,7 +55,7 @@ fn test_multi_template_caching_optimization() {
 fn test_multi_template_different_separators() {
     // Test multiple template sections with different separators
     let template =
-        MultiTemplate::parse("Comma: {split:,:0} Space: {split: :1} Pipe: {split:|:0}").unwrap();
+        MultiTemplate::parse("Comma: {split:,:0} Space: {split: :1} Pipe: {split:\\|:0}").unwrap();
     let result = template.format("a,b c|d").unwrap();
     assert_eq!(result, "Comma: a Space: c|d Pipe: a,b c");
 }

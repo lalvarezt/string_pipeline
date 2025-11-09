@@ -217,9 +217,8 @@ jobs:
            zsh xz-utils liblz4-tool musl-tools brotli zstd
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: nightly
           target: ${{ matrix.target }}
 
       # for some reason, the above action doesn't seem to set the target correctly
