@@ -496,9 +496,9 @@ jobs:
             --warmup "$WARMUP" \
             --runs "$RUNS" \
             --export-markdown comparison_results.md \
-            --command-name "$BASELINE_SHA" \
+            --command-name "baseline ($BASELINE_SHA)" \
             "./bench-throughput-baseline --template all --size $SIZE --output /dev/null" \
-            --command-name "$CURRENT_SHA" \
+            --command-name "current ($CURRENT_SHA)" \
             "./bench-throughput-current --template all --size $SIZE --output /dev/null"
 
           echo "✓ Benchmark comparison complete"
@@ -522,16 +522,22 @@ jobs:
               '**Requested by:** @${{ github.event.comment.user.login }}',
               '',
               '**Configuration:**',
-              `- **Baseline:** \`${baseline_sha}\``,
-              `- **Current:** \`${current_sha}\``,
-              `- **Size:** ${size} paths`,
+              `- **Baseline (older):** \`${baseline_sha}\``,
+              `- **Current (newer):** \`${current_sha}\``,
+              `- **Test:** All 26 predefined templates`,
+              `- **Input size:** ${size} paths per run`,
               `- **Warmup:** ${warmup} runs`,
-              `- **Runs:** ${runs} measurements`,
-              `- **Templates:** All 26 predefined templates`,
+              `- **Measurements:** ${runs} runs`,
               '',
               '**Results:**',
               '',
               comparison_results.trim(),
+              '',
+              '> **Interpretation:**',
+              '> - **Mean**: Average execution time across all runs',
+              '> - **Min/Max**: Fastest and slowest runs observed',
+              '> - **Relative**: Speed comparison (1.00 = baseline, <1.00 = faster, >1.00 = slower)',
+              '> - Each run processes all 26 templates on ${size} generated paths',
               '',
               '---',
               '',
