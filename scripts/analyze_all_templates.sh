@@ -11,7 +11,7 @@ usage() {
   cat <<EOF
 Usage: $(basename "$0") <baseline-sha> <current-sha> [options]
 
-Analyze all 26 predefined templates with statistical confidence.
+Analyze all 34 predefined templates with statistical confidence.
 
 Arguments:
   baseline-sha    Git SHA/ref for baseline version
@@ -98,34 +98,46 @@ fi
 # Create export directory
 mkdir -p "$EXPORT_DIR"
 
-# All 26 predefined templates (from bench-throughput.rs TemplateSet)
+# All 34 predefined templates (from bench-throughput.rs TemplateSet)
+# Organized by operation type: String ops, Split ops, List ops, Complex chains
 TEMPLATES=(
-  "{split:/:..}"
-  "{split:/:-1}"
-  "{split:/:..|join:/}"
-  "{split:/:-1|upper}"
-  "{split:/:-1|lower}"
-  "{split:/:-1|trim}"
+  # String Operations (direct, no split needed)
+  "{upper}"
+  "{lower}"
+  "{trim}"
+  "{trim:left}"
+  "{substring:0..10}"
+  "{substring:-5..}"
+  "{reverse}"
+  "{append:!!!}"
+  "{prepend:>>>}"
+  "{surround:**}"
+  "{pad:50: :right}"
+  "{pad:50:0:left}"
   "{replace:s/\\.txt$/.md/}"
   "{replace:s/\\/\\/+/\\//g}"
-  "{split:/:-1|substring:0..10}"
-  "{split:/:-1|reverse}"
-  "{strip_ansi}"
-  "{split:/:..|filter:^[a-z]|join:/}"
-  "{split:/:..|sort|join:/}"
-  "{split:/:..|unique|join:/}"
-  "{split:/:-1|pad:50: :right}"
-  "{split:/:-1}"
-  "{split:/:0..-1|join:/}"
-  "{split:/:-1|split:.:0}"
-  "{split:/:-1|split:.:-1}"
   "{regex_extract:[^/]+$}"
+  "{strip_ansi}"
+  # Split Operations
+  "{split:/:..}"
+  "{split:/:-1}"
+  "{split:/:0..-1}"
+  # List Operations (require split first)
+  "{split:/:..|join:/}"
+  "{split:,:..|filter:^[a-z]}"
+  "{split:,:..|filter_not:^\\.}"
+  "{split:,:..|sort}"
+  "{split:,:..|sort:desc}"
+  "{split:,:..|unique}"
+  "{split:,:..|slice:1..3}"
+  "{split:,:..|slice:-3..}"
+  "{split:,:..|map:{upper}}"
+  "{split:,:..|map:{trim|lower}}"
+  # Complex Chains
+  "{trim|upper|pad:20}"
+  "{split:/:..|filter:^[a-z]|sort|join:-}"
   "{split:/:..|map:{upper}|join:/}"
-  "{split:/:1..|join:/}"
-  "{split:/:..|take:3|join:/}"
-  "{split:/:..|filter:^[^\\.]|join:/}"
-  "{split:/:0..-1|join:_}"
-  "{split:/:-1|substring:0..5}...{split:/:-1|substring:-5}"
+  "{split:/:-1|split:.:0}"
 )
 
 # Convert array to comma-separated list for hyperfine
@@ -136,7 +148,7 @@ echo "Per-Template Benchmark Analysis"
 echo "========================================="
 echo "Baseline:    $BASELINE_SHA"
 echo "Current:     $CURRENT_SHA"
-echo "Templates:   26 predefined templates"
+echo "Templates:   34 predefined templates"
 echo "Input size:  $SIZE paths"
 echo "Warmup:      $WARMUP runs"
 echo "Runs:        $RUNS measurements"

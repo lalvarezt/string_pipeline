@@ -170,52 +170,56 @@ impl PathGenerator {
     }
 }
 
-/// Comprehensive template set covering all operations and real-world use cases
+/// Comprehensive template set with proper coverage for all operation types.
+/// Organizes templates into three categories:
+/// - String operations (direct, no split needed)
+/// - Split operations
+/// - List operations (require split first, use map:{upper} for secondary ops)
 struct TemplateSet;
 
 impl TemplateSet {
     fn get_templates() -> Vec<(&'static str, &'static str)> {
         vec![
-            // Core individual operations
-            ("Split all", "{split:/:..}"),
-            ("Split last index", "{split:/:-1}"),
-            ("Join", "{split:/:..|join:/}"),
-            ("Upper", "{split:/:-1|upper}"),
-            ("Lower", "{split:/:-1|lower}"),
-            ("Trim", "{split:/:-1|trim}"),
+            // ===== String Operations (direct, no split needed) =====
+            ("Upper", "{upper}"),
+            ("Lower", "{lower}"),
+            ("Trim", "{trim}"),
+            ("Trim left", "{trim:left}"),
+            ("Substring range", "{substring:0..10}"),
+            ("Substring negative", "{substring:-5..}"),
+            ("Reverse string", "{reverse}"),
+            ("Append", "{append:!!!}"),
+            ("Prepend", "{prepend:>>>}"),
+            ("Surround", "{surround:**}"),
+            ("Pad right", "{pad:50: :right}"),
+            ("Pad left", "{pad:50:0:left}"),
             ("Replace simple", "{replace:s/\\.txt$/.md/}"),
-            ("Replace complex", "{replace:s/\\/\\/+/\\//g}"),
-            ("Substring", "{split:/:-1|substring:0..10}"),
-            ("Reverse", "{split:/:-1|reverse}"),
+            ("Replace global", "{replace:s/\\/\\/+/\\//g}"),
+            ("Regex extract", "{regex_extract:[^/]+$}"),
             ("Strip ANSI", "{strip_ansi}"),
-            ("Filter", "{split:/:..|filter:^[a-z]|join:/}"),
-            ("Sort", "{split:/:..|sort|join:/}"),
-            ("Unique", "{split:/:..|unique|join:/}"),
-            ("Pad", "{split:/:-1|pad:50: :right}"),
-            // Real-world path templates (television use cases)
-            ("Extract filename", "{split:/:-1}"),
-            ("Extract directory", "{split:/:0..-1|join:/}"),
-            ("Basename no ext", "{split:/:-1|split:.:0}"),
-            ("File extension", "{split:/:-1|split:.:-1}"),
-            ("Regex extract filename", "{regex_extract:[^/]+$}"),
-            (
-                "Uppercase all components",
-                "{split:/:..|map:{upper}|join:/}",
-            ),
-            ("Remove hidden dirs", "{split:/:..|filter_not:^\\.|join:/}"),
-            ("Normalize filename", "{split:/:-1|trim|lower}"),
-            ("Slug generation", "{replace:s/ /_/g|lower}"),
-            ("Breadcrumb last 3", "{split:/:..|slice:-3..|join: > }"),
-            // Complex chains
-            ("Chain: trim+upper+pad", "{split:/:-1|trim|upper|pad:20}"),
-            (
-                "Chain: split+filter+sort+join",
-                "{split:/:..|filter:^[a-z]|sort|join:-}",
-            ),
-            (
-                "Chain: map complex",
-                "{split:/:..|map:{trim|lower|replace:s/_/-/g}|join:/}",
-            ),
+
+            // ===== Split Operations =====
+            ("Split all", "{split:/:..}"),
+            ("Split last", "{split:/:-1}"),
+            ("Split range", "{split:/:0..-1}"),
+
+            // ===== List Operations (require split first) =====
+            ("Join", "{split:/:..|join:/}"),
+            ("Filter", "{split:,:..|filter:^[a-z]}"),
+            ("Filter not", "{split:,:..|filter_not:^\\.}"),
+            ("Sort", "{split:,:..|sort}"),
+            ("Sort desc", "{split:,:..|sort:desc}"),
+            ("Unique", "{split:,:..|unique}"),
+            ("Slice range", "{split:,:..|slice:1..3}"),
+            ("Slice negative", "{split:,:..|slice:-3..}"),
+            ("Map upper", "{split:,:..|map:{upper}}"),
+            ("Map complex", "{split:,:..|map:{trim|lower}}"),
+
+            // ===== Complex Chains =====
+            ("Chain string ops", "{trim|upper|pad:20}"),
+            ("Chain list ops", "{split:/:..|filter:^[a-z]|sort|join:-}"),
+            ("Map + join", "{split:/:..|map:{upper}|join:/}"),
+            ("Nested split", "{split:/:-1|split:.:0}"),
         ]
     }
 }
