@@ -76,34 +76,86 @@ The benchmark system uses an **on-demand approach** triggered via PR comments. T
 
 ## Files
 
-### `compare_benchmarks.py`
+### `analyze_all_templates.sh`
 
-Python script that compares two benchmark JSON files and generates a markdown report.
+**New in v2.0.0**: Comprehensive per-template analysis script using hyperfine's `--parameter-list`.
 
-**For local use only** - CI/CD uses hyperfine directly via `compare_benchmark_versions.sh`.
-
-**Updated for v2.0.0**: Simplified to compare `avg_time_per_path` and `throughput` only (no more p95/p99/stddev).
+Efficiently benchmarks all 26 predefined templates with full statistical confidence by running hyperfine twice (once per version) instead of 26 times.
 
 **Usage:**
 
 ```bash
-python3 scripts/compare_benchmarks.py baseline.json current.json > report.md
+./scripts/analyze_all_templates.sh <baseline-sha> <current-sha> [options]
+
+Options:
+  --size <n>       Input size in paths (default: 10000)
+  --warmup <n>     Warmup runs (default: 5)
+  --runs <n>       Benchmark runs (default: 50)
+  --export-dir     Output directory (default: ./template_analysis)
 ```
 
 **Features:**
 
-- Detects performance regressions (>10% slower)
-- Highlights improvements (>5% faster)
-- Compares avg/path latency and throughput
-- Color-coded indicators:
-  - 🟢 Significant improvement (>5% faster)
-  - ✅ Improvement (2-5% faster)
-  - ➖ Neutral (<2% change)
-  - 🟡 Caution (2-5% slower)
-  - ⚠️ Warning (5-10% slower)
-  - 🔴 Regression (>10% slower)
+- Uses hyperfine's `--parameter-list` to iterate over all templates
+- Two-pass approach: runs hyperfine once for baseline, once for current
+- Generates comprehensive comparison report with statistical data
+- Much faster than running hyperfine 26 separate times
+- Full mean/min/max/stddev for every template
 
-**Note:** For statistical confidence intervals, use hyperfine locally (see `compare_benchmark_versions.sh`).
+**Output:**
+- Hyperfine JSON files with complete statistical data
+- Markdown report with per-template comparison
+- Highlights regressions and improvements
+
+**Workflow integration:**
+```bash
+# 1. Compile versions
+./scripts/compile_benchmark_versions.sh abc1234 def5678
+
+# 2. Run comprehensive analysis
+./scripts/analyze_all_templates.sh abc1234 def5678 --runs 100
+
+# 3. View results
+cat template_analysis/comparison_report.md
+```
+
+### `compare_template_results.py`
+
+Helper script that parses hyperfine JSON outputs and generates per-template comparison reports.
+
+Called automatically by `analyze_all_templates.sh` - you typically won't run this directly.
+
+**Features:**
+
+- Parses hyperfine JSON format (mean, stddev, min, max)
+- Generates markdown tables with statistical data
+- Detects regressions and improvements
+- Highlights templates with high variance
+- Color-coded indicators based on change magnitude
+
+### `compare_benchmarks.py`
+
+**⚠️ DEPRECATED**: This script compares single-run JSON outputs from `bench-throughput`.
+
+**Why deprecated:**
+- Single-run measurements lack statistical confidence
+- Cannot distinguish noise from real performance changes
+- Superseded by `analyze_all_templates.sh` which uses hyperfine
+- Conflicts with v2.0.0 philosophy (hyperfine for benchmarking)
+
+**Migration:**
+```bash
+# Old approach (unreliable)
+bench-throughput --template all --output baseline.json
+bench-throughput --template all --output current.json
+python3 scripts/compare_benchmarks.py baseline.json current.json
+
+# New approach (statistically sound)
+./scripts/compile_benchmark_versions.sh baseline current
+./scripts/analyze_all_templates.sh baseline current
+```
+
+**Status:** Kept for backward compatibility but not recommended. May be removed in future versions.
 
 ## GitHub Actions Workflow
 
@@ -139,47 +191,65 @@ The single workflow that handles all benchmark comparisons.
 
 ## Running Benchmarks Locally
 
-### Quick All-Templates Run
+### Quick Single-Template Test
 
 ```bash
 cargo build --release --bin bench-throughput
 
-# All templates, default size
-./target/release/bench-throughput --template all --size 10000
+# Single template, single run (quick smoke test)
+./target/release/bench-throughput --template "{split:/:-1}" --size 10000
 
-# Custom size
-./target/release/bench-throughput --template all --size 50000 --output my_benchmark.json
+# With JSON output for inspection
+./target/release/bench-throughput --template all --size 10000 --output my_benchmark.json
 ```
 
-###Compare two benchmark runs
-```bash
-# Run baseline
-./target/release/bench-throughput --template all --size 10000 --output baseline.json
+### Statistical Analysis with Hyperfine
 
-# Make code changes...
-
-# Run current
-./target/release/bench-throughput --template all --size 10000 --output current.json
-
-# Compare
-python3 scripts/compare_benchmarks.py baseline.json current.json
-```
-
-### Detailed Per-Template Analysis with Hyperfine
-
-For statistical confidence on specific templates:
+For reliable performance measurements, always use hyperfine:
 
 ```bash
-# Single template with hyperfine
+# Quick overall check (all 26 templates in one run)
+hyperfine --warmup 5 --runs 50 \
+  './target/release/bench-throughput --template all --size 10000 --output /dev/null'
+
+# Detailed analysis of specific template
 hyperfine --warmup 10 --runs 100 \
-  'cargo run --release --bin bench-throughput -- \
-    --template "{split:/:-1}" --size 10000'
-
-# Compare two versions of a specific template
-./scripts/compare_benchmark_versions.sh <sha1> <sha2> \
-  --template "{split:/:-1}" \
-  --warmup 10 --runs 100
+  './target/release/bench-throughput --template "{split:/:-1}" --size 10000 --output /dev/null'
 ```
+
+### Per-Template Detailed Analysis
+
+**New in v2.0.0**: Analyze all 26 templates with full statistical confidence using a single command:
+
+```bash
+# First, compile the versions you want to compare
+./scripts/compile_benchmark_versions.sh abc1234 def5678
+
+# Run comprehensive per-template analysis
+./scripts/analyze_all_templates.sh abc1234 def5678
+
+# With custom parameters
+./scripts/analyze_all_templates.sh abc1234 def5678 \
+  --size 50000 \
+  --runs 100 \
+  --export-dir ./my_analysis
+```
+
+**What it does:**
+1. Runs hyperfine with `--parameter-list` on ALL 26 templates (baseline version)
+2. Runs hyperfine with `--parameter-list` on ALL 26 templates (current version)
+3. Generates comprehensive markdown report comparing each template
+
+**Output:**
+- `template_analysis/baseline_results.json` - Full hyperfine statistics for baseline
+- `template_analysis/current_results.json` - Full hyperfine statistics for current
+- `template_analysis/comparison_report.md` - Per-template comparison with:
+  - Mean execution time and change percentage
+  - Min/Max/StdDev for each template
+  - Regression/improvement highlighting
+  - Statistical confidence metrics
+
+**Efficiency:** Instead of running hyperfine 26 times (one per template), this runs it **twice** (once per version) and compares the results. Much faster!
 
 ## Version Comparison Workflow
 

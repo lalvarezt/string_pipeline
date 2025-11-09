@@ -1,7 +1,18 @@
 #!/usr/bin/env python3
 """
+⚠️ DEPRECATED: This script is deprecated and may be removed in future versions.
+
 Compare benchmark results and generate a markdown report.
 Detects performance regressions and improvements.
+
+DEPRECATION NOTICE:
+This script compares single-run JSON outputs from bench-throughput, which lacks
+statistical confidence. It cannot distinguish noise from real performance changes.
+
+RECOMMENDED ALTERNATIVE:
+Use analyze_all_templates.sh which runs hyperfine with statistical analysis:
+    ./scripts/compile_benchmark_versions.sh baseline current
+    ./scripts/analyze_all_templates.sh baseline current
 
 Updated for bench-throughput v2.0.0:
 - Removed latency_stats (p95, p99, stddev) - no longer available
