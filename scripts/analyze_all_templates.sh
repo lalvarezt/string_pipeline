@@ -11,7 +11,7 @@ usage() {
   cat <<EOF
 Usage: $(basename "$0") <baseline-sha> <current-sha> [options]
 
-Analyze all 30 predefined templates with statistical confidence.
+Analyze all 38 predefined templates with statistical confidence.
 
 Arguments:
   baseline-sha    Git SHA/ref for baseline version
@@ -98,43 +98,48 @@ fi
 # Create export directory
 mkdir -p "$EXPORT_DIR"
 
-# All 30 predefined templates (from bench-throughput.rs TemplateSet)
-# Designed for path data - realistic path manipulation operations
+# Comprehensive template set covering all operation types
 TEMPLATES=(
   # String Operations (direct, no split needed)
   "{upper}"
   "{lower}"
   "{reverse}"
+  "{trim}"
+  "{trim:left}"
+  "{trim:right}"
+  "{substring:0..10}"
+  "{substring:-5..}"
+  "{append:.bak}"
+  "{prepend:backup_}"
+  "{surround:\"}"
+  "{pad:80: :right}"
+  "{pad:80:0:left}"
   "{replace:s/\\.txt$/.md/}"
   "{replace:s/\\/\\/+/\\//g}"
   "{regex_extract:[^/]+$}"
   "{strip_ansi}"
-  "{trim}"
-  "{pad:80: :right}"
-  "{pad:80:_:left}"
   # Split Operations
   "{split:/:..}"
   "{split:/:-1}"
   "{split:/:0..-1}"
   "{split:/:0..3}"
-  # List Operations on path components
+  # List Operations (with split)
   "{split:/:..|join:/}"
   "{split:/:..|filter:^[a-z]+$}"
   "{split:/:..|filter_not:^\\.}"
   "{split:/:..|sort}"
   "{split:/:..|sort:desc}"
+  "{split:/:..|reverse}"
   "{split:/:..|unique}"
   "{split:/:..|slice:2..5}"
   "{split:/:..|slice:-3..}"
   "{split:/:..|map:{upper}}"
   "{split:/:..|map:{trim}}"
-  # Real-world path manipulation
+  # Complex Chains
+  "{trim|upper|pad:20}"
+  "{split:/:..|filter:^[a-z]+$|sort|join:-}"
   "{split:/:-1|split:.:0}"
-  "{split:/:-1|split:.:-1}"
-  "{split:/:0..-1|join:/}"
   "{split:/:..|map:{upper}|join:/}"
-  "{replace:s/\\/\\/+/\\//g|lower}"
-  "{split:/:..|slice:-3..|join: > }"
 )
 
 # Convert array to comma-separated list for hyperfine
@@ -145,7 +150,7 @@ echo "Per-Template Benchmark Analysis"
 echo "========================================="
 echo "Baseline:    $BASELINE_SHA"
 echo "Current:     $CURRENT_SHA"
-echo "Templates:   30 predefined templates"
+echo "Templates:   38 predefined templates"
 echo "Input size:  $SIZE paths"
 echo "Warmup:      $WARMUP runs"
 echo "Runs:        $RUNS measurements"
