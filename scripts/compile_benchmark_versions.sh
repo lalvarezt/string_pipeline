@@ -8,7 +8,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BENCH_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/string_pipeline/benchmarks"
-DEFAULT_START_COMMIT="HEAD~10"
+DEFAULT_START_COMMIT="5e028194"
 VERBOSE=0
 DRY_RUN=0
 
