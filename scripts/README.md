@@ -65,19 +65,22 @@ The benchmark system uses an **on-demand approach** triggered via PR comments. T
 6. **Run with hyperfine**:
    - 5 warmup runs
    - 50 measurement runs
-   - Statistical analysis of execution time
-7. **Compare results**:
-   - Hyperfine overall execution time comparison
-   - Per-template breakdown from JSON
-8. **Results posted** as PR comment with detailed comparison
-9. **Success reaction** 🚀 (or 😕 on failure)
-10. **Artifacts uploaded** for 30 days
+   - Tests all 26 templates in each run
+   - Statistical analysis of total execution time
+7. **Results posted** as PR comment with hyperfine comparison
+   - Mean execution time for each version
+   - Standard deviation, min/max ranges
+   - Relative speed comparison (e.g., "1.05x faster")
+8. **Success reaction** 🚀 (or 😕 on failure)
+9. **Artifacts uploaded** for 30 days
 
 ## Files
 
 ### `compare_benchmarks.py`
 
 Python script that compares two benchmark JSON files and generates a markdown report.
+
+**For local use only** - CI/CD uses hyperfine directly via `compare_benchmark_versions.sh`.
 
 **Updated for v2.0.0**: Simplified to compare `avg_time_per_path` and `throughput` only (no more p95/p99/stddev).
 
@@ -119,21 +122,19 @@ The single workflow that handles all benchmark comparisons.
 2. **Installs** hyperfine for statistical benchmarking
 3. **Checks** both refs for benchmark tool existence
 4. **Builds** the benchmark tool for each ref
-5. **Runs** benchmarks with hyperfine (5 warmup + 50 runs)
-6. **Compares** results using both:
-   - Hyperfine's overall execution time analysis
-   - Per-template comparison via `compare_benchmarks.py`
-7. **Posts** detailed report to PR
-8. **Uploads** artifacts (results + build logs)
+5. **Runs** benchmarks with hyperfine directly
+   - 5 warmup runs + 50 measurement runs
+   - All 26 templates mode (single execution time per run)
+   - Statistical analysis and comparison from hyperfine
+   - Results exported as markdown table
+6. **Posts** detailed report to PR with markdown table
+7. **Uploads** artifacts (markdown results + build logs)
 
 **Artifacts:**
 
 - **benchmark-comparison-<comment_id>**
-  - Both benchmark JSON files (per-template data)
-  - Hyperfine JSON results (statistical timing data)
-  - Hyperfine markdown table
-  - Per-template comparison markdown
-  - Build logs for debugging
+  - Hyperfine comparison results (markdown table)
+  - Build logs for both refs (baseline and current)
   - Retained for 30 days
 
 ## Running Benchmarks Locally
