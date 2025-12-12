@@ -798,9 +798,8 @@ pub mod strip_ansi_operations {
         assert_eq!(process("", "{strip_ansi}").unwrap(), "");
 
         // Only ANSI sequences
-        // TODO: fast_strip_ansi doesn't handle this edge case correctly
-        // let input = "\x1b[31m\x1b[1m\x1b[0m";
-        // assert_eq!(process(input, "{strip_ansi}").unwrap(), "");
+        let input = "\x1b[31m\x1b[1m\x1b[0m";
+        assert_eq!(process(input, "{strip_ansi}").unwrap(), "");
 
         // Malformed ANSI sequences (should still work)
         let input = "\x1b[99mText\x1b[";
