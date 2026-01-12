@@ -225,7 +225,6 @@ cargo build --release --bin bench
 [📖 Template System](docs/template-system.md)
 [⚙️  CLI Options & Usage](docs/command-line-options.md)
 [🔍 Comprehensive Debug System Guide](docs/debug-system.md)
-[📊 Performance Benchmarking Guide](docs/benchmarking.md)
 
 ## 🤝 Contributing
 
