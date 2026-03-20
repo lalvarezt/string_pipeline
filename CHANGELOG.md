@@ -3,6 +3,15 @@
 All notable changes to this project will be documented in this file.
 <!-- ignore lint rules that are often triggered by content generated from commits / git-cliff -->
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style -->
+## [0.13.1](https://github.com/lalvarezt/string_pipeline/compare/0.13.0..0.13.1) - 2026-03-20
+
+### 🐛 Bug Fixes
+
+- *(lib)* Update to latest fast-strip-ansi, issue with only ansi strings is solved - ([0ef8ff7](https://github.com/lalvarezt/string_pipeline/commit/0ef8ff7a1f48232b0ae2e0df6ceda099841ba184))
+
+### 📚 Documentation
+
+- Remove AI boilerplate - ([8f752d2](https://github.com/lalvarezt/string_pipeline/commit/8f752d2c179f6c0f18edd93e03b86566f7d02b8b))
 ## [0.13.0](https://github.com/lalvarezt/string_pipeline/compare/0.12.0..0.13.0) - 2025-11-04
 
 ### ⛰️  Features
