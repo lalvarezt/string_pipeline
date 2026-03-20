@@ -9,7 +9,10 @@ use string_pipeline::Template;
 // -----------------------------------------------------------------------------
 
 const SMALL_INPUT: &str = "apple,banana,cherry,date,elderberry,fig,grape,honeydew,kiwi,lemon";
+const PADDED_SMALL_INPUT: &str = " apple , banana , cherry , date , elderberry ";
+const USER_RECORD: &str = "john doe admin@example.com";
 static LARGE_INPUT: Lazy<String> = Lazy::new(|| SMALL_INPUT.repeat(1_000)); // ~600 KB
+static LARGE_MAP_INPUT: Lazy<String> = Lazy::new(|| PADDED_SMALL_INPUT.repeat(1_000));
 
 // -----------------------------------------------------------------------------
 // 1. Parsing Benchmarks – How fast can we compile templates?
@@ -17,13 +20,16 @@ static LARGE_INPUT: Lazy<String> = Lazy::new(|| SMALL_INPUT.repeat(1_000)); // ~
 
 fn bench_parsing(c: &mut Criterion) {
     let cases = [
-        ("simple", "{upper}"),
-        ("medium", "{split:,:..|join: }"),
+        ("single_block_simple", "{upper}"),
+        ("single_block_chain", "{split:,:..|map:{trim|upper}|join:,}"),
         (
-            "complex",
+            "multi_section",
+            "User: {split: :0} Email: {split: :1} Fruits: {split:,:..|sort|join:\\|}",
+        ),
+        (
+            "complex_nested",
             "{split:,:..|filter:^[a-m]|map:{trim|upper|substring:0..3}|sort|join:,}",
         ),
-        ("nested_map", "{split:,:..|map:{split:_:..|reverse}|join: }"),
     ];
 
     let mut group = c.benchmark_group("template_parsing");
@@ -42,14 +48,30 @@ fn bench_parsing(c: &mut Criterion) {
 fn bench_execution(c: &mut Criterion) {
     // (id, template, input)
     let cases = [
+        ("single_block_upper_small", "{upper}", SMALL_INPUT),
         ("split_join_small", "{split:,:..|join: }", SMALL_INPUT),
         ("split_join_large", "{split:,:..|join: }", &LARGE_INPUT),
+        (
+            "multi_section_format",
+            "Name: {split: :0} Surname: {split: :1}",
+            USER_RECORD,
+        ),
+        (
+            "repeated_split_sections",
+            "First: {split:,:0} Second: {split:,:1} Third: {split:,:2}",
+            SMALL_INPUT,
+        ),
         (
             "filter_sort",
             "{split:,:..|filter:^[a-m]|sort|join:,}",
             SMALL_INPUT,
         ),
         ("map_upper", "{split:,:..|map:{upper}|join:,}", SMALL_INPUT),
+        (
+            "map_trim_upper_large",
+            "{split:,:..|map:{trim|upper}|join:,}",
+            &LARGE_MAP_INPUT,
+        ),
         (
             "complex_nested",
             "{split:,:..|filter:^[a-m]|map:{reverse|upper}|sort|join:,}",
@@ -67,28 +89,23 @@ fn bench_execution(c: &mut Criterion) {
 }
 
 // -----------------------------------------------------------------------------
-// 3. Cache Effectiveness – First run vs subsequent runs
+// 3. Structured inputs – multi-section formatting with per-section inputs
 // -----------------------------------------------------------------------------
 
-fn bench_caching(c: &mut Criterion) {
-    let tpl_str = "{split:,:..|filter:a|join:,}";
-    let tpl = Template::parse(tpl_str).unwrap();
+fn bench_structured_inputs(c: &mut Criterion) {
+    let tpl = Template::parse("Users: {upper} | Files: {lower}").unwrap();
+    let user_inputs = ["john doe", "jane smith", "peter parker"];
+    let file_inputs = ["FILE1.TXT", "FILE2.TXT", "FILE3.TXT"];
+    let inputs: [&[&str]; 2] = [&user_inputs, &file_inputs];
+    let separators = [" ", ","];
 
-    let mut group = c.benchmark_group("cache_effect");
-
-    // Measure first-call cost (cold caches)
-    group.bench_function("first_call", |b| {
-        b.iter(|| tpl.format(black_box(SMALL_INPUT)).unwrap())
+    let mut group = c.benchmark_group("structured_inputs");
+    group.bench_function("format_with_inputs", |b| {
+        b.iter(|| {
+            tpl.format_with_inputs(black_box(&inputs), black_box(&separators))
+                .unwrap()
+        })
     });
-
-    // Warm the caches once
-    let _ = tpl.format(SMALL_INPUT).unwrap();
-
-    // Measure subsequent calls (hot caches)
-    group.bench_function("subsequent_calls", |b| {
-        b.iter(|| tpl.format(black_box(SMALL_INPUT)).unwrap())
-    });
-
     group.finish();
 }
 
@@ -102,6 +119,6 @@ criterion_group! {
         .configure_from_args()
         .sample_size(200)
         .measurement_time(Duration::from_secs(5));
-    targets = bench_parsing, bench_execution, bench_caching
+    targets = bench_parsing, bench_execution, bench_structured_inputs
 }
 criterion_main!(benches);
