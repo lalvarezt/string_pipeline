@@ -51,6 +51,7 @@ use std::hash::{Hash, Hasher};
 
 use crate::pipeline::get_cached_split;
 use crate::pipeline::{DebugTracer, RangeSpec, StringOp, apply_ops_internal, apply_range, parser}; // ← use global split cache
+use memchr::memchr_iter;
 
 /* ------------------------------------------------------------------------ */
 /*  MultiTemplate – the single implementation                               */
@@ -891,6 +892,23 @@ impl MultiTemplate {
             return Ok(self.fast_single_split(input, sep, range));
         }
 
+        /* fast path: split + join over the full input ------------------- */
+        if ops.len() == 2
+            && let [
+                StringOp::Split {
+                    sep: split_sep,
+                    range,
+                },
+                StringOp::Join { sep: join_sep },
+            ] = ops
+            && Self::is_full_range(range)
+        {
+            if let Some(t) = dbg {
+                t.cache_operation("FAST SPLIT+JOIN", "direct separator rewrite");
+            }
+            return Ok(self.fast_split_join(input, split_sep, join_sep));
+        }
+
         /* general path – memoised per call ------------------------------ */
 
         let key = CacheKey {
@@ -928,6 +946,40 @@ impl MultiTemplate {
             1 => selected[0].clone(),
             _ => selected.join(sep),
         }
+    }
+
+    #[inline]
+    fn fast_split_join(&self, input: &str, split_sep: &str, join_sep: &str) -> String {
+        if split_sep.is_empty() || split_sep == join_sep {
+            return input.to_string();
+        }
+
+        if split_sep.len() == 1 {
+            let split_byte = split_sep.as_bytes()[0];
+            let estimated_len = if join_sep.len() == 1 {
+                input.len()
+            } else {
+                let replacements = memchr_iter(split_byte, input.as_bytes()).count();
+                input.len() + replacements.saturating_mul(join_sep.len().saturating_sub(1))
+            };
+
+            let mut result = String::with_capacity(estimated_len);
+            let mut start = 0usize;
+            for idx in memchr_iter(split_byte, input.as_bytes()) {
+                result.push_str(&input[start..idx]);
+                result.push_str(join_sep);
+                start = idx + 1;
+            }
+            result.push_str(&input[start..]);
+            result
+        } else {
+            input.replace(split_sep, join_sep)
+        }
+    }
+
+    #[inline]
+    fn is_full_range(range: &RangeSpec) -> bool {
+        matches!(range, RangeSpec::Range(None, None, false))
     }
 
     fn format_operations_summary(ops: &[StringOp]) -> String {
