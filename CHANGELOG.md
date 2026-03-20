@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style -->
 ## [0.13.1](https://github.com/lalvarezt/string_pipeline/compare/0.13.0..0.13.1) - 2026-03-20
 
+### ⛰️  Features
+
+- *(bench)* Add performance benchmark baseline - ([bde39bd](https://github.com/lalvarezt/string_pipeline/commit/bde39bdd6f7a76d09711bce6ded00da9e8510069))
+
 ### 🐛 Bug Fixes
 
 - *(lib)* Update to latest fast-strip-ansi, issue with only ansi strings is solved - ([0ef8ff7](https://github.com/lalvarezt/string_pipeline/commit/0ef8ff7a1f48232b0ae2e0df6ceda099841ba184))
@@ -12,6 +16,12 @@ All notable changes to this project will be documented in this file.
 ### 📚 Documentation
 
 - Remove AI boilerplate - ([8f752d2](https://github.com/lalvarezt/string_pipeline/commit/8f752d2c179f6c0f18edd93e03b86566f7d02b8b))
+
+### ⚡ Performance
+
+- Optimize template execution hot path - ([bde39bd](https://github.com/lalvarezt/string_pipeline/commit/bde39bdd6f7a76d09711bce6ded00da9e8510069))
+- Optimize split join fast path - ([bde39bd](https://github.com/lalvarezt/string_pipeline/commit/bde39bdd6f7a76d09711bce6ded00da9e8510069))
+
 ## [0.13.0](https://github.com/lalvarezt/string_pipeline/compare/0.12.0..0.13.0) - 2025-11-04
 
 ### ⛰️  Features
