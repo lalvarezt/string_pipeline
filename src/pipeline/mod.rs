@@ -357,7 +357,7 @@ pub(crate) enum Value {
 /// [`Append`]: StringOp::Append
 /// [`Prepend`]: StringOp::Prepend
 /// [`StripAnsi`]: StringOp::StripAnsi
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash)]
 pub enum StringOp {
     /// Split a string by separator and optionally select a range of parts.
     ///
@@ -908,7 +908,7 @@ pub enum StringOp {
 ///
 /// [`Index`]: RangeSpec::Index
 /// [`Range`]: RangeSpec::Range
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash)]
 pub enum RangeSpec {
     /// Select a single item by index.
     ///
@@ -945,7 +945,7 @@ pub enum RangeSpec {
 /// Direction for trimming operations.
 ///
 /// Specifies which end(s) of a string to trim characters from.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash)]
 pub enum TrimDirection {
     /// Trim from both ends (default).
     Both,
@@ -958,7 +958,7 @@ pub enum TrimDirection {
 /// Direction for sorting operations.
 ///
 /// Specifies the order for sorting list items.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash)]
 pub enum SortDirection {
     /// Ascending order (A to Z).
     Asc,
@@ -969,7 +969,7 @@ pub enum SortDirection {
 /// Direction for padding operations.
 ///
 /// Specifies where to add padding characters to reach target width.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash)]
 pub enum PadDirection {
     /// Add padding to the left (right-align text).
     Left,
@@ -1118,7 +1118,7 @@ pub fn apply_ops_internal(
 
     for (i, op) in ops.iter().enumerate() {
         let step_start = if debug { Some(Instant::now()) } else { None };
-        let input_val = val.clone();
+        let input_val = if debug { Some(val.clone()) } else { None };
 
         match op {
             StringOp::Map { operations } => {
@@ -1127,7 +1127,7 @@ pub fn apply_ops_internal(
                         i + 1,
                         ops.len(),
                         op,
-                        &input_val,
+                        input_val.as_ref().unwrap(),
                         &Value::Str("processing...".to_string()),
                         Duration::from_nanos(0),
                     );
@@ -1182,7 +1182,14 @@ pub fn apply_ops_internal(
             && let Some(ref tracer) = debug_tracer
         {
             let elapsed = step_start.unwrap().elapsed();
-            tracer.operation_step(i + 1, ops.len(), op, &input_val, &val, elapsed);
+            tracer.operation_step(
+                i + 1,
+                ops.len(),
+                op,
+                input_val.as_ref().unwrap(),
+                &val,
+                elapsed,
+            );
         }
     }
 

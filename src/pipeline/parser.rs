@@ -192,7 +192,7 @@ pub fn parse_multi_template(template: &str) -> Result<(Vec<TemplateSection>, boo
                     debug = true; // If any section has debug enabled, enable for the whole multi-template
                 }
 
-                sections.push(TemplateSection::Template(ops));
+                sections.push(TemplateSection::from_ops(ops));
             }
         } else {
             // Regular character, add to current literal
