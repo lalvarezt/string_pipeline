@@ -129,7 +129,14 @@ pub enum TemplateSection {
     /// A literal text section that appears unchanged in the output.
     Literal(String),
     /// A template section containing a sequence of string operations to apply.
-    Template(Vec<StringOp>),
+    Template { ops: Vec<StringOp>, cache_key: u64 },
+}
+
+impl TemplateSection {
+    pub(crate) fn from_ops(ops: Vec<StringOp>) -> Self {
+        let cache_key = MultiTemplate::hash_ops(&ops);
+        Self::Template { ops, cache_key }
+    }
 }
 
 /// Type of template section for introspection and analysis.
@@ -243,7 +250,7 @@ impl TemplateCache {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct CacheKey {
     input_hash: u64,
-    ops_signature: String,
+    section_key: u64,
 }
 
 /* ------------------------------------------------------------------------ */
@@ -450,12 +457,13 @@ impl MultiTemplate {
                             tracer.separator();
                         }
                     }
-                    TemplateSection::Template(ops) => {
+                    TemplateSection::Template { ops, cache_key } => {
                         let summary = Self::format_operations_summary(ops);
                         tracer.section(idx + 1, self.sections.len(), "template", &summary);
                         let out = self.apply_template_section(
                             input,
                             ops,
+                            *cache_key,
                             input_hash,
                             &mut cache,
                             &Some(&tracer),
@@ -470,9 +478,10 @@ impl MultiTemplate {
             for section in &self.sections {
                 match section {
                     TemplateSection::Literal(text) => result.push_str(text),
-                    TemplateSection::Template(ops) => {
-                        let out =
-                            self.apply_template_section(input, ops, input_hash, &mut cache, &None)?;
+                    TemplateSection::Template { ops, cache_key } => {
+                        let out = self.apply_template_section(
+                            input, ops, *cache_key, input_hash, &mut cache, &None,
+                        )?;
                         result.push_str(&out);
                     }
                 }
@@ -534,7 +543,7 @@ impl MultiTemplate {
     pub fn template_section_count(&self) -> usize {
         self.sections
             .iter()
-            .filter(|s| matches!(s, TemplateSection::Template(_)))
+            .filter(|s| matches!(s, TemplateSection::Template { .. }))
             .count()
     }
 
@@ -712,7 +721,7 @@ impl MultiTemplate {
                 TemplateSection::Literal(text) => {
                     result.push_str(text);
                 }
-                TemplateSection::Template(ops) => {
+                TemplateSection::Template { ops, cache_key } => {
                     if template_index >= inputs.len() {
                         return Err("Internal error: template index out of bounds".to_string());
                     }
@@ -730,6 +739,7 @@ impl MultiTemplate {
                             self.apply_template_section(
                                 section_inputs[0],
                                 ops,
+                                *cache_key,
                                 input_hash,
                                 &mut cache,
                                 &None, // No debug tracing for structured processing
@@ -744,7 +754,7 @@ impl MultiTemplate {
                                 let input_hash = input_hasher.finish();
 
                                 let result = self.apply_template_section(
-                                    input, ops, input_hash, &mut cache,
+                                    input, ops, *cache_key, input_hash, &mut cache,
                                     &None, // No debug tracing for structured processing
                                 )?;
                                 results.push(result);
@@ -792,7 +802,7 @@ impl MultiTemplate {
         let mut template_index = 0;
 
         for section in &self.sections {
-            if let TemplateSection::Template(ops) = section {
+            if let TemplateSection::Template { ops, .. } = section {
                 result.push((template_index, ops));
                 template_index += 1;
             }
@@ -842,7 +852,7 @@ impl MultiTemplate {
                         operations: None,
                     });
                 }
-                TemplateSection::Template(ops) => {
+                TemplateSection::Template { ops, .. } => {
                     result.push(SectionInfo {
                         section_type: SectionType::Template,
                         overall_position,
@@ -866,6 +876,7 @@ impl MultiTemplate {
         &self,
         input: &str,
         ops: &[StringOp],
+        section_key: u64,
         input_hash: u64,
         cache: &mut TemplateCache,
         dbg: &Option<&DebugTracer>,
@@ -884,7 +895,7 @@ impl MultiTemplate {
 
         let key = CacheKey {
             input_hash,
-            ops_signature: format!("{ops:?}"),
+            section_key,
         };
 
         if let Some(cached) = cache.operations.get(&key) {
@@ -958,6 +969,16 @@ impl MultiTemplate {
             .join(" | ")
     }
 
+    fn make_template_section(ops: Vec<StringOp>) -> TemplateSection {
+        TemplateSection::from_ops(ops)
+    }
+
+    fn hash_ops(ops: &[StringOp]) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        ops.hash(&mut hasher);
+        hasher.finish()
+    }
+
     /* -------- helper: detect plain single-block templates ------------- */
 
     /// Detects and parses templates that consist of exactly one `{ ... }` block
@@ -993,7 +1014,7 @@ impl MultiTemplate {
 
         // Safe to treat as single template block.
         let (ops, dbg_flag) = parser::parse_template(template)?;
-        let sections = vec![TemplateSection::Template(ops)];
+        let sections = vec![Self::make_template_section(ops)];
         Ok(Some(Self::new(template.to_string(), sections, dbg_flag)))
     }
 }
