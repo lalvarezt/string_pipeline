@@ -939,6 +939,14 @@ impl MultiTemplate {
 
     #[inline]
     fn fast_single_split(&self, input: &str, sep: &str, range: &RangeSpec) -> String {
+        if Self::is_full_range(range) {
+            return input.to_string();
+        }
+
+        if let RangeSpec::Index(idx) = range {
+            return self.fast_split_index(input, sep, *idx);
+        }
+
         let parts = get_cached_split(input, sep);
         let selected = apply_range(&parts, range);
         match selected.len() {
@@ -975,6 +983,55 @@ impl MultiTemplate {
         } else {
             input.replace(split_sep, join_sep)
         }
+    }
+
+    #[inline]
+    fn fast_split_index(&self, input: &str, sep: &str, idx: isize) -> String {
+        if sep.is_empty() {
+            let parts = get_cached_split(input, sep);
+            return apply_range(&parts, &RangeSpec::Index(idx))
+                .into_iter()
+                .next()
+                .unwrap_or_default();
+        }
+
+        if sep.len() == 1 {
+            let sep_byte = sep.as_bytes()[0];
+            let parts_len = memchr_iter(sep_byte, input.as_bytes()).count() + 1;
+            let resolved = Self::resolve_split_index(idx, parts_len);
+            return Self::split_index_single_byte(input, sep_byte, resolved);
+        }
+
+        let parts_len = input.matches(sep).count() + 1;
+        let resolved = Self::resolve_split_index(idx, parts_len);
+        input
+            .split(sep)
+            .nth(resolved)
+            .unwrap_or_default()
+            .to_string()
+    }
+
+    #[inline]
+    fn split_index_single_byte(input: &str, sep_byte: u8, target_idx: usize) -> String {
+        let mut start = 0usize;
+        let mut current_idx = 0usize;
+
+        for idx in memchr_iter(sep_byte, input.as_bytes()) {
+            if current_idx == target_idx {
+                return input[start..idx].to_string();
+            }
+            current_idx += 1;
+            start = idx + 1;
+        }
+
+        input[start..].to_string()
+    }
+
+    #[inline]
+    fn resolve_split_index(idx: isize, parts_len: usize) -> usize {
+        let parts_len_i = parts_len as isize;
+        let resolved = if idx < 0 { parts_len_i + idx } else { idx };
+        resolved.clamp(0, parts_len_i.saturating_sub(1)) as usize
     }
 
     #[inline]
