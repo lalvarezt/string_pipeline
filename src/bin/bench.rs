@@ -68,6 +68,7 @@ struct BenchmarkSuite {
     iterations: usize,
     warmup_iterations: usize,
     test_data: String,
+    formatting_test_data: String,
     quiet: bool,
 }
 
@@ -75,6 +76,7 @@ impl BenchmarkSuite {
     fn new(iterations: usize, quiet: bool) -> Self {
         // Create some realistic test data
         let test_data = "apple,banana,cherry,date,elderberry,fig,grape,honeydew,ice_fruit,jackfruit,kiwi,lemon,mango,nectarine,orange,papaya,quince,raspberry,strawberry,tomato,ugli_fruit,vanilla,watermelon,xigua,yellow_apple,zucchini".to_string();
+        let formatting_test_data = "john doe admin@example.com".to_string();
 
         // Use 10% of iterations for warmup
         let warmup_iterations = iterations / 10;
@@ -83,6 +85,7 @@ impl BenchmarkSuite {
             iterations,
             warmup_iterations,
             test_data,
+            formatting_test_data,
             quiet,
         }
     }
@@ -171,6 +174,10 @@ impl BenchmarkSuite {
                 "{upper|trim|replace:s/,/ /g}",
             ),
             (
+                "Multi: formatting (name + surname + email)",
+                "Name: {split: :0} Surname: {split: :1} Email: {split: :2}",
+            ),
+            (
                 "Multi: split + sort + unique + join",
                 "{split:,:..|sort|unique|join:+}",
             ),
@@ -182,7 +189,15 @@ impl BenchmarkSuite {
                 if !self.quiet {
                     print!("  {name} ... ");
                 }
-                let result = self.benchmark_template(name, template_str);
+                let result = if name == "Multi: formatting (name + surname + email)" {
+                    self.benchmark_template_with_input(
+                        name,
+                        template_str,
+                        &self.formatting_test_data,
+                    )
+                } else {
+                    self.benchmark_template(name, template_str)
+                };
                 if !self.quiet {
                     println!("✓ avg: {:?}", result.average_time);
                 }
@@ -302,13 +317,22 @@ impl BenchmarkSuite {
     }
 
     fn benchmark_template(&self, name: &str, template_str: &str) -> BenchmarkResult {
+        self.benchmark_template_with_input(name, template_str, &self.test_data)
+    }
+
+    fn benchmark_template_with_input(
+        &self,
+        name: &str,
+        template_str: &str,
+        input: &str,
+    ) -> BenchmarkResult {
         let template = Template::parse(template_str)
             .unwrap_or_else(|e| panic!("Failed to parse template '{template_str}': {e}"));
 
         // Warmup phase - run operations without timing to warm up caches and system state
         for _ in 0..self.warmup_iterations {
             let _ = template
-                .format(&self.test_data)
+                .format(input)
                 .unwrap_or_else(|e| panic!("Failed to execute template '{template_str}': {e}"));
         }
 
@@ -318,7 +342,7 @@ impl BenchmarkSuite {
         for _ in 0..self.iterations {
             let start = Instant::now();
             let _ = template
-                .format(&self.test_data)
+                .format(input)
                 .unwrap_or_else(|e| panic!("Failed to execute template '{template_str}': {e}"));
             let duration = start.elapsed();
             times.push(duration);
