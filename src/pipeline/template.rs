@@ -1014,13 +1014,11 @@ impl MultiTemplate {
     #[inline]
     fn split_index_single_byte(input: &str, sep_byte: u8, target_idx: usize) -> String {
         let mut start = 0usize;
-        let mut current_idx = 0usize;
 
-        for idx in memchr_iter(sep_byte, input.as_bytes()) {
+        for (current_idx, idx) in memchr_iter(sep_byte, input.as_bytes()).enumerate() {
             if current_idx == target_idx {
                 return input[start..idx].to_string();
             }
-            current_idx += 1;
             start = idx + 1;
         }
 
