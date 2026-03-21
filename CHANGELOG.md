@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 <!-- ignore lint rules that are often triggered by content generated from commits / git-cliff -->
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style -->
+## [0.13.2](https://github.com/lalvarezt/string_pipeline/compare/0.13.1..0.13.2) - 2026-03-21
+
+### ⛰️  Features
+
+- *(bench)* Add formatting benchmark case - ([6b7bc7b](https://github.com/lalvarezt/string_pipeline/commit/6b7bc7bac896d31b441d77293a0613c09446553d))
+
+### ⚡ Performance
+
+- Optimize split index formatting path - ([05d7311](https://github.com/lalvarezt/string_pipeline/commit/05d73115becb7cccbfd09c35313511bfa27e7937))
+
+
 ## [0.13.1](https://github.com/lalvarezt/string_pipeline/compare/0.13.0..0.13.1) - 2026-03-20
 
 ### ⛰️  Features
