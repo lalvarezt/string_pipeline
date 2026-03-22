@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 <!-- ignore lint rules that are often triggered by content generated from commits / git-cliff -->
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style -->
+## [0.13.4](https://github.com/lalvarezt/string_pipeline/compare/0.13.3..0.13.4) - 2026-03-22
+
+### 🐛 Bug Fixes
+
+- *(clippy)* Reduce template execution helper args - ([fe1a63b](https://github.com/lalvarezt/string_pipeline/commit/fe1a63b44f7c5f1ac2b896afb1f97b4f3250e908))
+- *(release)* Correct generated release notes - ([c8f6f3e](https://github.com/lalvarezt/string_pipeline/commit/c8f6f3ecb3cb508e1cea821a2dc3424ab0715c17))
+
 ## [0.13.3](https://github.com/lalvarezt/string_pipeline/compare/0.13.2..0.13.3) - 2026-03-22
 
 ### 🐛 Bug Fixes
