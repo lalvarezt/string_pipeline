@@ -3,6 +3,20 @@
 All notable changes to this project will be documented in this file.
 <!-- ignore lint rules that are often triggered by content generated from commits / git-cliff -->
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style -->
+## [0.13.3](https://github.com/lalvarezt/string_pipeline/compare/0.13.2..0.13.3) - 2026-03-22
+
+### 🐛 Bug Fixes
+
+- *(clippy)* Remove explicit loop counter - ([d43bf54](https://github.com/lalvarezt/string_pipeline/commit/d43bf544c06195f700fc1972e09d325affd61c28))
+
+### 🚜 Refactor
+
+- Compile template section execution plans - ([af4d847](https://github.com/lalvarezt/string_pipeline/commit/af4d847497aadcbd94db0f997d1b1e6f5f8e220d))
+
+### Bench
+
+- Add television specific workloads - ([50fe36f](https://github.com/lalvarezt/string_pipeline/commit/50fe36ff7db28cec9b0a546c36a18639723ed840))
+
 ## [0.13.2](https://github.com/lalvarezt/string_pipeline/compare/0.13.1..0.13.2) - 2026-03-21
 
 ### ⛰️  Features
