@@ -274,6 +274,12 @@ impl TemplateCache {
     }
 }
 
+struct ExecutionContext<'a> {
+    input_hash: &'a mut Option<u64>,
+    cache: &'a mut TemplateCache,
+    dbg: &'a Option<&'a DebugTracer>,
+}
+
 /// Cache key combining input hash and operation signature.
 ///
 /// This key uniquely identifies a specific input string and operation sequence
@@ -503,9 +509,11 @@ impl MultiTemplate {
                             ops,
                             exec,
                             *cache_key,
-                            &mut input_hash,
-                            &mut cache,
-                            &Some(&tracer),
+                            ExecutionContext {
+                                input_hash: &mut input_hash,
+                                cache: &mut cache,
+                                dbg: &Some(&tracer),
+                            },
                         )?;
                         result.push_str(&out);
                     }
@@ -529,9 +537,11 @@ impl MultiTemplate {
                             ops,
                             exec,
                             *cache_key,
-                            &mut input_hash,
-                            &mut cache,
-                            &None,
+                            ExecutionContext {
+                                input_hash: &mut input_hash,
+                                cache: &mut cache,
+                                dbg: &None,
+                            },
                         )?;
                         result.push_str(&out);
                     }
@@ -796,9 +806,11 @@ impl MultiTemplate {
                                 ops,
                                 exec,
                                 *cache_key,
-                                &mut input_hash,
-                                &mut cache,
-                                &None, // No debug tracing for structured processing
+                                ExecutionContext {
+                                    input_hash: &mut input_hash,
+                                    cache: &mut cache,
+                                    dbg: &None, // No debug tracing for structured processing
+                                },
                             )?
                         }
                         _ => {
@@ -814,9 +826,11 @@ impl MultiTemplate {
                                     ops,
                                     exec,
                                     *cache_key,
-                                    &mut input_hash,
-                                    &mut cache,
-                                    &None, // No debug tracing for structured processing
+                                    ExecutionContext {
+                                        input_hash: &mut input_hash,
+                                        cache: &mut cache,
+                                        dbg: &None, // No debug tracing for structured processing
+                                    },
                                 )?;
                                 results.push(result);
                             }
@@ -940,36 +954,36 @@ impl MultiTemplate {
         ops: &[StringOp],
         exec: &TemplateExecutionPlan,
         section_key: u64,
-        input_hash: &mut Option<u64>,
-        cache: &mut TemplateCache,
-        dbg: &Option<&DebugTracer>,
+        ctx: ExecutionContext<'_>,
     ) -> Result<String, String> {
         match exec.cache_policy {
             CachePolicy::Never => {
-                if let Some(t) = dbg {
+                if let Some(t) = ctx.dbg {
                     t.cache_operation("DIRECT EXEC", "cache disabled for unique section");
                 }
-                self.execute_template_section_inner(input, ops, &exec.kind, dbg)
+                self.execute_template_section_inner(input, ops, &exec.kind, ctx.dbg)
             }
             CachePolicy::PerCall => {
                 let key = CacheKey {
-                    input_hash: *input_hash.get_or_insert_with(|| Self::hash_input(input)),
+                    input_hash: *ctx
+                        .input_hash
+                        .get_or_insert_with(|| Self::hash_input(input)),
                     section_key,
                 };
 
-                if let Some(cached) = cache.operations.get(&key) {
-                    if let Some(t) = dbg {
+                if let Some(cached) = ctx.cache.operations.get(&key) {
+                    if let Some(t) = ctx.dbg {
                         t.cache_operation("CACHE HIT", "re-using formatted section");
                     }
                     return Ok(cached.clone());
                 }
 
-                if let Some(t) = dbg {
+                if let Some(t) = ctx.dbg {
                     t.cache_operation("CACHE MISS", "computing section");
                 }
 
-                let out = self.execute_template_section_inner(input, ops, &exec.kind, dbg)?;
-                cache.operations.insert(key, out.clone());
+                let out = self.execute_template_section_inner(input, ops, &exec.kind, ctx.dbg)?;
+                ctx.cache.operations.insert(key, out.clone());
                 Ok(out)
             }
         }
