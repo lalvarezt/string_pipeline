@@ -5,9 +5,9 @@
 # Configuration options are organized into tables and keys.
 # See documentation for more information on available options.
 
-# [remote.github]
-# owner = "lalvarezt"
-# repo = "string_pipeline"
+[remote.github]
+owner = "lalvarezt"
+repo = "string_pipeline"
 
 [changelog]
 # changelog header
@@ -90,8 +90,8 @@ postprocessors = [
 conventional_commits = true
 # filter out the commits that are not conventional
 filter_unconventional = true
-# process each line of a commit as an individual commit
-split_commits = true
+# process each commit as a single changelog entry
+split_commits = false
 # regex for preprocessing the commit messages
 commit_preprocessors = [
   { pattern = "^\\*\\s+", replace = "" },
@@ -109,6 +109,8 @@ commit_parsers = [
   { message = "^style", group = "<!-- 5 -->🎨 Styling" },
   { message = "^test", group = "<!-- 6 -->🧪 Testing" },
   { message = "^chore\\(release\\): prepare for", skip = true },
+  { message = "^chore\\(changelog\\)", skip = true },
+  { message = "^chore: bump to ", skip = true },
   { message = "^chore\\(deps.*\\)", skip = true },
   { message = "^chore\\(pr\\)", skip = true },
   { message = "^chore\\(pull\\)", skip = true },
