@@ -30,6 +30,17 @@ fn bench_parsing(c: &mut Criterion) {
             "complex_nested",
             "{split:,:..|filter:^[a-m]|map:{trim|upper|substring:0..3}|sort|join:,}",
         ),
+        ("tv_path_last_segment", "{split:/:-1}"),
+        ("tv_tabbed_display", "{split:\\t:0} ({split:\\t:2})"),
+        (
+            "tv_editor_command",
+            "${EDITOR:-vim} '+{strip_ansi|split:\\::1}' '{strip_ansi|split:\\::0}'",
+        ),
+        (
+            "tv_pr_command",
+            "gh pr view {strip_ansi|split:#:1|split:   :0} --web",
+        ),
+        ("tv_display_suffix", "{} - displayed"),
     ];
 
     let mut group = c.benchmark_group("template_parsing");
@@ -77,6 +88,23 @@ fn bench_execution(c: &mut Criterion) {
             "{split:,:..|filter:^[a-m]|map:{reverse|upper}|sort|join:,}",
             SMALL_INPUT,
         ),
+        ("tv_path_last_segment", "{split:/:-1}", "/a/b/c/d.txt"),
+        (
+            "tv_tabbed_display",
+            "{split:\\t:0} ({split:\\t:2})",
+            "api\tnginx:latest\tUp 2 hours",
+        ),
+        (
+            "tv_editor_command",
+            "${EDITOR:-vim} '+{strip_ansi|split:\\::1}' '{strip_ansi|split:\\::0}'",
+            "src/main.rs:42:fn main()",
+        ),
+        (
+            "tv_pr_command",
+            "gh pr view {strip_ansi|split:#:1|split:   :0} --web",
+            "feature/add-benchmarks #123   ready",
+        ),
+        ("tv_display_suffix", "{} - displayed", "entry_12345"),
     ];
 
     let mut group = c.benchmark_group("template_execution");

@@ -101,6 +101,9 @@ impl BenchmarkSuite {
             println!();
         }
 
+        // Parsing benchmarks
+        results.extend(self.run_parsing_benchmarks());
+
         // Single operation benchmarks
         results.extend(self.run_single_operation_benchmarks());
 
@@ -114,6 +117,49 @@ impl BenchmarkSuite {
         results.extend(self.run_complex_benchmarks());
 
         results
+    }
+
+    fn run_parsing_benchmarks(&self) -> Vec<BenchmarkResult> {
+        if !self.quiet {
+            println!("🔸 Running parsing benchmarks...");
+        }
+
+        let benchmarks = vec![
+            ("Parse: single block simple", "{upper}"),
+            (
+                "Parse: single block chain",
+                "{split:,:..|map:{trim|upper}|join:,}",
+            ),
+            (
+                "Parse: multi section",
+                "User: {split: :0} Email: {split: :1} Fruits: {split:,:..|sort|join:\\|}",
+            ),
+            ("Parse: tv path last segment", "{split:/:-1}"),
+            ("Parse: tv tabbed display", "{split:\\t:0} ({split:\\t:2})"),
+            (
+                "Parse: tv editor command",
+                "${EDITOR:-vim} '+{strip_ansi|split:\\::1}' '{strip_ansi|split:\\::0}'",
+            ),
+            (
+                "Parse: tv pr command",
+                "gh pr view {strip_ansi|split:#:1|split:   :0} --web",
+            ),
+            ("Parse: tv display suffix", "{} - displayed"),
+        ];
+
+        benchmarks
+            .into_iter()
+            .map(|(name, template_str)| {
+                if !self.quiet {
+                    print!("  {name} ... ");
+                }
+                let result = self.benchmark_template_parsing(name, template_str);
+                if !self.quiet {
+                    println!("✓ avg: {:?}", result.average_time);
+                }
+                result
+            })
+            .collect()
     }
 
     fn run_single_operation_benchmarks(&self) -> Vec<BenchmarkResult> {
@@ -177,6 +223,13 @@ impl BenchmarkSuite {
                 "Multi: formatting (name + surname + email)",
                 "Name: {split: :0} Surname: {split: :1} Email: {split: :2}",
             ),
+            ("Multi: tv path last segment", "{split:/:-1}"),
+            ("Multi: tv tabbed display", "{split:\\t:0} ({split:\\t:2})"),
+            (
+                "Multi: tv editor command",
+                "${EDITOR:-vim} '+{strip_ansi|split:\\::1}' '{strip_ansi|split:\\::0}'",
+            ),
+            ("Multi: tv display suffix", "{} - displayed"),
             (
                 "Multi: split + sort + unique + join",
                 "{split:,:..|sort|unique|join:+}",
@@ -189,14 +242,30 @@ impl BenchmarkSuite {
                 if !self.quiet {
                     print!("  {name} ... ");
                 }
-                let result = if name == "Multi: formatting (name + surname + email)" {
-                    self.benchmark_template_with_input(
+                let result = match name {
+                    "Multi: formatting (name + surname + email)" => self
+                        .benchmark_template_with_input(
+                            name,
+                            template_str,
+                            &self.formatting_test_data,
+                        ),
+                    "Multi: tv path last segment" => {
+                        self.benchmark_template_with_input(name, template_str, "/a/b/c/d.txt")
+                    }
+                    "Multi: tv tabbed display" => self.benchmark_template_with_input(
                         name,
                         template_str,
-                        &self.formatting_test_data,
-                    )
-                } else {
-                    self.benchmark_template(name, template_str)
+                        "api\tnginx:latest\tUp 2 hours",
+                    ),
+                    "Multi: tv editor command" => self.benchmark_template_with_input(
+                        name,
+                        template_str,
+                        "src/main.rs:42:fn main()",
+                    ),
+                    "Multi: tv display suffix" => {
+                        self.benchmark_template_with_input(name, template_str, "entry_12345")
+                    }
+                    _ => self.benchmark_template(name, template_str),
                 };
                 if !self.quiet {
                     println!("✓ avg: {:?}", result.average_time);
@@ -320,6 +389,24 @@ impl BenchmarkSuite {
         self.benchmark_template_with_input(name, template_str, &self.test_data)
     }
 
+    fn benchmark_template_parsing(&self, name: &str, template_str: &str) -> BenchmarkResult {
+        for _ in 0..self.warmup_iterations {
+            let _ = Template::parse(template_str)
+                .unwrap_or_else(|e| panic!("Failed to parse template '{template_str}': {e}"));
+        }
+
+        let mut times = Vec::with_capacity(self.iterations);
+
+        for _ in 0..self.iterations {
+            let start = Instant::now();
+            let _ = Template::parse(template_str)
+                .unwrap_or_else(|e| panic!("Failed to parse template '{template_str}': {e}"));
+            times.push(start.elapsed());
+        }
+
+        BenchmarkResult::new(name.to_string(), times)
+    }
+
     fn benchmark_template_with_input(
         &self,
         name: &str,
@@ -401,6 +488,8 @@ fn print_text_report(results: &[BenchmarkResult], total_time: Duration, warmup_i
     for result in results {
         let category = if result.name.starts_with("Single:") {
             "Single Operations"
+        } else if result.name.starts_with("Parse:") {
+            "Parsing"
         } else if result.name.starts_with("Multi:") {
             "Multiple Simple Operations"
         } else if result.name.starts_with("Map:") {
