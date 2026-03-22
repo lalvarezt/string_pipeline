@@ -45,7 +45,7 @@
 //! - Cache hit/miss statistics
 //! - Input/output values at each stage
 
-use std::collections::{HashMap, hash_map::DefaultHasher};
+use std::collections::{HashMap, HashSet, hash_map::DefaultHasher};
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 
@@ -116,10 +116,40 @@ use memchr::memchr_iter;
 pub struct MultiTemplate {
     raw: String,
     sections: Vec<TemplateSection>,
+    compiled_sections: Vec<CompiledSectionPlan>,
     debug: bool,
 }
 
 /* ---------- helper enums ------------------------------------------------- */
+
+#[derive(Debug, Clone)]
+enum CompiledSectionPlan {
+    Literal,
+    Template {
+        exec: TemplateExecutionPlan,
+        cache_key: u64,
+    },
+}
+
+#[derive(Debug, Clone)]
+struct TemplateExecutionPlan {
+    kind: TemplateExecutionKind,
+    cache_policy: CachePolicy,
+}
+
+#[derive(Debug, Clone)]
+enum TemplateExecutionKind {
+    Passthrough,
+    SplitIndex { sep: String, idx: isize },
+    SplitJoinRewrite { split_sep: String, join_sep: String },
+    Generic,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CachePolicy {
+    Never,
+    PerCall,
+}
 
 /// Represents a section within a parsed template.
 ///
@@ -260,9 +290,11 @@ struct CacheKey {
 
 impl MultiTemplate {
     fn new(raw: String, sections: Vec<TemplateSection>, debug: bool) -> Self {
+        let compiled_sections = Self::compile_sections(&sections);
         Self {
             raw,
             sections,
+            compiled_sections,
             debug,
         }
     }
@@ -418,11 +450,8 @@ impl MultiTemplate {
         use std::time::Instant;
 
         let mut cache = TemplateCache::new();
-        let mut result = String::new();
-
-        let mut hasher = DefaultHasher::new();
-        input.hash(&mut hasher);
-        let input_hash = hasher.finish();
+        let mut result = String::with_capacity(self.estimate_output_capacity(input));
+        let mut input_hash = None;
 
         /* -------- optional debug session -------------------------------- */
 
@@ -442,9 +471,14 @@ impl MultiTemplate {
             );
             tracer.session_start("MULTI-TEMPLATE", &self.raw, input, Some(&info));
 
-            for (idx, section) in self.sections.iter().enumerate() {
-                match section {
-                    TemplateSection::Literal(text) => {
+            for (idx, (section, plan)) in self
+                .sections
+                .iter()
+                .zip(self.compiled_sections.iter())
+                .enumerate()
+            {
+                match (section, plan) {
+                    (TemplateSection::Literal(text), CompiledSectionPlan::Literal) => {
                         let preview = if text.trim().is_empty() && text.len() <= 2 {
                             "whitespace".to_string()
                         } else if text.len() <= 20 {
@@ -458,33 +492,50 @@ impl MultiTemplate {
                             tracer.separator();
                         }
                     }
-                    TemplateSection::Template { ops, cache_key } => {
+                    (
+                        TemplateSection::Template { ops, .. },
+                        CompiledSectionPlan::Template { exec, cache_key },
+                    ) => {
                         let summary = Self::format_operations_summary(ops);
                         tracer.section(idx + 1, self.sections.len(), "template", &summary);
-                        let out = self.apply_template_section(
+                        let out = self.execute_template_section(
                             input,
                             ops,
+                            exec,
                             *cache_key,
-                            input_hash,
+                            &mut input_hash,
                             &mut cache,
                             &Some(&tracer),
                         )?;
                         result.push_str(&out);
                     }
+                    _ => unreachable!("compiled section plan must match template sections"),
                 }
             }
 
             tracer.session_end("MULTI-TEMPLATE", &result, start_time.unwrap().elapsed());
         } else {
-            for section in &self.sections {
-                match section {
-                    TemplateSection::Literal(text) => result.push_str(text),
-                    TemplateSection::Template { ops, cache_key } => {
-                        let out = self.apply_template_section(
-                            input, ops, *cache_key, input_hash, &mut cache, &None,
+            for (section, plan) in self.sections.iter().zip(self.compiled_sections.iter()) {
+                match (section, plan) {
+                    (TemplateSection::Literal(text), CompiledSectionPlan::Literal) => {
+                        result.push_str(text)
+                    }
+                    (
+                        TemplateSection::Template { ops, .. },
+                        CompiledSectionPlan::Template { exec, cache_key },
+                    ) => {
+                        let out = self.execute_template_section(
+                            input,
+                            ops,
+                            exec,
+                            *cache_key,
+                            &mut input_hash,
+                            &mut cache,
+                            &None,
                         )?;
                         result.push_str(&out);
                     }
+                    _ => unreachable!("compiled section plan must match template sections"),
                 }
             }
         }
@@ -717,12 +768,15 @@ impl MultiTemplate {
         let mut template_index = 0;
         let mut cache = TemplateCache::new();
 
-        for section in &self.sections {
-            match section {
-                TemplateSection::Literal(text) => {
+        for (section, plan) in self.sections.iter().zip(self.compiled_sections.iter()) {
+            match (section, plan) {
+                (TemplateSection::Literal(text), CompiledSectionPlan::Literal) => {
                     result.push_str(text);
                 }
-                TemplateSection::Template { ops, cache_key } => {
+                (
+                    TemplateSection::Template { ops, .. },
+                    CompiledSectionPlan::Template { exec, cache_key },
+                ) => {
                     if template_index >= inputs.len() {
                         return Err("Internal error: template index out of bounds".to_string());
                     }
@@ -735,13 +789,14 @@ impl MultiTemplate {
                         1 => {
                             let mut input_hasher = std::collections::hash_map::DefaultHasher::new();
                             std::hash::Hash::hash(&section_inputs[0], &mut input_hasher);
-                            let input_hash = input_hasher.finish();
+                            let mut input_hash = Some(input_hasher.finish());
 
-                            self.apply_template_section(
+                            self.execute_template_section(
                                 section_inputs[0],
                                 ops,
+                                exec,
                                 *cache_key,
-                                input_hash,
+                                &mut input_hash,
                                 &mut cache,
                                 &None, // No debug tracing for structured processing
                             )?
@@ -752,10 +807,15 @@ impl MultiTemplate {
                                 let mut input_hasher =
                                     std::collections::hash_map::DefaultHasher::new();
                                 std::hash::Hash::hash(&input, &mut input_hasher);
-                                let input_hash = input_hasher.finish();
+                                let mut input_hash = Some(input_hasher.finish());
 
-                                let result = self.apply_template_section(
-                                    input, ops, *cache_key, input_hash, &mut cache,
+                                let result = self.execute_template_section(
+                                    input,
+                                    ops,
+                                    exec,
+                                    *cache_key,
+                                    &mut input_hash,
+                                    &mut cache,
                                     &None, // No debug tracing for structured processing
                                 )?;
                                 results.push(result);
@@ -766,6 +826,7 @@ impl MultiTemplate {
                     result.push_str(&output);
                     template_index += 1;
                 }
+                _ => unreachable!("compiled section plan must match template sections"),
             }
         }
 
@@ -873,26 +934,134 @@ impl MultiTemplate {
     /*  internal helpers                                                   */
     /* ------------------------------------------------------------------ */
 
-    fn apply_template_section(
+    fn execute_template_section(
         &self,
         input: &str,
         ops: &[StringOp],
+        exec: &TemplateExecutionPlan,
         section_key: u64,
-        input_hash: u64,
+        input_hash: &mut Option<u64>,
         cache: &mut TemplateCache,
         dbg: &Option<&DebugTracer>,
     ) -> Result<String, String> {
-        /* fast path: single split --------------------------------------- */
-        if ops.len() == 1
-            && let StringOp::Split { sep, range } = &ops[0]
-        {
-            if let Some(t) = dbg {
-                t.cache_operation("FAST SPLIT", &format!("by '{sep}'"));
+        match exec.cache_policy {
+            CachePolicy::Never => {
+                if let Some(t) = dbg {
+                    t.cache_operation("DIRECT EXEC", "cache disabled for unique section");
+                }
+                self.execute_template_section_inner(input, ops, &exec.kind, dbg)
             }
-            return Ok(self.fast_single_split(input, sep, range));
+            CachePolicy::PerCall => {
+                let key = CacheKey {
+                    input_hash: *input_hash.get_or_insert_with(|| Self::hash_input(input)),
+                    section_key,
+                };
+
+                if let Some(cached) = cache.operations.get(&key) {
+                    if let Some(t) = dbg {
+                        t.cache_operation("CACHE HIT", "re-using formatted section");
+                    }
+                    return Ok(cached.clone());
+                }
+
+                if let Some(t) = dbg {
+                    t.cache_operation("CACHE MISS", "computing section");
+                }
+
+                let out = self.execute_template_section_inner(input, ops, &exec.kind, dbg)?;
+                cache.operations.insert(key, out.clone());
+                Ok(out)
+            }
+        }
+    }
+
+    fn execute_template_section_inner(
+        &self,
+        input: &str,
+        ops: &[StringOp],
+        kind: &TemplateExecutionKind,
+        dbg: &Option<&DebugTracer>,
+    ) -> Result<String, String> {
+        match kind {
+            TemplateExecutionKind::Passthrough => {
+                if let Some(t) = dbg {
+                    t.cache_operation("FAST PASSTHROUGH", "empty template section");
+                }
+                Ok(input.to_string())
+            }
+            TemplateExecutionKind::SplitIndex { sep, idx } => {
+                if let Some(t) = dbg {
+                    t.cache_operation("FAST SPLIT", &format!("by '{sep}'"));
+                }
+                Ok(self.fast_split_index(input, sep, *idx))
+            }
+            TemplateExecutionKind::SplitJoinRewrite {
+                split_sep,
+                join_sep,
+            } => {
+                if let Some(t) = dbg {
+                    t.cache_operation("FAST SPLIT+JOIN", "direct separator rewrite");
+                }
+                Ok(self.fast_split_join(input, split_sep, join_sep))
+            }
+            TemplateExecutionKind::Generic => {
+                let nested_dbg = if self.debug {
+                    Some(DebugTracer::new(true))
+                } else {
+                    None
+                };
+                apply_ops_internal(input, ops, self.debug, nested_dbg)
+            }
+        }
+    }
+
+    fn compile_sections(sections: &[TemplateSection]) -> Vec<CompiledSectionPlan> {
+        let mut repeated_keys = HashSet::with_capacity(sections.len());
+        let mut seen_keys = HashSet::with_capacity(sections.len());
+        for section in sections {
+            if let TemplateSection::Template { cache_key, .. } = section
+                && !seen_keys.insert(*cache_key)
+            {
+                repeated_keys.insert(*cache_key);
+            }
         }
 
-        /* fast path: split + join over the full input ------------------- */
+        sections
+            .iter()
+            .map(|section| match section {
+                TemplateSection::Literal(_) => CompiledSectionPlan::Literal,
+                TemplateSection::Template { ops, cache_key } => CompiledSectionPlan::Template {
+                    exec: TemplateExecutionPlan {
+                        kind: Self::compile_template_execution_kind(ops),
+                        cache_policy: if repeated_keys.contains(cache_key) {
+                            CachePolicy::PerCall
+                        } else {
+                            CachePolicy::Never
+                        },
+                    },
+                    cache_key: *cache_key,
+                },
+            })
+            .collect()
+    }
+
+    fn compile_template_execution_kind(ops: &[StringOp]) -> TemplateExecutionKind {
+        if ops.is_empty() {
+            return TemplateExecutionKind::Passthrough;
+        }
+
+        if ops.len() == 1
+            && let StringOp::Split {
+                sep,
+                range: RangeSpec::Index(idx),
+            } = &ops[0]
+        {
+            return TemplateExecutionKind::SplitIndex {
+                sep: sep.clone(),
+                idx: *idx,
+            };
+        }
+
         if ops.len() == 2
             && let [
                 StringOp::Split {
@@ -903,57 +1072,30 @@ impl MultiTemplate {
             ] = ops
             && Self::is_full_range(range)
         {
-            if let Some(t) = dbg {
-                t.cache_operation("FAST SPLIT+JOIN", "direct separator rewrite");
-            }
-            return Ok(self.fast_split_join(input, split_sep, join_sep));
+            return TemplateExecutionKind::SplitJoinRewrite {
+                split_sep: split_sep.clone(),
+                join_sep: join_sep.clone(),
+            };
         }
 
-        /* general path – memoised per call ------------------------------ */
-
-        let key = CacheKey {
-            input_hash,
-            section_key,
-        };
-
-        if let Some(cached) = cache.operations.get(&key) {
-            if let Some(t) = dbg {
-                t.cache_operation("CACHE HIT", "re-using formatted section");
-            }
-            return Ok(cached.clone());
-        }
-
-        if let Some(t) = dbg {
-            t.cache_operation("CACHE MISS", "computing section");
-        }
-
-        let nested_dbg = if self.debug {
-            Some(DebugTracer::new(true))
-        } else {
-            None
-        };
-        let out = apply_ops_internal(input, ops, self.debug, nested_dbg)?;
-        cache.operations.insert(key, out.clone());
-        Ok(out)
+        TemplateExecutionKind::Generic
     }
 
-    #[inline]
-    fn fast_single_split(&self, input: &str, sep: &str, range: &RangeSpec) -> String {
-        if Self::is_full_range(range) {
-            return input.to_string();
-        }
+    fn estimate_output_capacity(&self, input: &str) -> usize {
+        self.sections
+            .iter()
+            .map(|section| match section {
+                TemplateSection::Literal(text) => text.len(),
+                TemplateSection::Template { .. } => 0,
+            })
+            .sum::<usize>()
+            + input.len()
+    }
 
-        if let RangeSpec::Index(idx) = range {
-            return self.fast_split_index(input, sep, *idx);
-        }
-
-        let parts = get_cached_split(input, sep);
-        let selected = apply_range(&parts, range);
-        match selected.len() {
-            0 => String::new(),
-            1 => selected[0].clone(),
-            _ => selected.join(sep),
-        }
+    fn hash_input(input: &str) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        input.hash(&mut hasher);
+        hasher.finish()
     }
 
     #[inline]
