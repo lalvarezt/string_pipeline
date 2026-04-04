@@ -135,6 +135,22 @@
 //! assert_eq!(sections.len(), 2); // Two template sections: {strip_ansi|lower} and {}
 //! ```
 //!
+//! ## Rich Formatting Results
+//!
+//! Use `format_rich()` when you need both the final rendered string and the
+//! individual result of each template section.
+//!
+//! ```rust
+//! use string_pipeline::Template;
+//!
+//! let template = Template::parse("asd {upper} bsd {lower}").unwrap();
+//! let result = template.format_rich("MiXeD").unwrap();
+//!
+//! assert_eq!(result.rendered, "asd MIXED bsd mixed");
+//! assert_eq!(result.template_outputs[0].output, "MIXED");
+//! assert_eq!(result.template_outputs[1].output, "mixed");
+//! ```
+//!
 //! ## Error Handling
 //!
 //! All operations return `Result<String, String>` for comprehensive error handling:
@@ -260,4 +276,6 @@
 
 mod pipeline;
 
-pub use pipeline::{MultiTemplate, SectionInfo, SectionType, Template};
+pub use pipeline::{
+    MultiTemplate, RichFormatResult, SectionInfo, SectionType, Template, TemplateOutput,
+};

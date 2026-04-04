@@ -722,6 +722,177 @@ fn test_structured_template_file_operations() {
     );
 }
 
+#[test]
+fn test_format_rich_mixed_template() {
+    let template = MultiTemplate::parse("asd {upper} bsd {lower}").unwrap();
+    let result = template.format_rich("MiXeD").unwrap();
+
+    assert_eq!(result.rendered, "asd MIXED bsd mixed");
+    assert_eq!(result.template_outputs.len(), 2);
+    assert_eq!(result.template_outputs[0].template_position, 0);
+    assert_eq!(result.template_outputs[0].overall_position, 1);
+    assert_eq!(result.template_outputs[0].output, "MIXED");
+    assert_eq!(result.template_outputs[1].template_position, 1);
+    assert_eq!(result.template_outputs[1].overall_position, 3);
+    assert_eq!(result.template_outputs[1].output, "mixed");
+}
+
+#[test]
+fn test_format_rich_single_template() {
+    let template = MultiTemplate::parse("Result: {upper}").unwrap();
+    let result = template.format_rich("hello").unwrap();
+
+    assert_eq!(result.rendered, "Result: HELLO");
+    assert_eq!(result.template_outputs.len(), 1);
+    assert_eq!(result.template_outputs[0].template_position, 0);
+    assert_eq!(result.template_outputs[0].overall_position, 1);
+    assert_eq!(result.template_outputs[0].output, "HELLO");
+}
+
+#[test]
+fn test_format_rich_consecutive_templates() {
+    let template = MultiTemplate::parse("{upper}{lower}").unwrap();
+    let result = template.format_rich("TeSt").unwrap();
+
+    assert_eq!(result.rendered, "TESTtest");
+    assert_eq!(result.template_outputs.len(), 2);
+    assert_eq!(result.template_outputs[0].overall_position, 0);
+    assert_eq!(result.template_outputs[1].overall_position, 1);
+    assert_eq!(result.template_outputs[0].output, "TEST");
+    assert_eq!(result.template_outputs[1].output, "test");
+}
+
+#[test]
+fn test_format_rich_literal_only_template() {
+    let template = MultiTemplate::parse("literal only").unwrap();
+    let result = template.format_rich("ignored").unwrap();
+
+    assert_eq!(result.rendered, "literal only");
+    assert!(result.template_outputs.is_empty());
+}
+
+#[test]
+fn test_format_rich_empty_template_section() {
+    let template = MultiTemplate::parse("keep {} here").unwrap();
+    let result = template.format_rich("value").unwrap();
+
+    assert_eq!(result.rendered, "keep value here");
+    assert_eq!(result.template_outputs.len(), 1);
+    assert_eq!(result.template_outputs[0].output, "value");
+    assert_eq!(result.template_outputs[0].overall_position, 1);
+}
+
+#[test]
+fn test_format_rich_repeated_template_sections() {
+    let template = MultiTemplate::parse("First: {split:,:0} Again: {split:,:0}").unwrap();
+    let result = template.format_rich("apple,banana").unwrap();
+
+    assert_eq!(result.rendered, "First: apple Again: apple");
+    assert_eq!(result.template_outputs.len(), 2);
+    assert_eq!(result.template_outputs[0].output, "apple");
+    assert_eq!(result.template_outputs[1].output, "apple");
+    assert_eq!(result.template_outputs[0].template_position, 0);
+    assert_eq!(result.template_outputs[1].template_position, 1);
+}
+
+#[test]
+fn test_format_rich_complex_pipeline_outputs() {
+    let template =
+        MultiTemplate::parse("Users: {split:,:1..3|join:;} Count: {split:,:..|map:{upper}|join:-}")
+            .unwrap();
+    let result = template.format_rich("alice,bob,charlie,dave,eve").unwrap();
+
+    assert_eq!(
+        result.rendered,
+        "Users: bob;charlie Count: ALICE-BOB-CHARLIE-DAVE-EVE"
+    );
+    assert_eq!(result.template_outputs.len(), 2);
+    assert_eq!(result.template_outputs[0].output, "bob;charlie");
+    assert_eq!(
+        result.template_outputs[1].output,
+        "ALICE-BOB-CHARLIE-DAVE-EVE"
+    );
+}
+
+#[test]
+fn test_format_rich_shell_variables_do_not_create_template_outputs() {
+    let template = MultiTemplate::parse("${HOME}/projects/{upper}").unwrap();
+    let result = template.format_rich("readme").unwrap();
+
+    assert_eq!(result.rendered, "${HOME}/projects/README");
+    assert_eq!(result.template_outputs.len(), 1);
+    assert_eq!(result.template_outputs[0].output, "README");
+    assert_eq!(result.template_outputs[0].overall_position, 1);
+}
+
+#[test]
+fn test_format_rich_error_propagation() {
+    let template = MultiTemplate::parse("Valid: {upper} Invalid: {regex_extract:[}").unwrap();
+    let regular_error = template.format("test").unwrap_err();
+    let rich_error = template.format_rich("test").unwrap_err();
+
+    assert_eq!(rich_error, regular_error);
+}
+
+#[test]
+fn test_format_with_inputs_rich_single_inputs() {
+    let template = MultiTemplate::parse("User: {upper} | Email: {lower}").unwrap();
+    let result = template
+        .format_with_inputs_rich(&[&["john doe"], &["JOHN@EXAMPLE.COM"]], &[" ", " "])
+        .unwrap();
+
+    assert_eq!(result.rendered, "User: JOHN DOE | Email: john@example.com");
+    assert_eq!(result.template_outputs.len(), 2);
+    assert_eq!(result.template_outputs[0].output, "JOHN DOE");
+    assert_eq!(result.template_outputs[1].output, "john@example.com");
+}
+
+#[test]
+fn test_format_with_inputs_rich_multiple_values() {
+    let template = MultiTemplate::parse("Users: {upper} | Files: {lower}").unwrap();
+    let result = template
+        .format_with_inputs_rich(
+            &[&["john doe", "peter parker"], &["FILE1.TXT", "FILE2.TXT"]],
+            &[" ", ","],
+        )
+        .unwrap();
+
+    assert_eq!(
+        result.rendered,
+        "Users: JOHN DOE PETER PARKER | Files: file1.txt,file2.txt"
+    );
+    assert_eq!(result.template_outputs.len(), 2);
+    assert_eq!(result.template_outputs[0].output, "JOHN DOE PETER PARKER");
+    assert_eq!(result.template_outputs[1].output, "file1.txt,file2.txt");
+}
+
+#[test]
+fn test_format_with_inputs_rich_missing_inputs_and_default_separator() {
+    let template = MultiTemplate::parse("A: {upper} B: {lower} C: {}").unwrap();
+    let result = template
+        .format_with_inputs_rich(&[&["one"], &["TWO", "THREE"]], &[","])
+        .unwrap();
+
+    assert_eq!(result.rendered, "A: ONE B: two three C: ");
+    assert_eq!(result.template_outputs.len(), 3);
+    assert_eq!(result.template_outputs[0].output, "ONE");
+    assert_eq!(result.template_outputs[1].output, "two three");
+    assert_eq!(result.template_outputs[2].output, "");
+}
+
+#[test]
+fn test_format_with_inputs_rich_error_propagation() {
+    let template = MultiTemplate::parse("Valid: {upper} Invalid: {regex_extract:[}").unwrap();
+    let regular_error = template
+        .format_with_inputs(&[&["test"], &["input"]], &[" ", " "])
+        .unwrap_err();
+    let rich_error = template
+        .format_with_inputs_rich(&[&["test"], &["input"]], &[" ", " "])
+        .unwrap_err();
+
+    assert_eq!(rich_error, regular_error);
+}
+
 // Tests for shell variable support (${...} patterns)
 
 #[test]

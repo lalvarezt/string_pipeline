@@ -52,7 +52,9 @@ use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-pub use crate::pipeline::template::{MultiTemplate, SectionInfo, SectionType, Template};
+pub use crate::pipeline::template::{
+    MultiTemplate, RichFormatResult, SectionInfo, SectionType, Template, TemplateOutput,
+};
 pub use debug::DebugTracer;
 
 /* ------------------------------------------------------------------------ */

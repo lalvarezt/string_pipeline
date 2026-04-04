@@ -256,6 +256,59 @@ pub struct SectionInfo {
     pub operations: Option<Vec<StringOp>>,
 }
 
+/// Rich output for a single template section.
+///
+/// This captures the exact string produced for one template section during
+/// formatting, along with both its template-only and overall section positions.
+///
+/// # Examples
+///
+/// ```rust
+/// use string_pipeline::Template;
+///
+/// let template = Template::parse("A: {upper} B: {lower}").unwrap();
+/// let result = template.format_rich("MiXeD").unwrap();
+///
+/// assert_eq!(result.template_outputs[0].template_position, 0);
+/// assert_eq!(result.template_outputs[0].overall_position, 1);
+/// assert_eq!(result.template_outputs[0].output, "MIXED");
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TemplateOutput {
+    /// Position among template sections only.
+    pub template_position: usize,
+    /// Position among all sections, including literals.
+    pub overall_position: usize,
+    /// Exact rendered output inserted for this template section.
+    pub output: String,
+}
+
+/// Rich formatting result containing the final rendered string and per-template outputs.
+///
+/// This type preserves the existing final string output while exposing the
+/// individual rendered results for each template section.
+///
+/// # Examples
+///
+/// ```rust
+/// use string_pipeline::Template;
+///
+/// let template = Template::parse("asd {upper} bsd {lower}").unwrap();
+/// let result = template.format_rich("MiXeD").unwrap();
+///
+/// assert_eq!(result.rendered, "asd MIXED bsd mixed");
+/// assert_eq!(result.template_outputs.len(), 2);
+/// assert_eq!(result.template_outputs[0].output, "MIXED");
+/// assert_eq!(result.template_outputs[1].output, "mixed");
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RichFormatResult {
+    /// Final rendered output, identical to what `format()` would return.
+    pub rendered: String,
+    /// Outputs for each template section in left-to-right order.
+    pub template_outputs: Vec<TemplateOutput>,
+}
+
 /* ---------- per-format call cache (operation results only) -------------- */
 
 /// Per-template-instance cache for operation results.
@@ -277,7 +330,7 @@ impl TemplateCache {
 struct ExecutionContext<'a> {
     input_hash: &'a mut Option<u64>,
     cache: &'a mut TemplateCache,
-    dbg: &'a Option<&'a DebugTracer>,
+    dbg: Option<&'a DebugTracer>,
 }
 
 /// Cache key combining input hash and operation signature.
@@ -288,6 +341,52 @@ struct ExecutionContext<'a> {
 struct CacheKey {
     input_hash: u64,
     section_key: u64,
+}
+
+struct RenderBuffer {
+    rendered: String,
+    template_outputs: Option<Vec<TemplateOutput>>,
+}
+
+impl RenderBuffer {
+    fn new(rendered_capacity: usize, rich_capacity: Option<usize>) -> Self {
+        Self {
+            rendered: String::with_capacity(rendered_capacity),
+            template_outputs: rich_capacity.map(Vec::with_capacity),
+        }
+    }
+
+    fn push_literal(&mut self, text: &str) {
+        self.rendered.push_str(text);
+    }
+
+    fn push_template_output(
+        &mut self,
+        template_position: usize,
+        overall_position: usize,
+        output: String,
+    ) {
+        self.rendered.push_str(&output);
+
+        if let Some(template_outputs) = &mut self.template_outputs {
+            template_outputs.push(TemplateOutput {
+                template_position,
+                overall_position,
+                output,
+            });
+        }
+    }
+
+    fn into_rendered(self) -> String {
+        self.rendered
+    }
+
+    fn into_rich(self) -> RichFormatResult {
+        RichFormatResult {
+            rendered: self.rendered,
+            template_outputs: self.template_outputs.unwrap_or_default(),
+        }
+    }
 }
 
 /* ------------------------------------------------------------------------ */
@@ -453,104 +552,32 @@ impl MultiTemplate {
     /// assert_eq!(result, "Items: apple | banana | cherry");
     /// ```
     pub fn format(&self, input: &str) -> Result<String, String> {
-        use std::time::Instant;
+        self.render_single_input(input, false)
+            .map(RenderBuffer::into_rendered)
+    }
 
-        let mut cache = TemplateCache::new();
-        let mut result = String::with_capacity(self.estimate_output_capacity(input));
-        let mut input_hash = None;
-
-        /* -------- optional debug session -------------------------------- */
-
-        let start_time = if self.debug {
-            Some(Instant::now())
-        } else {
-            None
-        };
-
-        if self.debug {
-            let tracer = DebugTracer::new(true);
-            let info = format!(
-                "{} sections (literal: {}, template: {})",
-                self.sections.len(),
-                self.sections.len() - self.template_section_count(),
-                self.template_section_count()
-            );
-            tracer.session_start("MULTI-TEMPLATE", &self.raw, input, Some(&info));
-
-            for (idx, (section, plan)) in self
-                .sections
-                .iter()
-                .zip(self.compiled_sections.iter())
-                .enumerate()
-            {
-                match (section, plan) {
-                    (TemplateSection::Literal(text), CompiledSectionPlan::Literal) => {
-                        let preview = if text.trim().is_empty() && text.len() <= 2 {
-                            "whitespace".to_string()
-                        } else if text.len() <= 20 {
-                            format!("'{text}'")
-                        } else {
-                            format!("'{}...' ({} chars)", &text[..15], text.len())
-                        };
-                        tracer.section(idx + 1, self.sections.len(), "literal", &preview);
-                        result.push_str(text);
-                        if idx + 1 < self.sections.len() {
-                            tracer.separator();
-                        }
-                    }
-                    (
-                        TemplateSection::Template { ops, .. },
-                        CompiledSectionPlan::Template { exec, cache_key },
-                    ) => {
-                        let summary = Self::format_operations_summary(ops);
-                        tracer.section(idx + 1, self.sections.len(), "template", &summary);
-                        let out = self.execute_template_section(
-                            input,
-                            ops,
-                            exec,
-                            *cache_key,
-                            ExecutionContext {
-                                input_hash: &mut input_hash,
-                                cache: &mut cache,
-                                dbg: &Some(&tracer),
-                            },
-                        )?;
-                        result.push_str(&out);
-                    }
-                    _ => unreachable!("compiled section plan must match template sections"),
-                }
-            }
-
-            tracer.session_end("MULTI-TEMPLATE", &result, start_time.unwrap().elapsed());
-        } else {
-            for (section, plan) in self.sections.iter().zip(self.compiled_sections.iter()) {
-                match (section, plan) {
-                    (TemplateSection::Literal(text), CompiledSectionPlan::Literal) => {
-                        result.push_str(text)
-                    }
-                    (
-                        TemplateSection::Template { ops, .. },
-                        CompiledSectionPlan::Template { exec, cache_key },
-                    ) => {
-                        let out = self.execute_template_section(
-                            input,
-                            ops,
-                            exec,
-                            *cache_key,
-                            ExecutionContext {
-                                input_hash: &mut input_hash,
-                                cache: &mut cache,
-                                dbg: &None,
-                            },
-                        )?;
-                        result.push_str(&out);
-                    }
-                    _ => unreachable!("compiled section plan must match template sections"),
-                }
-            }
-        }
-
-        Ok(result)
+    /// Apply the template to input data, returning both the final string and
+    /// each rendered template section result.
+    ///
+    /// `rendered` is identical to the output of [`MultiTemplate::format`], while
+    /// `template_outputs` captures the exact text inserted for each template
+    /// section in left-to-right order.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// let template = Template::parse("asd {upper} bsd {lower}").unwrap();
+    /// let result = template.format_rich("MiXeD").unwrap();
+    ///
+    /// assert_eq!(result.rendered, "asd MIXED bsd mixed");
+    /// assert_eq!(result.template_outputs[0].output, "MIXED");
+    /// assert_eq!(result.template_outputs[1].output, "mixed");
+    /// ```
+    pub fn format_rich(&self, input: &str) -> Result<RichFormatResult, String> {
+        self.render_single_input(input, true)
+            .map(RenderBuffer::into_rich)
     }
 
     /* -------- public helpers ------------------------------------------- */
@@ -747,104 +774,23 @@ impl MultiTemplate {
         inputs: &[&[&str]],
         separators: &[&str],
     ) -> Result<String, String> {
-        let template_sections_count = self.template_section_count();
+        self.render_structured_inputs(inputs, separators, false)
+            .map(RenderBuffer::into_rendered)
+    }
 
-        // Handle input/template count mismatches gracefully
-        let adjusted_inputs: Vec<&[&str]> = (0..template_sections_count)
-            .map(|i| {
-                if i < inputs.len() {
-                    inputs[i] // Use actual input
-                } else {
-                    &[] as &[&str] // Empty slice for missing inputs
-                }
-            })
-            .collect();
-
-        // Handle separator/template count mismatches gracefully
-        let adjusted_separators: Vec<&str> = (0..template_sections_count)
-            .map(|i| {
-                if i < separators.len() {
-                    separators[i] // Use actual separator
-                } else {
-                    " " // Default to space for missing separators
-                }
-            })
-            .collect();
-
-        let inputs = &adjusted_inputs;
-        let separators = &adjusted_separators;
-
-        let mut result = String::new();
-        let mut template_index = 0;
-        let mut cache = TemplateCache::new();
-
-        for (section, plan) in self.sections.iter().zip(self.compiled_sections.iter()) {
-            match (section, plan) {
-                (TemplateSection::Literal(text), CompiledSectionPlan::Literal) => {
-                    result.push_str(text);
-                }
-                (
-                    TemplateSection::Template { ops, .. },
-                    CompiledSectionPlan::Template { exec, cache_key },
-                ) => {
-                    if template_index >= inputs.len() {
-                        return Err("Internal error: template index out of bounds".to_string());
-                    }
-
-                    // Process each input individually, then join the results
-                    let section_inputs = inputs[template_index];
-                    let separator = separators[template_index];
-                    let output = match section_inputs.len() {
-                        0 => String::new(),
-                        1 => {
-                            let mut input_hasher = std::collections::hash_map::DefaultHasher::new();
-                            std::hash::Hash::hash(&section_inputs[0], &mut input_hasher);
-                            let mut input_hash = Some(input_hasher.finish());
-
-                            self.execute_template_section(
-                                section_inputs[0],
-                                ops,
-                                exec,
-                                *cache_key,
-                                ExecutionContext {
-                                    input_hash: &mut input_hash,
-                                    cache: &mut cache,
-                                    dbg: &None, // No debug tracing for structured processing
-                                },
-                            )?
-                        }
-                        _ => {
-                            let mut results = Vec::new();
-                            for input in section_inputs {
-                                let mut input_hasher =
-                                    std::collections::hash_map::DefaultHasher::new();
-                                std::hash::Hash::hash(&input, &mut input_hasher);
-                                let mut input_hash = Some(input_hasher.finish());
-
-                                let result = self.execute_template_section(
-                                    input,
-                                    ops,
-                                    exec,
-                                    *cache_key,
-                                    ExecutionContext {
-                                        input_hash: &mut input_hash,
-                                        cache: &mut cache,
-                                        dbg: &None, // No debug tracing for structured processing
-                                    },
-                                )?;
-                                results.push(result);
-                            }
-                            results.join(separator)
-                        }
-                    };
-                    result.push_str(&output);
-                    template_index += 1;
-                }
-                _ => unreachable!("compiled section plan must match template sections"),
-            }
-        }
-
-        Ok(result)
+    /// Format template with multiple inputs per template section, returning both
+    /// the final string and each per-section rendered output.
+    ///
+    /// `template_outputs` contains the exact joined output inserted for each
+    /// template section after applying the same input and separator rules as
+    /// [`MultiTemplate::format_with_inputs`].
+    pub fn format_with_inputs_rich(
+        &self,
+        inputs: &[&[&str]],
+        separators: &[&str],
+    ) -> Result<RichFormatResult, String> {
+        self.render_structured_inputs(inputs, separators, true)
+            .map(RenderBuffer::into_rich)
     }
 
     /// Get information about template sections for introspection.
@@ -948,6 +894,205 @@ impl MultiTemplate {
     /*  internal helpers                                                   */
     /* ------------------------------------------------------------------ */
 
+    fn render_single_input(&self, input: &str, collect_rich: bool) -> Result<RenderBuffer, String> {
+        use std::time::Instant;
+
+        let mut cache = TemplateCache::new();
+        let mut input_hash = None;
+        let start_time = self.debug.then(Instant::now);
+        let tracer = self.debug.then(|| DebugTracer::new(true));
+
+        if let Some(tracer) = tracer.as_ref() {
+            let info = format!(
+                "{} sections (literal: {}, template: {})",
+                self.sections.len(),
+                self.sections.len() - self.template_section_count(),
+                self.template_section_count()
+            );
+            tracer.session_start("MULTI-TEMPLATE", &self.raw, input, Some(&info));
+        }
+
+        let buffer = self.render_sections(
+            self.estimate_output_capacity(input),
+            collect_rich,
+            tracer.as_ref(),
+            |_, ops, exec, cache_key, dbg| {
+                self.execute_template_section(
+                    input,
+                    ops,
+                    exec,
+                    cache_key,
+                    ExecutionContext {
+                        input_hash: &mut input_hash,
+                        cache: &mut cache,
+                        dbg,
+                    },
+                )
+            },
+        )?;
+
+        if let (Some(tracer), Some(start_time)) = (tracer.as_ref(), start_time) {
+            tracer.session_end("MULTI-TEMPLATE", &buffer.rendered, start_time.elapsed());
+        }
+
+        Ok(buffer)
+    }
+
+    fn render_structured_inputs(
+        &self,
+        inputs: &[&[&str]],
+        separators: &[&str],
+        collect_rich: bool,
+    ) -> Result<RenderBuffer, String> {
+        let template_sections_count = self.template_section_count();
+
+        let adjusted_inputs: Vec<&[&str]> = (0..template_sections_count)
+            .map(|i| inputs.get(i).copied().unwrap_or(&[]))
+            .collect();
+        let adjusted_separators: Vec<&str> = (0..template_sections_count)
+            .map(|i| separators.get(i).copied().unwrap_or(" "))
+            .collect();
+
+        let mut cache = TemplateCache::new();
+
+        self.render_sections(
+            self.literal_output_capacity(),
+            collect_rich,
+            None,
+            |template_position, ops, exec, cache_key, _| {
+                self.execute_structured_template_section(
+                    adjusted_inputs[template_position],
+                    adjusted_separators[template_position],
+                    ops,
+                    exec,
+                    cache_key,
+                    &mut cache,
+                )
+            },
+        )
+    }
+
+    fn render_sections<F>(
+        &self,
+        rendered_capacity: usize,
+        collect_rich: bool,
+        tracer: Option<&DebugTracer>,
+        mut render_template_section: F,
+    ) -> Result<RenderBuffer, String>
+    where
+        F: FnMut(
+            usize,
+            &[StringOp],
+            &TemplateExecutionPlan,
+            u64,
+            Option<&DebugTracer>,
+        ) -> Result<String, String>,
+    {
+        let mut buffer = RenderBuffer::new(
+            rendered_capacity,
+            collect_rich.then_some(self.template_section_count()),
+        );
+        let mut template_position = 0;
+
+        for (overall_position, (section, plan)) in self
+            .sections
+            .iter()
+            .zip(self.compiled_sections.iter())
+            .enumerate()
+        {
+            match (section, plan) {
+                (TemplateSection::Literal(text), CompiledSectionPlan::Literal) => {
+                    if let Some(tracer) = tracer {
+                        let preview = Self::literal_preview(text);
+                        tracer.section(
+                            overall_position + 1,
+                            self.sections.len(),
+                            "literal",
+                            &preview,
+                        );
+                    }
+
+                    buffer.push_literal(text);
+
+                    if let Some(tracer) = tracer
+                        && overall_position + 1 < self.sections.len()
+                    {
+                        tracer.separator();
+                    }
+                }
+                (
+                    TemplateSection::Template { ops, .. },
+                    CompiledSectionPlan::Template { exec, cache_key },
+                ) => {
+                    if let Some(tracer) = tracer {
+                        let summary = Self::format_operations_summary(ops);
+                        tracer.section(
+                            overall_position + 1,
+                            self.sections.len(),
+                            "template",
+                            &summary,
+                        );
+                    }
+
+                    let output =
+                        render_template_section(template_position, ops, exec, *cache_key, tracer)?;
+                    buffer.push_template_output(template_position, overall_position, output);
+                    template_position += 1;
+                }
+                _ => unreachable!("compiled section plan must match template sections"),
+            }
+        }
+
+        Ok(buffer)
+    }
+
+    fn execute_structured_template_section(
+        &self,
+        section_inputs: &[&str],
+        separator: &str,
+        ops: &[StringOp],
+        exec: &TemplateExecutionPlan,
+        cache_key: u64,
+        cache: &mut TemplateCache,
+    ) -> Result<String, String> {
+        match section_inputs.len() {
+            0 => Ok(String::new()),
+            1 => {
+                let mut input_hash = Some(Self::hash_input(section_inputs[0]));
+                self.execute_template_section(
+                    section_inputs[0],
+                    ops,
+                    exec,
+                    cache_key,
+                    ExecutionContext {
+                        input_hash: &mut input_hash,
+                        cache,
+                        dbg: None,
+                    },
+                )
+            }
+            _ => {
+                let mut results = Vec::with_capacity(section_inputs.len());
+                for input in section_inputs {
+                    let mut input_hash = Some(Self::hash_input(input));
+                    let result = self.execute_template_section(
+                        input,
+                        ops,
+                        exec,
+                        cache_key,
+                        ExecutionContext {
+                            input_hash: &mut input_hash,
+                            cache,
+                            dbg: None,
+                        },
+                    )?;
+                    results.push(result);
+                }
+                Ok(results.join(separator))
+            }
+        }
+    }
+
     fn execute_template_section(
         &self,
         input: &str,
@@ -989,12 +1134,22 @@ impl MultiTemplate {
         }
     }
 
+    fn literal_preview(text: &str) -> String {
+        if text.trim().is_empty() && text.len() <= 2 {
+            "whitespace".to_string()
+        } else if text.len() <= 20 {
+            format!("'{text}'")
+        } else {
+            format!("'{}...' ({} chars)", &text[..15], text.len())
+        }
+    }
+
     fn execute_template_section_inner(
         &self,
         input: &str,
         ops: &[StringOp],
         kind: &TemplateExecutionKind,
-        dbg: &Option<&DebugTracer>,
+        dbg: Option<&DebugTracer>,
     ) -> Result<String, String> {
         match kind {
             TemplateExecutionKind::Passthrough => {
@@ -1104,6 +1259,16 @@ impl MultiTemplate {
             })
             .sum::<usize>()
             + input.len()
+    }
+
+    fn literal_output_capacity(&self) -> usize {
+        self.sections
+            .iter()
+            .map(|section| match section {
+                TemplateSection::Literal(text) => text.len(),
+                TemplateSection::Template { .. } => 0,
+            })
+            .sum()
     }
 
     fn hash_input(input: &str) -> u64 {
