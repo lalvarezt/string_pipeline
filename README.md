@@ -115,6 +115,53 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+### Rich Rendering
+
+Use the rich rendering path when you need both the final rendered string and the
+exact output produced by each template section.
+
+```rust
+use string_pipeline::Template;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let template = Template::parse("Preview {upper} ({lower})")?;
+    let result = template.format_rich("MiXeD")?;
+
+    assert_eq!(result.rendered(), "Preview MIXED (mixed)");
+    assert_eq!(result.template_output(0), Some("MIXED"));
+    assert_eq!(result.template_output(1), Some("mixed"));
+
+    let first = &result.template_outputs()[0];
+    assert_eq!(first.template_position(), 0);
+    assert_eq!(first.overall_position(), 1);
+    assert_eq!(first.as_str(result.rendered()), "MIXED");
+
+    Ok(())
+}
+```
+
+For structured templates, `format_with_inputs_rich()` exposes the per-section
+joined output after applying the same input and separator rules as
+`format_with_inputs()`.
+
+```rust
+use string_pipeline::Template;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let template = Template::parse("User: {upper} | File: {lower}")?;
+    let result = template.format_with_inputs_rich(
+        &[&["john doe", "jane smith"], &["README.MD"]],
+        &[" / ", " "],
+    )?;
+
+    assert_eq!(result.rendered(), "User: JOHN DOE / JANE SMITH | File: readme.md");
+    assert_eq!(result.template_output(0), Some("JOHN DOE / JANE SMITH"));
+    assert_eq!(result.template_output(1), Some("readme.md"));
+
+    Ok(())
+}
+```
+
 ### CLI (companion)
 
 Use the CLI to test the same templates externally.

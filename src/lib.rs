@@ -146,9 +146,46 @@
 //! let template = Template::parse("asd {upper} bsd {lower}").unwrap();
 //! let result = template.format_rich("MiXeD").unwrap();
 //!
-//! assert_eq!(result.rendered, "asd MIXED bsd mixed");
+//! assert_eq!(result.rendered(), "asd MIXED bsd mixed");
 //! assert_eq!(result.template_output(0), Some("MIXED"));
 //! assert_eq!(result.template_output(1), Some("mixed"));
+//! ```
+//!
+//! The rich result stores per-template outputs as ranges into the final
+//! rendered string. Use `template_output()` for direct indexed access or
+//! `template_outputs()` plus `TemplateOutput::as_str()` when you also need
+//! section positions.
+//!
+//! ```rust
+//! use string_pipeline::Template;
+//!
+//! let template = Template::parse("User: {upper}").unwrap();
+//! let result = template.format_rich("john").unwrap();
+//! let output = &result.template_outputs()[0];
+//!
+//! assert_eq!(output.template_position(), 0);
+//! assert_eq!(output.overall_position(), 1);
+//! assert_eq!(output.as_str(result.rendered()), "JOHN");
+//! ```
+//!
+//! Use `format_with_inputs_rich()` for structured templates when each template
+//! section receives its own input slice and separator.
+//!
+//! ```rust
+//! use string_pipeline::Template;
+//!
+//! let template = Template::parse("Users: {upper} | Files: {lower}").unwrap();
+//! let result = template.format_with_inputs_rich(
+//!     &[&["john doe", "jane smith"], &["FILE1.TXT", "FILE2.TXT"]],
+//!     &[" / ", ","],
+//! ).unwrap();
+//!
+//! assert_eq!(
+//!     result.rendered(),
+//!     "Users: JOHN DOE / JANE SMITH | Files: file1.txt,file2.txt"
+//! );
+//! assert_eq!(result.template_output(0), Some("JOHN DOE / JANE SMITH"));
+//! assert_eq!(result.template_output(1), Some("file1.txt,file2.txt"));
 //! ```
 //!
 //! ## Error Handling

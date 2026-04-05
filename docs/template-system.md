@@ -8,6 +8,7 @@ This document describes the template syntax used by `string_pipeline`.
 - [Template Syntax](#template-syntax)
 - [Evaluation Rules](#evaluation-rules)
 - [Multi-template Strings](#multi-template-strings)
+- [Rich Rendering](#rich-rendering)
 - [Operation Reference](#operation-reference)
 - [Range Specifications](#range-specifications)
 - [Escaping Rules](#escaping-rules)
@@ -120,6 +121,65 @@ Within one `format()` call, repeated template sections with the same operation s
 string-pipeline "First: {split:,:0} Again: {split:,:0}" "apple,banana,cherry"
 # First: apple Again: apple
 ```
+
+## Rich Rendering
+
+The standard rendering path returns only the final string. The rich rendering
+path keeps that final string and also exposes the output produced by each
+template section.
+
+This is useful when the caller needs to treat template substitutions
+differently from literal text, for example to post-process only the dynamic
+parts before passing the rendered result to another system.
+
+### Single-input rendering
+
+Use `format_rich()` to format one input while preserving per-section outputs.
+
+```rust
+use string_pipeline::Template;
+
+let template = Template::parse("Preview {upper} ({lower})").unwrap();
+let result = template.format_rich("MiXeD").unwrap();
+
+assert_eq!(result.rendered(), "Preview MIXED (mixed)");
+assert_eq!(result.template_output(0), Some("MIXED"));
+assert_eq!(result.template_output(1), Some("mixed"));
+```
+
+Each `TemplateOutput` also exposes metadata:
+
+- `template_position()`: position among template sections only
+- `overall_position()`: position among all sections, including literals
+- `rendered_range()`: byte range inside the final rendered string
+- `as_str(result.rendered())`: borrowed view of that section output
+
+The per-section outputs are stored as ranges into the final rendered string, so
+the rich path does not retain a second owned string per template section.
+
+### Structured-input rendering
+
+Use `format_with_inputs_rich()` when each template section receives its own
+input slice and separator.
+
+```rust
+use string_pipeline::Template;
+
+let template = Template::parse("User: {upper} | File: {lower}").unwrap();
+let result = template
+    .format_with_inputs_rich(
+        &[&["john doe", "jane smith"], &["README.MD"]],
+        &[" / ", " "],
+    )
+    .unwrap();
+
+assert_eq!(result.rendered(), "User: JOHN DOE / JANE SMITH | File: readme.md");
+assert_eq!(result.template_output(0), Some("JOHN DOE / JANE SMITH"));
+assert_eq!(result.template_output(1), Some("readme.md"));
+```
+
+In this mode, each rich template output is the fully joined output inserted for
+that section after applying the same rules as `format_with_inputs()`.
 
 ## Operation Reference
 

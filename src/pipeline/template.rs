@@ -262,6 +262,10 @@ pub struct SectionInfo {
 /// This captures the exact string produced for one template section during
 /// formatting, along with both its template-only and overall section positions.
 ///
+/// The output itself is represented as a byte range into
+/// [`RichFormatResult::rendered`], which avoids retaining a second owned string
+/// for every template section collected through the rich rendering path.
+///
 /// # Examples
 ///
 /// ```rust
@@ -270,8 +274,8 @@ pub struct SectionInfo {
 /// let template = Template::parse("A: {upper} B: {lower}").unwrap();
 /// let result = template.format_rich("MiXeD").unwrap();
 ///
-/// assert_eq!(result.template_outputs[0].template_position, 0);
-/// assert_eq!(result.template_outputs[0].overall_position, 1);
+/// assert_eq!(result.template_outputs()[0].template_position(), 0);
+/// assert_eq!(result.template_outputs()[0].overall_position(), 1);
 /// assert_eq!(result.template_output(0), Some("MIXED"));
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -302,6 +306,9 @@ impl TemplateOutput {
     }
 
     /// Borrow this section's rendered output from the full rendered string.
+    ///
+    /// This is the zero-allocation way to inspect a single template section
+    /// once you have a [`RichFormatResult`].
     pub fn as_str<'a>(&self, rendered: &'a str) -> &'a str {
         &rendered[self.rendered_range.clone()]
     }
@@ -312,6 +319,11 @@ impl TemplateOutput {
 /// This type preserves the existing final string output while exposing the
 /// individual rendered results for each template section.
 ///
+/// `rendered` is identical to the output of [`MultiTemplate::format`].
+/// `template_outputs` contains metadata for each template section in left-to-right
+/// order, and section strings can be accessed with [`RichFormatResult::template_output`]
+/// or [`TemplateOutput::as_str`].
+///
 /// # Examples
 ///
 /// ```rust
@@ -320,8 +332,8 @@ impl TemplateOutput {
 /// let template = Template::parse("asd {upper} bsd {lower}").unwrap();
 /// let result = template.format_rich("MiXeD").unwrap();
 ///
-/// assert_eq!(result.rendered, "asd MIXED bsd mixed");
-/// assert_eq!(result.template_outputs.len(), 2);
+/// assert_eq!(result.rendered(), "asd MIXED bsd mixed");
+/// assert_eq!(result.template_outputs().len(), 2);
 /// assert_eq!(result.template_output(0), Some("MIXED"));
 /// assert_eq!(result.template_output(1), Some("mixed"));
 /// ```
@@ -340,12 +352,17 @@ impl RichFormatResult {
         &self.rendered
     }
 
-    /// Outputs for each template section in left-to-right order.
+    /// Metadata for each template section in left-to-right order.
+    ///
+    /// Use [`RichFormatResult::template_output`] or [`TemplateOutput::as_str`]
+    /// to borrow the corresponding rendered section text.
     pub fn template_outputs(&self) -> &[TemplateOutput] {
         &self.template_outputs
     }
 
     /// Borrow the output of the template section at `index`.
+    ///
+    /// Returns `None` when the index is out of bounds.
     pub fn template_output(&self, index: usize) -> Option<&str> {
         self.template_outputs
             .get(index)
@@ -609,6 +626,9 @@ impl MultiTemplate {
     /// `template_outputs` captures the exact text inserted for each template
     /// section in left-to-right order.
     ///
+    /// The returned section metadata points into the final rendered string, so
+    /// the rich path avoids storing duplicate owned strings for each section.
+    ///
     /// # Examples
     ///
     /// ```rust
@@ -617,7 +637,7 @@ impl MultiTemplate {
     /// let template = Template::parse("asd {upper} bsd {lower}").unwrap();
     /// let result = template.format_rich("MiXeD").unwrap();
     ///
-    /// assert_eq!(result.rendered, "asd MIXED bsd mixed");
+    /// assert_eq!(result.rendered(), "asd MIXED bsd mixed");
     /// assert_eq!(result.template_output(0), Some("MIXED"));
     /// assert_eq!(result.template_output(1), Some("mixed"));
     /// ```
@@ -830,6 +850,28 @@ impl MultiTemplate {
     /// `template_outputs` contains the exact joined output inserted for each
     /// template section after applying the same input and separator rules as
     /// [`MultiTemplate::format_with_inputs`].
+    ///
+    /// This is useful when callers need the final rendered string and also need
+    /// to inspect or post-process the dynamic output of each template section
+    /// independently.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use string_pipeline::Template;
+    ///
+    /// let template = Template::parse("User: {upper} | File: {lower}").unwrap();
+    /// let result = template
+    ///     .format_with_inputs_rich(
+    ///         &[&["john doe", "jane smith"], &["README.MD"]],
+    ///         &[" / ", " "],
+    ///     )
+    ///     .unwrap();
+    ///
+    /// assert_eq!(result.rendered(), "User: JOHN DOE / JANE SMITH | File: readme.md");
+    /// assert_eq!(result.template_output(0), Some("JOHN DOE / JANE SMITH"));
+    /// assert_eq!(result.template_output(1), Some("readme.md"));
+    /// ```
     pub fn format_with_inputs_rich(
         &self,
         inputs: &[&[&str]],
