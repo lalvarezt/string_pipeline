@@ -275,6 +275,7 @@ pub struct SectionInfo {
 /// assert_eq!(result.template_output(0), Some("MIXED"));
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct TemplateOutput {
     /// Position among template sections only.
     pub template_position: usize,
@@ -285,6 +286,21 @@ pub struct TemplateOutput {
 }
 
 impl TemplateOutput {
+    /// Position among template sections only.
+    pub fn template_position(&self) -> usize {
+        self.template_position
+    }
+
+    /// Position among all sections, including literals.
+    pub fn overall_position(&self) -> usize {
+        self.overall_position
+    }
+
+    /// Byte range within [`RichFormatResult::rendered`] for this template section.
+    pub fn rendered_range(&self) -> Range<usize> {
+        self.rendered_range.clone()
+    }
+
     /// Borrow this section's rendered output from the full rendered string.
     pub fn as_str<'a>(&self, rendered: &'a str) -> &'a str {
         &rendered[self.rendered_range.clone()]
@@ -310,6 +326,7 @@ impl TemplateOutput {
 /// assert_eq!(result.template_output(1), Some("mixed"));
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct RichFormatResult {
     /// Final rendered output, identical to what `format()` would return.
     pub rendered: String,
@@ -318,6 +335,16 @@ pub struct RichFormatResult {
 }
 
 impl RichFormatResult {
+    /// Final rendered output, identical to what `format()` would return.
+    pub fn rendered(&self) -> &str {
+        &self.rendered
+    }
+
+    /// Outputs for each template section in left-to-right order.
+    pub fn template_outputs(&self) -> &[TemplateOutput] {
+        &self.template_outputs
+    }
+
     /// Borrow the output of the template section at `index`.
     pub fn template_output(&self, index: usize) -> Option<&str> {
         self.template_outputs
