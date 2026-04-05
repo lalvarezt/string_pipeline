@@ -85,10 +85,10 @@ fn test_complex_pipeline() {
 }
 
 // ============================================================================
-// MULTI-TEMPLATE SPECIFIC TESTS
+// TEMPLATE COMPOSITION TESTS
 // ============================================================================
 #[test]
-fn test_multi_template_basic() {
+fn test_template_basic() {
     let output = run_cli(&["Hello {upper} World!", "test"]);
     assert!(output.status.success());
     assert_eq!(
@@ -98,7 +98,7 @@ fn test_multi_template_basic() {
 }
 
 #[test]
-fn test_multi_template_multiple_sections() {
+fn test_template_multiple_sections() {
     let output = run_cli(&["First: {split:,:0} Last: {split:,:1}", "apple,banana"]);
     assert!(output.status.success());
     assert_eq!(
@@ -108,7 +108,7 @@ fn test_multi_template_multiple_sections() {
 }
 
 #[test]
-fn test_multi_template_with_complex_operations() {
+fn test_template_with_complex_operations() {
     let output = run_cli(&[
         "Count: {split:,:..|map:{upper}|join:-} Items: {split:,:1..3|join:;}",
         "a,b,c,d,e",
@@ -121,7 +121,7 @@ fn test_multi_template_with_complex_operations() {
 }
 
 #[test]
-fn test_multi_template_literal_only() {
+fn test_template_literal_only() {
     let output = run_cli(&["Just plain text", "ignored"]);
     assert!(output.status.success());
     assert_eq!(
@@ -131,7 +131,7 @@ fn test_multi_template_literal_only() {
 }
 
 #[test]
-fn test_multi_template_consecutive_templates() {
+fn test_template_consecutive_templates() {
     let output = run_cli(&["{upper}{lower}", "TeSt"]);
     assert!(output.status.success());
     assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "TESTtest");
@@ -156,7 +156,7 @@ fn test_template_file_option() {
 }
 
 #[test]
-fn test_template_file_multi_template() {
+fn test_template_file_template() {
     let template_file = create_temp_file("Prefix: {upper} Suffix: {lower}");
     let output = run_cli_with_stdin(
         &["--template-file", template_file.path().to_str().unwrap()],
@@ -202,7 +202,7 @@ fn test_both_template_and_input_files() {
 }
 
 #[test]
-fn test_input_file_with_multi_template() {
+fn test_input_file_with_template() {
     let input_file = create_temp_file("apple,banana");
     let output = run_cli(&[
         "First: {split:,:0} Second: {split:,:1}",
@@ -228,7 +228,7 @@ fn test_debug_flag() {
 }
 
 #[test]
-fn test_debug_flag_with_multi_template() {
+fn test_debug_flag_with_template() {
     let output = run_cli(&["--debug", "Result: {upper}", "hello"]);
     assert!(output.status.success());
     assert_eq!(
@@ -361,7 +361,7 @@ fn test_validate_flag() {
 }
 
 #[test]
-fn test_validate_multi_template() {
+fn test_validate_template() {
     let output = run_cli(&["--validate", "Hello {upper} World!"]);
     assert!(output.status.success());
     assert_eq!(
@@ -585,7 +585,7 @@ fn test_unicode_input() {
 }
 
 #[test]
-fn test_unicode_in_multi_template() {
+fn test_unicode_in_template() {
     let output = run_cli(&["🎉 Result: {upper} 🎊", "café"]);
     assert!(output.status.success());
     assert_eq!(
@@ -615,7 +615,7 @@ fn test_very_long_input() {
 }
 
 #[test]
-fn test_whitespace_preservation_in_multi_template() {
+fn test_whitespace_preservation_in_template() {
     let output = run_cli(&["   Before   {trim}   After   ", "  test  "]);
     assert!(output.status.success());
     assert_eq!(
@@ -626,7 +626,7 @@ fn test_whitespace_preservation_in_multi_template() {
 
 #[test]
 fn test_template_with_literal_braces() {
-    // Test that literal braces in multi-templates work with proper escaping
+    // Test that literal braces in templates work with proper escaping
     let output = run_cli(&["literal text {upper} more literal", "hello"]);
     assert!(output.status.success());
     assert_eq!(
@@ -677,7 +677,7 @@ fn test_file_input_with_debug() {
 }
 
 #[test]
-fn test_template_file_with_multi_template_and_validation() {
+fn test_template_file_with_template_and_validation() {
     let template_file = create_temp_file("Start: {split:,:0} End: {split:,:1}");
     let output = run_cli(&[
         "--validate",
