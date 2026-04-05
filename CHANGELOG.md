@@ -3,6 +3,23 @@
 All notable changes to this project will be documented in this file.
 <!-- ignore lint rules that are often triggered by content generated from commits / git-cliff -->
 <!-- markdownlint-disable line-length no-bare-urls ul-style emphasis-style -->
+## [0.14.0](https://github.com/lalvarezt/string_pipeline/compare/0.13.4..0.14.0) - 2026-04-05
+
+### ⛰️  Features
+
+- Add rich formatting results for template pipelines - ([322dba6](https://github.com/lalvarezt/string_pipeline/commit/322dba6cda68cfca2dd1ce513dd8013693c03be6))
+
+### 🚜 Refactor
+
+- Rename MultiTemplate to Template - ([a24f22b](https://github.com/lalvarezt/string_pipeline/commit/a24f22bf9db6cd840154df93057ed8fb34ca5848))
+- Rename public template API to `Template` - ([1dd5609](https://github.com/lalvarezt/string_pipeline/commit/1dd5609a16486c0b4c4130e39b73555834749884))
+- Expose rich format result accessors - ([3d61340](https://github.com/lalvarezt/string_pipeline/commit/3d613402084ad7bf64d4db78959500bcaed5ab38))
+- Expose rich template outputs as borrowed slices - ([d749cf8](https://github.com/lalvarezt/string_pipeline/commit/d749cf8d7db17514dae11a375938bb4860a487ae))
+
+### 📚 Documentation
+
+- Document rich template rendering APIs - ([afc867e](https://github.com/lalvarezt/string_pipeline/commit/afc867e1328054d8498592da146474c176722ea7))
+
 ## [0.13.4](https://github.com/lalvarezt/string_pipeline/compare/0.13.3..0.13.4) - 2026-03-22
 
 ### 🐛 Bug Fixes
