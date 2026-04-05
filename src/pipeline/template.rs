@@ -1,8 +1,9 @@
 //! Template engine for string transformation with mixed literal and operation sections.
 //!
-//! This module provides the `MultiTemplate` type, which supports templates containing
-//! both literal text and transformation sections. Templates can mix static content
-//! with dynamic string operations, enabling complex text processing patterns.
+//! This module provides the implementation behind the public `Template` API,
+//! supporting templates that contain both literal text and transformation
+//! sections. Templates can mix static content with dynamic string operations,
+//! enabling complex text processing patterns.
 //!
 //! # Template Syntax
 //!
@@ -55,14 +56,17 @@ use crate::pipeline::{DebugTracer, RangeSpec, StringOp, apply_ops_internal, appl
 use memchr::memchr_iter;
 
 /* ------------------------------------------------------------------------ */
-/*  MultiTemplate – the single implementation                               */
+/*  Template implementation                                                 */
 /* ------------------------------------------------------------------------ */
 
 /// A template engine supporting mixed literal text and string transformation operations.
 ///
-/// `MultiTemplate` can contain any combination of literal text sections and template
-/// sections that apply string operations to input data. This enables creating complex
-/// text formatting patterns while maintaining high performance through intelligent caching.
+/// Prefer using [`Template`] in public code.
+///
+/// This type can contain any combination of literal text sections and
+/// template sections that apply string operations to input data. This enables
+/// creating complex text formatting patterns while maintaining high performance
+/// through intelligent caching.
 ///
 /// # Template Structure
 ///
@@ -175,7 +179,7 @@ impl TemplateSection {
 ///
 /// Distinguishes between literal text sections and template operation sections
 /// when examining template structure programmatically. Used by introspection
-/// methods like [`MultiTemplate::get_section_info`] to provide detailed template analysis.
+/// methods like [`Template::get_section_info`] to provide detailed template analysis.
 ///
 /// # Examples
 ///
@@ -206,7 +210,7 @@ pub enum SectionType {
 /// Detailed information about a template section for introspection and debugging.
 ///
 /// Provides comprehensive metadata about each section in a template, including
-/// its type, position, and content. Used by [`MultiTemplate::get_section_info`]
+/// its type, position, and content. Used by [`Template::get_section_info`]
 /// to enable programmatic template analysis and debugging.
 ///
 /// This struct contains all necessary information to understand both the structure
@@ -319,7 +323,7 @@ impl TemplateOutput {
 /// This type preserves the existing final string output while exposing the
 /// individual rendered results for each template section.
 ///
-/// `rendered` is identical to the output of [`MultiTemplate::format`].
+/// `rendered` is identical to the output of [`Template::format`].
 /// `template_outputs` contains metadata for each template section in left-to-right
 /// order, and section strings can be accessed with [`RichFormatResult::template_output`]
 /// or [`TemplateOutput::as_str`].
@@ -453,7 +457,7 @@ impl RenderBuffer {
 }
 
 /* ------------------------------------------------------------------------ */
-/*  impl MultiTemplate                                                      */
+/*  impl Template internals                                                 */
 /* ------------------------------------------------------------------------ */
 
 impl MultiTemplate {
@@ -469,7 +473,7 @@ impl MultiTemplate {
 
     /* -------- constructors ---------------------------------------------- */
 
-    /// Parse a template string into a `MultiTemplate` instance.
+    /// Parse a template string into a `Template` instance.
     ///
     /// Parses template syntax containing literal text and `{operation}` blocks,
     /// with support for complex operation pipelines, debug information is suppressed.
@@ -480,7 +484,7 @@ impl MultiTemplate {
     ///
     /// # Returns
     ///
-    /// * `Ok(MultiTemplate)` - Successfully parsed template
+    /// * `Ok(Self)` - Successfully parsed template
     /// * `Err(String)` - Parse error description
     ///
     /// # Template Syntax
@@ -503,7 +507,7 @@ impl MultiTemplate {
     /// ```
     pub fn parse(template: &str) -> Result<Self, String> {
         // Fast-path: if the input is a *single* template block (no outer-level
-        // literal text) we can skip the multi-template scanner and directly
+        // literal text) we can skip the mixed-section scanner and directly
         // parse the operation list.
         if let Some(single) = Self::try_single_block(template)? {
             return Ok(single);
@@ -513,7 +517,7 @@ impl MultiTemplate {
         Ok(Self::new(template.to_string(), sections, false))
     }
 
-    /// Parse a template string into a `MultiTemplate` instance.
+    /// Parse a template string into a `Template` instance.
     ///
     /// Parses template syntax containing literal text and `{operation}` blocks,
     /// with support for complex operation pipelines and debug mode.
@@ -525,7 +529,7 @@ impl MultiTemplate {
     ///
     /// # Returns
     ///
-    /// * `Ok(MultiTemplate)` - Successfully parsed template
+    /// * `Ok(Self)` - Successfully parsed template
     /// * `Err(String)` - Parse error description
     ///
     /// # Template Syntax
@@ -622,7 +626,7 @@ impl MultiTemplate {
     /// Apply the template to input data, returning both the final string and
     /// each rendered template section result.
     ///
-    /// `rendered` is identical to the output of [`MultiTemplate::format`], while
+    /// `rendered` is identical to the output of [`Template::format`], while
     /// `template_outputs` captures the exact text inserted for each template
     /// section in left-to-right order.
     ///
@@ -849,7 +853,7 @@ impl MultiTemplate {
     ///
     /// `template_outputs` contains the exact joined output inserted for each
     /// template section after applying the same input and separator rules as
-    /// [`MultiTemplate::format_with_inputs`].
+    /// [`Template::format_with_inputs`].
     ///
     /// This is useful when callers need the final rendered string and also need
     /// to inspect or post-process the dynamic output of each template section
@@ -1498,7 +1502,7 @@ impl MultiTemplate {
     /* -------- helper: detect plain single-block templates ------------- */
 
     /// Detects and parses templates that consist of exactly one `{ ... }` block
-    /// with no surrounding literal text. Returns `Ok(Some(MultiTemplate))` when
+    /// with no surrounding literal text. Returns `Ok(Some(Self))` when
     /// the fast path can be applied, `Ok(None)` otherwise.
     fn try_single_block(template: &str) -> Result<Option<Self>, String> {
         // Must start with '{' and end with '}' to be a candidate.
@@ -1558,19 +1562,16 @@ impl Display for MultiTemplate {
 
 /* ---------- backward compatibility alias --------------------------------- */
 
-/// Type alias for backward compatibility.
+/// Preferred public type alias for template parsing and rendering.
 ///
-/// `Template` is an alias for `MultiTemplate`, providing a shorter name for the
-/// template type while maintaining compatibility with existing code.
+/// Use `Template` in new code.
 ///
 /// # Examples
 ///
 /// ```rust
 /// use string_pipeline::Template;
-/// use string_pipeline::MultiTemplate;
 ///
-/// // These are equivalent:
-/// let template1 = Template::parse("{upper}").unwrap();
-/// let template2 = MultiTemplate::parse("{upper}").unwrap();
+/// let template = Template::parse("{upper}").unwrap();
+/// assert_eq!(template.format("hello").unwrap(), "HELLO");
 /// ```
 pub type Template = MultiTemplate;

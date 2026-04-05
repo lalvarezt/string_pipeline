@@ -7,7 +7,7 @@ This document describes the template syntax used by `string_pipeline`.
 - [Quick Start](#quick-start)
 - [Template Syntax](#template-syntax)
 - [Evaluation Rules](#evaluation-rules)
-- [Multi-template Strings](#multi-template-strings)
+- [Templates With Literal Text](#templates-with-literal-text)
 - [Rich Rendering](#rich-rendering)
 - [Operation Reference](#operation-reference)
 - [Range Specifications](#range-specifications)
@@ -47,8 +47,7 @@ Notes:
 
 - `{}` is valid and returns the input unchanged.
 - Operations are evaluated from left to right.
-- A template can contain either only a template block (`{...}`) or literal text with one or more blocks (multi-template
-mode).
+- A template can contain either only a template block (`{...}`) or literal text with one or more blocks.
 
 ### Shorthand syntax
 
@@ -92,9 +91,10 @@ most recent `split` or `join` operation in that pipeline.
 
 Use an explicit `join` as the final step when output format must be fixed.
 
-## Multi-template Strings
+## Templates With Literal Text
 
-A multi-template combines literal text and one or more template sections.
+A template with literal text combines static content and one or more template
+sections.
 
 ```text
 User: {split:,:0} Score: {split:,:1}
@@ -180,6 +180,13 @@ assert_eq!(result.template_output(1), Some("readme.md"));
 
 In this mode, each rich template output is the fully joined output inserted for
 that section after applying the same rules as `format_with_inputs()`.
+
+## Deprecations
+
+Use `Template` as the public type name in new code.
+
+`MultiTemplate` is retained only as a compatibility name in the current
+release line and is planned for removal in the next major release.
 
 ## Operation Reference
 

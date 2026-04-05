@@ -85,21 +85,21 @@
 //! assert_eq!(result, "a,b,c");
 //! ```
 //!
-//! ## Multi-Template Support
+//! ## Templates With Literal Text
 //!
-//! Beyond simple templates, the library supports **multi-templates** that combine literal text
-//! with multiple template sections, featuring automatic caching for performance:
+//! Mixed literal/template strings support automatic caching for repeated
+//! sections within one render call:
 //!
 //! ```rust
-//! use string_pipeline::MultiTemplate;
+//! use string_pipeline::Template;
 //!
 //! // Combine literal text with template operations
-//! let template = MultiTemplate::parse("Name: {split: :0} Age: {split: :1}").unwrap();
+//! let template = Template::parse("Name: {split: :0} Age: {split: :1}").unwrap();
 //! let result = template.format("John 25").unwrap();
 //! assert_eq!(result, "Name: John Age: 25");
 //!
 //! // Automatic caching: split operation performed only once
-//! let template = MultiTemplate::parse("First: {split:,:0} Second: {split:,:1}").unwrap();
+//! let template = Template::parse("First: {split:,:0} Second: {split:,:1}").unwrap();
 //! let result = template.format("apple,banana").unwrap();
 //! assert_eq!(result, "First: apple Second: banana");
 //! ```
@@ -308,8 +308,15 @@
 //! }
 //! ```
 //!
+//! ## Compatibility
+//!
+//! Use [`Template`] as the public type name in new code.
+//!
+//! `MultiTemplate` is retained only as a compatibility name in the current
+//! release line and is planned for removal in the next major release.
+//!
 //! For complete documentation including all operations, advanced features, and debugging techniques,
-//! see the [`Template`] and [`MultiTemplate`] documentation and the comprehensive guides in the `docs/` directory.
+//! see the [`Template`] documentation and the comprehensive guides in the `docs/` directory.
 
 mod pipeline;
 

@@ -17,7 +17,7 @@ This document describes how debug output works in `string_pipeline`.
 Debug mode shows:
 
 - template/session boundaries
-- section-level processing for multi-template input
+- section-level processing for templates with literal text
 - cache events (`FAST SPLIT`, `CACHE HIT`, `CACHE MISS`)
 - per-operation input/result/timing
 - `map` item processing and sub-pipeline steps
@@ -157,7 +157,7 @@ string-pipeline -d '{split:,:..|map:{split: :..|join:-}}' 'hello world,foo bar'
 
 Use item-level traces to verify each sub-pipeline result.
 
-### Check cache reuse in multi-template input
+### Check cache reuse in templates with literal text
 
 ```bash
 string-pipeline -d 'A:{split:,:0|upper} B:{split:,:1|upper} C:{split:,:0|upper}' 'x,y,z'

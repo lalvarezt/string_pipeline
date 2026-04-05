@@ -217,6 +217,13 @@ HELLO-WORLD
 
 API docs: <https://docs.rs/string_pipeline>
 
+## Deprecations
+
+Use `Template` as the public Rust type in new code.
+
+`MultiTemplate` is retained only as a compatibility name in the current release
+line and is planned for removal in the next major release.
+
 ## Development
 
 ```bash

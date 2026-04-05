@@ -12,7 +12,7 @@
 //! The pipeline system consists of several key components:
 //!
 //! - **Operations**: The [`StringOp`] enum defines all available transformations
-//! - **Templates**: The [`MultiTemplate`] type provides template-based processing
+//! - **Templates**: The [`Template`] type provides template-based processing
 //! - **Execution Engine**: The [`apply_ops_internal`] function processes operation sequences
 //! - **Caching**: Global caches for regex compilation and string splitting
 //! - **Debug Support**: Comprehensive tracing via [`DebugTracer`]

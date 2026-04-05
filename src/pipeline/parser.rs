@@ -95,14 +95,14 @@ pub fn parse_template(template: &str) -> Result<(Vec<StringOp>, bool), String> {
     Ok((ops, debug))
 }
 
-/// Parses a multi-template string containing mixed literal text and template sections.
+/// Parses a template string containing mixed literal text and template sections.
 ///
 /// This function processes strings that contain both literal text and template operations,
 /// creating a sequence of sections that can be processed with caching support.
 ///
 /// # Arguments
 ///
-/// * `template` - The multi-template string to parse
+/// * `template` - The template string to parse
 ///
 /// # Returns
 ///
@@ -112,7 +112,7 @@ pub fn parse_template(template: &str) -> Result<(Vec<StringOp>, bool), String> {
 /// # Examples
 ///
 /// ```rust
-/// // This is an internal function used by MultiTemplate::parse()
+/// // This is an internal function used by Template::parse()
 /// // let (sections, debug) = parse_multi_template("Hello {upper} world").unwrap();
 /// // assert_eq!(sections.len(), 3); // "Hello ", upper operation, " world"
 /// ```
@@ -184,7 +184,7 @@ pub fn parse_multi_template(template: &str) -> Result<(Vec<TemplateSection>, boo
                 let full_template = format!("{{{template_content}}}");
                 let (ops, section_debug) = parse_template(&full_template)?;
                 if section_debug {
-                    debug = true; // If any section has debug enabled, enable for the whole multi-template
+                    debug = true; // If any section has debug enabled, enable for the whole template
                 }
 
                 sections.push(TemplateSection::from_ops(ops));
