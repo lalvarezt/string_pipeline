@@ -113,10 +113,10 @@ pub fn parse_template(template: &str) -> Result<(Vec<StringOp>, bool), String> {
 ///
 /// ```rust
 /// // This is an internal function used by Template::parse()
-/// // let (sections, debug) = parse_multi_template("Hello {upper} world").unwrap();
+/// // let (sections, debug) = parse_template_sections("Hello {upper} world").unwrap();
 /// // assert_eq!(sections.len(), 3); // "Hello ", upper operation, " world"
 /// ```
-pub fn parse_multi_template(template: &str) -> Result<(Vec<TemplateSection>, bool), String> {
+pub fn parse_template_sections(template: &str) -> Result<(Vec<TemplateSection>, bool), String> {
     let mut sections = Vec::new();
     let mut current_literal = String::new();
     let mut chars = template.chars().peekable();
@@ -203,6 +203,16 @@ pub fn parse_multi_template(template: &str) -> Result<(Vec<TemplateSection>, boo
     }
 
     Ok((sections, debug))
+}
+
+/// Deprecated compatibility wrapper for [`parse_template_sections`].
+#[allow(dead_code)]
+#[deprecated(
+    since = "0.14.0",
+    note = "use `parse_template_sections` instead; `parse_multi_template` will be removed in the next major release"
+)]
+pub fn parse_multi_template(template: &str) -> Result<(Vec<TemplateSection>, bool), String> {
+    parse_template_sections(template)
 }
 
 /// Parses a single operation from a parse tree node.

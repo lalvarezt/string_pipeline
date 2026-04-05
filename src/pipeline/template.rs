@@ -118,7 +118,7 @@ use memchr::memchr_iter;
 /// assert_eq!(result, "a | b | c");
 /// ```
 #[derive(Debug, Clone)]
-pub struct MultiTemplate {
+pub struct Template {
     raw: String,
     sections: Vec<TemplateSection>,
     compiled_sections: Vec<CompiledSectionPlan>,
@@ -170,7 +170,7 @@ pub enum TemplateSection {
 
 impl TemplateSection {
     pub(crate) fn from_ops(ops: Vec<StringOp>) -> Self {
-        let cache_key = MultiTemplate::hash_ops(&ops);
+        let cache_key = Template::hash_ops(&ops);
         Self::Template { ops, cache_key }
     }
 }
@@ -460,7 +460,7 @@ impl RenderBuffer {
 /*  impl Template internals                                                 */
 /* ------------------------------------------------------------------------ */
 
-impl MultiTemplate {
+impl Template {
     fn new(raw: String, sections: Vec<TemplateSection>, debug: bool) -> Self {
         let compiled_sections = Self::compile_sections(&sections);
         Self {
@@ -513,7 +513,7 @@ impl MultiTemplate {
             return Ok(single);
         }
 
-        let (sections, _) = parser::parse_multi_template(template)?;
+        let (sections, _) = parser::parse_template_sections(template)?;
         Ok(Self::new(template.to_string(), sections, false))
     }
 
@@ -565,7 +565,7 @@ impl MultiTemplate {
             return Ok(single);
         }
 
-        let (sections, inner_dbg) = parser::parse_multi_template(template)?;
+        let (sections, inner_dbg) = parser::parse_template_sections(template)?;
         Ok(Self::new(
             template.to_string(),
             sections,
@@ -1554,7 +1554,7 @@ impl MultiTemplate {
 /// let template = Template::parse("Hello {upper}!").unwrap();
 /// println!("{}", template); // Prints: Hello {upper}!
 /// ```
-impl Display for MultiTemplate {
+impl Display for Template {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.raw)
     }
@@ -1562,16 +1562,12 @@ impl Display for MultiTemplate {
 
 /* ---------- backward compatibility alias --------------------------------- */
 
-/// Preferred public type alias for template parsing and rendering.
+/// Deprecated compatibility alias.
 ///
-/// Use `Template` in new code.
-///
-/// # Examples
-///
-/// ```rust
-/// use string_pipeline::Template;
-///
-/// let template = Template::parse("{upper}").unwrap();
-/// assert_eq!(template.format("hello").unwrap(), "HELLO");
-/// ```
-pub type Template = MultiTemplate;
+/// Use [`Template`] instead. `MultiTemplate` will be removed in the next major
+/// release.
+#[deprecated(
+    since = "0.14.0",
+    note = "use `Template` instead; `MultiTemplate` will be removed in the next major release"
+)]
+pub type MultiTemplate = Template;

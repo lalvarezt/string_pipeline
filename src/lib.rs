@@ -320,6 +320,7 @@
 
 mod pipeline;
 
+#[allow(deprecated)]
 pub use pipeline::{
     MultiTemplate, RichFormatResult, SectionInfo, SectionType, Template, TemplateOutput,
 };

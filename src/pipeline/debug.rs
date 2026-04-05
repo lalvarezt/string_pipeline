@@ -46,7 +46,7 @@ impl DebugTracer {
         }
     }
 
-    /// Logs the start of a session (template or multi-template processing).
+    /// Logs the start of a session (template or template processing).
     ///
     /// This marks the beginning of a complete processing session, showing
     /// the session type, template string, input data, and optional additional information.
@@ -310,9 +310,9 @@ impl DebugTracer {
         self.separator();
     }
 
-    /// Logs section processing information for multi-template operations.
+    /// Logs section processing information for template operations.
     ///
-    /// This shows progress through different sections of a multi-template,
+    /// This shows progress through different sections of a template,
     /// including section type and content information.
     ///
     /// # Arguments

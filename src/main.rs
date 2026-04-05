@@ -2,7 +2,7 @@ use clap::{CommandFactory, Parser};
 use std::fs;
 use std::io::{self, Read};
 use std::path::PathBuf;
-use string_pipeline::MultiTemplate;
+use string_pipeline::Template;
 
 #[derive(Parser)]
 #[command(
@@ -235,7 +235,7 @@ fn main() {
     });
 
     // Parse template and handle debug mode from both template prefix and CLI flag
-    let template = MultiTemplate::parse_with_debug(&config.template, None).unwrap_or_else(|e| {
+    let template = Template::parse_with_debug(&config.template, None).unwrap_or_else(|e| {
         eprintln!("Error parsing template: {e}");
         std::process::exit(1);
     });

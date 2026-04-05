@@ -52,6 +52,7 @@ use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
+#[allow(deprecated)]
 pub use crate::pipeline::template::{
     MultiTemplate, RichFormatResult, SectionInfo, SectionType, Template, TemplateOutput,
 };
