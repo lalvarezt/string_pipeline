@@ -81,7 +81,7 @@ Add to `Cargo.toml`:
 
 ```toml
 [dependencies]
-string_pipeline = "0.13.4"
+string_pipeline = "0.14.0"
 ```
 
 ### CLI (companion)
