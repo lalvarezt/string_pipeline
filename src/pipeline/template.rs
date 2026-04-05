@@ -48,6 +48,7 @@
 use std::collections::{HashMap, HashSet, hash_map::DefaultHasher};
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
+use std::ops::Range;
 
 use crate::pipeline::get_cached_split;
 use crate::pipeline::{DebugTracer, RangeSpec, StringOp, apply_ops_internal, apply_range, parser}; // ← use global split cache
@@ -271,7 +272,7 @@ pub struct SectionInfo {
 ///
 /// assert_eq!(result.template_outputs[0].template_position, 0);
 /// assert_eq!(result.template_outputs[0].overall_position, 1);
-/// assert_eq!(result.template_outputs[0].output, "MIXED");
+/// assert_eq!(result.template_output(0), Some("MIXED"));
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TemplateOutput {
@@ -279,8 +280,15 @@ pub struct TemplateOutput {
     pub template_position: usize,
     /// Position among all sections, including literals.
     pub overall_position: usize,
-    /// Exact rendered output inserted for this template section.
-    pub output: String,
+    /// Byte range within [`RichFormatResult::rendered`] for this template section.
+    pub rendered_range: Range<usize>,
+}
+
+impl TemplateOutput {
+    /// Borrow this section's rendered output from the full rendered string.
+    pub fn as_str<'a>(&self, rendered: &'a str) -> &'a str {
+        &rendered[self.rendered_range.clone()]
+    }
 }
 
 /// Rich formatting result containing the final rendered string and per-template outputs.
@@ -298,8 +306,8 @@ pub struct TemplateOutput {
 ///
 /// assert_eq!(result.rendered, "asd MIXED bsd mixed");
 /// assert_eq!(result.template_outputs.len(), 2);
-/// assert_eq!(result.template_outputs[0].output, "MIXED");
-/// assert_eq!(result.template_outputs[1].output, "mixed");
+/// assert_eq!(result.template_output(0), Some("MIXED"));
+/// assert_eq!(result.template_output(1), Some("mixed"));
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RichFormatResult {
@@ -307,6 +315,15 @@ pub struct RichFormatResult {
     pub rendered: String,
     /// Outputs for each template section in left-to-right order.
     pub template_outputs: Vec<TemplateOutput>,
+}
+
+impl RichFormatResult {
+    /// Borrow the output of the template section at `index`.
+    pub fn template_output(&self, index: usize) -> Option<&str> {
+        self.template_outputs
+            .get(index)
+            .map(|output| output.as_str(&self.rendered))
+    }
 }
 
 /* ---------- per-format call cache (operation results only) -------------- */
@@ -366,13 +383,15 @@ impl RenderBuffer {
         overall_position: usize,
         output: String,
     ) {
+        let start = self.rendered.len();
         self.rendered.push_str(&output);
+        let end = self.rendered.len();
 
         if let Some(template_outputs) = &mut self.template_outputs {
             template_outputs.push(TemplateOutput {
                 template_position,
                 overall_position,
-                output,
+                rendered_range: start..end,
             });
         }
     }
@@ -572,8 +591,8 @@ impl MultiTemplate {
     /// let result = template.format_rich("MiXeD").unwrap();
     ///
     /// assert_eq!(result.rendered, "asd MIXED bsd mixed");
-    /// assert_eq!(result.template_outputs[0].output, "MIXED");
-    /// assert_eq!(result.template_outputs[1].output, "mixed");
+    /// assert_eq!(result.template_output(0), Some("MIXED"));
+    /// assert_eq!(result.template_output(1), Some("mixed"));
     /// ```
     pub fn format_rich(&self, input: &str) -> Result<RichFormatResult, String> {
         self.render_single_input(input, true)

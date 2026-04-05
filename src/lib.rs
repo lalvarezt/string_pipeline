@@ -147,8 +147,8 @@
 //! let result = template.format_rich("MiXeD").unwrap();
 //!
 //! assert_eq!(result.rendered, "asd MIXED bsd mixed");
-//! assert_eq!(result.template_outputs[0].output, "MIXED");
-//! assert_eq!(result.template_outputs[1].output, "mixed");
+//! assert_eq!(result.template_output(0), Some("MIXED"));
+//! assert_eq!(result.template_output(1), Some("mixed"));
 //! ```
 //!
 //! ## Error Handling

@@ -731,10 +731,10 @@ fn test_format_rich_mixed_template() {
     assert_eq!(result.template_outputs.len(), 2);
     assert_eq!(result.template_outputs[0].template_position, 0);
     assert_eq!(result.template_outputs[0].overall_position, 1);
-    assert_eq!(result.template_outputs[0].output, "MIXED");
+    assert_eq!(result.template_output(0), Some("MIXED"));
     assert_eq!(result.template_outputs[1].template_position, 1);
     assert_eq!(result.template_outputs[1].overall_position, 3);
-    assert_eq!(result.template_outputs[1].output, "mixed");
+    assert_eq!(result.template_output(1), Some("mixed"));
 }
 
 #[test]
@@ -746,7 +746,7 @@ fn test_format_rich_single_template() {
     assert_eq!(result.template_outputs.len(), 1);
     assert_eq!(result.template_outputs[0].template_position, 0);
     assert_eq!(result.template_outputs[0].overall_position, 1);
-    assert_eq!(result.template_outputs[0].output, "HELLO");
+    assert_eq!(result.template_output(0), Some("HELLO"));
 }
 
 #[test]
@@ -758,8 +758,8 @@ fn test_format_rich_consecutive_templates() {
     assert_eq!(result.template_outputs.len(), 2);
     assert_eq!(result.template_outputs[0].overall_position, 0);
     assert_eq!(result.template_outputs[1].overall_position, 1);
-    assert_eq!(result.template_outputs[0].output, "TEST");
-    assert_eq!(result.template_outputs[1].output, "test");
+    assert_eq!(result.template_output(0), Some("TEST"));
+    assert_eq!(result.template_output(1), Some("test"));
 }
 
 #[test]
@@ -778,7 +778,7 @@ fn test_format_rich_empty_template_section() {
 
     assert_eq!(result.rendered, "keep value here");
     assert_eq!(result.template_outputs.len(), 1);
-    assert_eq!(result.template_outputs[0].output, "value");
+    assert_eq!(result.template_output(0), Some("value"));
     assert_eq!(result.template_outputs[0].overall_position, 1);
 }
 
@@ -789,8 +789,8 @@ fn test_format_rich_repeated_template_sections() {
 
     assert_eq!(result.rendered, "First: apple Again: apple");
     assert_eq!(result.template_outputs.len(), 2);
-    assert_eq!(result.template_outputs[0].output, "apple");
-    assert_eq!(result.template_outputs[1].output, "apple");
+    assert_eq!(result.template_output(0), Some("apple"));
+    assert_eq!(result.template_output(1), Some("apple"));
     assert_eq!(result.template_outputs[0].template_position, 0);
     assert_eq!(result.template_outputs[1].template_position, 1);
 }
@@ -807,10 +807,10 @@ fn test_format_rich_complex_pipeline_outputs() {
         "Users: bob;charlie Count: ALICE-BOB-CHARLIE-DAVE-EVE"
     );
     assert_eq!(result.template_outputs.len(), 2);
-    assert_eq!(result.template_outputs[0].output, "bob;charlie");
+    assert_eq!(result.template_output(0), Some("bob;charlie"));
     assert_eq!(
-        result.template_outputs[1].output,
-        "ALICE-BOB-CHARLIE-DAVE-EVE"
+        result.template_output(1),
+        Some("ALICE-BOB-CHARLIE-DAVE-EVE")
     );
 }
 
@@ -821,7 +821,7 @@ fn test_format_rich_shell_variables_do_not_create_template_outputs() {
 
     assert_eq!(result.rendered, "${HOME}/projects/README");
     assert_eq!(result.template_outputs.len(), 1);
-    assert_eq!(result.template_outputs[0].output, "README");
+    assert_eq!(result.template_output(0), Some("README"));
     assert_eq!(result.template_outputs[0].overall_position, 1);
 }
 
@@ -843,8 +843,8 @@ fn test_format_with_inputs_rich_single_inputs() {
 
     assert_eq!(result.rendered, "User: JOHN DOE | Email: john@example.com");
     assert_eq!(result.template_outputs.len(), 2);
-    assert_eq!(result.template_outputs[0].output, "JOHN DOE");
-    assert_eq!(result.template_outputs[1].output, "john@example.com");
+    assert_eq!(result.template_output(0), Some("JOHN DOE"));
+    assert_eq!(result.template_output(1), Some("john@example.com"));
 }
 
 #[test]
@@ -862,8 +862,8 @@ fn test_format_with_inputs_rich_multiple_values() {
         "Users: JOHN DOE PETER PARKER | Files: file1.txt,file2.txt"
     );
     assert_eq!(result.template_outputs.len(), 2);
-    assert_eq!(result.template_outputs[0].output, "JOHN DOE PETER PARKER");
-    assert_eq!(result.template_outputs[1].output, "file1.txt,file2.txt");
+    assert_eq!(result.template_output(0), Some("JOHN DOE PETER PARKER"));
+    assert_eq!(result.template_output(1), Some("file1.txt,file2.txt"));
 }
 
 #[test]
@@ -875,9 +875,9 @@ fn test_format_with_inputs_rich_missing_inputs_and_default_separator() {
 
     assert_eq!(result.rendered, "A: ONE B: two three C: ");
     assert_eq!(result.template_outputs.len(), 3);
-    assert_eq!(result.template_outputs[0].output, "ONE");
-    assert_eq!(result.template_outputs[1].output, "two three");
-    assert_eq!(result.template_outputs[2].output, "");
+    assert_eq!(result.template_output(0), Some("ONE"));
+    assert_eq!(result.template_output(1), Some("two three"));
+    assert_eq!(result.template_output(2), Some(""));
 }
 
 #[test]
