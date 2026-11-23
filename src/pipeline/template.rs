@@ -106,9 +106,11 @@ use memchr::memchr_iter;
 /// ## Debug Mode
 ///
 /// ```rust
-/// use string_pipeline::Template;
+/// use string_pipeline::{ParseOptions, Template};
 ///
-/// let template = Template::parse_with_debug("{split:,:..|sort|join: \\| }", Some(true)).unwrap();
+/// let mut options = ParseOptions::default();
+/// options.debug = Some(true);
+/// let template = Template::parse_with_options("{split:,:..|sort|join: \\| }", options).unwrap();
 /// let result = template.format("c,a,b").unwrap(); // Prints debug info to stderr
 /// assert_eq!(result, "a | b | c");
 /// ```
@@ -149,6 +151,17 @@ enum TemplateExecutionKind {
 enum CachePolicy {
     Never,
     PerCall,
+}
+
+/// Controls optional behavior when parsing a multi-template.
+/// Start with `ParseOptions::default()` and set the options you need.
+#[derive(Debug, Clone, Default)]
+#[non_exhaustive]
+pub struct ParseOptions {
+    /// Interpret brace escapes in literal text. Disabled by default.
+    pub escape_braces: bool,
+    /// Override debug mode. Use `None` to follow the template's debug markers.
+    pub debug: Option<bool>,
 }
 
 /// Represents a section within a parsed template.
@@ -351,59 +364,48 @@ impl MultiTemplate {
         Ok(Self::new(template.to_string(), sections, false))
     }
 
-    /// Parse a template string into a `MultiTemplate` instance.
+    /// Parse a template with the given debug override and default brace handling.
+    #[deprecated(note = "use MultiTemplate::parse_with_options with ParseOptions::debug")]
+    pub fn parse_with_debug(template: &str, debug: Option<bool>) -> Result<Self, String> {
+        Self::parse_with_options(
+            template,
+            ParseOptions {
+                debug,
+                ..ParseOptions::default()
+            },
+        )
+    }
+
+    /// Parse a template with explicit options.
     ///
-    /// Parses template syntax containing literal text and `{operation}` blocks,
-    /// with support for complex operation pipelines and debug mode.
+    /// # Errors
     ///
-    /// # Arguments
-    ///
-    /// * `template` - The template string to parse
-    /// * `debug` - Optional debug mode override (None uses template's debug markers)
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(MultiTemplate)` - Successfully parsed template
-    /// * `Err(String)` - Parse error description
-    ///
-    /// # Template Syntax
-    ///
-    /// - Literal text appears as-is in output
-    /// - `{operation}` blocks apply transformations to input
-    /// - Multiple operations: `{op1|op2|op3}`
-    /// - Debug markers: `{!debug}`
+    /// Returns an error if the template syntax or a pipeline operation is invalid.
     ///
     /// # Examples
     ///
     /// ```rust
-    /// use string_pipeline::Template;
+    /// use string_pipeline::{MultiTemplate, ParseOptions};
     ///
-    /// // Simple template
-    /// let template = Template::parse_with_debug("Hello {upper}!", None).unwrap();
-    ///
-    /// // Complex pipeline
-    /// let template = Template::parse_with_debug("{split:,:..|sort|join: - }", None).unwrap();
-    ///
-    /// // Debug enabled
-    /// let template = Template::parse_with_debug("{!upper|trim}", None).unwrap();
-    ///
-    /// // Debug override
-    /// let template = Template::parse_with_debug("{upper}", Some(true)).unwrap();
+    /// let mut options = ParseOptions::default();
+    /// options.escape_braces = true;
+    /// let template = MultiTemplate::parse_with_options(r"\{{upper}\}", options).unwrap();
+    /// assert_eq!(template.format("hello").unwrap(), "{HELLO}");
     /// ```
-    pub fn parse_with_debug(template: &str, debug: Option<bool>) -> Result<Self, String> {
+    pub fn parse_with_options(template: &str, options: ParseOptions) -> Result<Self, String> {
         // Re-use the single-block shortcut when applicable.
         if let Some(mut single) = Self::try_single_block(template)? {
-            if let Some(dbg_override) = debug {
+            if let Some(dbg_override) = options.debug {
                 single.debug = dbg_override;
             }
             return Ok(single);
         }
 
-        let (sections, inner_dbg) = parser::parse_multi_template(template)?;
+        let (sections, inner_dbg) = parser::parse_multi_template_with_options(template, &options)?;
         Ok(Self::new(
             template.to_string(),
             sections,
-            debug.unwrap_or(inner_dbg),
+            options.debug.unwrap_or(inner_dbg),
         ))
     }
 
@@ -619,7 +621,7 @@ impl MultiTemplate {
     /// ```rust
     /// use string_pipeline::Template;
     ///
-    /// let template = Template::parse_with_debug("{upper}", Some(true)).unwrap();
+    /// let template = Template::parse("{upper}").unwrap().with_debug(true);
     /// assert!(template.is_debug());
     /// ```
     pub fn is_debug(&self) -> bool {

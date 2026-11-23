@@ -16,7 +16,7 @@ use smallvec::SmallVec;
 use super::{PadDirection, RangeSpec, SortDirection, StringOp, TrimDirection};
 
 // Import the new template section types
-use super::template::TemplateSection;
+use super::template::{ParseOptions, TemplateSection};
 
 // Common separator constant to avoid repeated allocations
 const SPACE_SEP: &str = " ";
@@ -117,13 +117,44 @@ pub fn parse_template(template: &str) -> Result<(Vec<StringOp>, bool), String> {
 /// // assert_eq!(sections.len(), 3); // "Hello ", upper operation, " world"
 /// ```
 pub fn parse_multi_template(template: &str) -> Result<(Vec<TemplateSection>, bool), String> {
+    parse_multi_template_with_options(template, &ParseOptions::default())
+}
+
+pub(super) fn parse_multi_template_with_options(
+    template: &str,
+    options: &ParseOptions,
+) -> Result<(Vec<TemplateSection>, bool), String> {
+    #[derive(Clone, Copy)]
+    enum ShellQuote {
+        Single,
+        Double,
+        AnsiC,
+    }
+    use ShellQuote::{AnsiC, Double, Single};
+
     let mut sections = Vec::new();
     let mut current_literal = String::new();
     let mut chars = template.chars().peekable();
     let mut debug = false;
 
     while let Some(ch) = chars.next() {
-        if ch == '{' {
+        if options.escape_braces && ch == '\\' {
+            let mut backslashes = 1;
+            while chars.next_if_eq(&'\\').is_some() {
+                backslashes += 1;
+            }
+
+            // Only runs immediately before a brace participate in escaping.
+            if let Some(brace @ ('{' | '}')) = chars.peek().copied() {
+                current_literal.extend(std::iter::repeat_n('\\', backslashes / 2));
+                if backslashes % 2 == 1 {
+                    chars.next();
+                    current_literal.push(brace);
+                }
+            } else {
+                current_literal.extend(std::iter::repeat_n('\\', backslashes));
+            }
+        } else if ch == '{' {
             // Check if this is a shell variable expansion ${...}
             if current_literal.ends_with('$') {
                 // This is a shell variable expansion, treat as literal text
@@ -131,11 +162,52 @@ pub fn parse_multi_template(template: &str) -> Result<(Vec<TemplateSection>, boo
 
                 // Find the matching closing brace for the shell variable
                 let mut brace_count = 1;
-                for inner_ch in chars.by_ref() {
+                let mut quote = None;
+                let mut quoted_expansions = Vec::new();
+                while let Some(inner_ch) = chars.next() {
                     current_literal.push(inner_ch);
+                    if options.escape_braces {
+                        match (quote, inner_ch) {
+                            (Some(Single | AnsiC), '\'') | (Some(Double), '"') => {
+                                quote = None;
+                                continue;
+                            }
+                            (Some(Single), _) => continue,
+                            (_, '\\') => {
+                                current_literal.extend(chars.next());
+                                continue;
+                            }
+                            (None, '\'') => {
+                                quote = Some(Single);
+                                continue;
+                            }
+                            (None, '"') => {
+                                quote = Some(Double);
+                                continue;
+                            }
+                            (None, '$') if chars.next_if_eq(&'\'').is_some() => {
+                                current_literal.push('\'');
+                                quote = Some(AnsiC);
+                                continue;
+                            }
+                            (Some(Double), '$') if chars.next_if_eq(&'{').is_some() => {
+                                current_literal.push('{');
+                                brace_count += 1;
+                                quoted_expansions.push(brace_count);
+                                quote = None;
+                                continue;
+                            }
+                            (Some(_), _) => continue,
+                            (None, _) => {}
+                        }
+                    }
                     if inner_ch == '{' {
                         brace_count += 1;
                     } else if inner_ch == '}' {
+                        if quoted_expansions.last() == Some(&brace_count) {
+                            quoted_expansions.pop();
+                            quote = Some(Double);
+                        }
                         brace_count -= 1;
                         if brace_count == 0 {
                             break; // Found matching closing brace for shell variable

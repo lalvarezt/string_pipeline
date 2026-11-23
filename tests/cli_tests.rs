@@ -170,6 +170,31 @@ fn test_template_file_multi_template() {
 }
 
 #[test]
+fn test_template_file_with_brace_escapes() {
+    let source = r"jq -n --arg key '{split:/:0}' '\{name: $key\}'";
+    let file = create_temp_file(source);
+    let path = file.path().to_str().unwrap();
+
+    assert!(
+        !run_cli(&["--validate", "--template-file", path])
+            .status
+            .success()
+    );
+    let validation = run_cli(&["--escape", "--validate", "--template-file", path]);
+    assert!(
+        validation.status.success(),
+        "{}",
+        String::from_utf8_lossy(&validation.stderr)
+    );
+    let output = run_cli_with_stdin(&["-e", "-q", "--template-file", path], "alpha/beta");
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "jq -n --arg key 'alpha' '{name: $key}'"
+    );
+}
+
+#[test]
 fn test_input_file_option() {
     let input_file = create_temp_file("hello world");
     let output = run_cli(&[

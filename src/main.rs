@@ -2,7 +2,7 @@ use clap::{CommandFactory, Parser};
 use std::fs;
 use std::io::{self, Read};
 use std::path::PathBuf;
-use string_pipeline::MultiTemplate;
+use string_pipeline::{MultiTemplate, ParseOptions};
 
 #[derive(Parser)]
 #[command(
@@ -35,6 +35,10 @@ struct Cli {
     #[arg(short = 'd', long = "debug")]
     debug: bool,
 
+    /// Enable brace escapes in literal template text
+    #[arg(short = 'e', long)]
+    escape: bool,
+
     /// Validate template syntax without processing input
     #[arg(long = "validate")]
     validate: bool,
@@ -58,7 +62,7 @@ struct Config {
     input: Option<String>,
     validate: bool,
     quiet: bool,
-    debug: bool,
+    parse_options: ParseOptions,
 }
 
 /// Read content from a file with proper error handling
@@ -121,13 +125,21 @@ fn build_config(cli: Cli) -> Result<Config, String> {
     } else {
         Some(get_input(&cli)?)
     };
+    let debug = if cli.quiet {
+        Some(false)
+    } else {
+        cli.debug.then_some(true)
+    };
+    let mut parse_options = ParseOptions::default();
+    parse_options.escape_braces = cli.escape;
+    parse_options.debug = debug;
 
     Ok(Config {
         template,
         input,
         validate: cli.validate,
         quiet: cli.quiet,
-        debug: cli.debug,
+        parse_options,
     })
 }
 
@@ -195,7 +207,11 @@ CACHING:
   In 'A: {{split:,:0}} B: {{split:,:1}} C: {{split:,:0}}', the input is
   split only once, with subsequent operations reusing the cached split result.
 
-ESCAPING:
+LITERAL BRACE ESCAPING:
+  Use -e or --escape to emit literal braces with \\{{ and \\}}.
+  -e '\\{{{{upper}}\\}}' prints '{{HELLO}}' for input 'hello'.
+
+ARGUMENT ESCAPING:
   \\:  - Literal colon
   \\|  - Literal pipe
   \\}} - Literal closing brace
@@ -234,16 +250,11 @@ fn main() {
         std::process::exit(1);
     });
 
-    // Parse template and handle debug mode from both template prefix and CLI flag
-    let template = MultiTemplate::parse_with_debug(&config.template, None).unwrap_or_else(|e| {
-        eprintln!("Error parsing template: {e}");
-        std::process::exit(1);
-    });
-
-    // Enable debug if either the template has ! prefix OR the CLI debug flag is set
-    // Disable debug only if quiet mode is enabled
-    let should_debug = (template.is_debug() || config.debug) && !config.quiet;
-    let template = template.with_debug(should_debug);
+    let template = MultiTemplate::parse_with_options(&config.template, config.parse_options)
+        .unwrap_or_else(|e| {
+            eprintln!("Error parsing template: {e}");
+            std::process::exit(1);
+        });
 
     // If just validating, exit here
     if config.validate {

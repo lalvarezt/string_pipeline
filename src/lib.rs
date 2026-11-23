@@ -260,4 +260,4 @@
 
 mod pipeline;
 
-pub use pipeline::{MultiTemplate, SectionInfo, SectionType, Template};
+pub use pipeline::{MultiTemplate, ParseOptions, SectionInfo, SectionType, Template};

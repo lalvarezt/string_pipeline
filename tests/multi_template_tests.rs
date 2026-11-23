@@ -1,4 +1,10 @@
-use string_pipeline::{MultiTemplate, SectionType};
+use string_pipeline::{MultiTemplate, ParseOptions, SectionType};
+
+fn brace_escape_options() -> ParseOptions {
+    let mut options = ParseOptions::default();
+    options.escape_braces = true;
+    options
+}
 
 #[test]
 fn test_multi_template_literal_text_only() {
@@ -6,6 +12,75 @@ fn test_multi_template_literal_text_only() {
     let template = MultiTemplate::parse("Just plain text without any templates").unwrap();
     let result = template.format("input_ignored").unwrap();
     assert_eq!(result, "Just plain text without any templates");
+}
+
+#[test]
+fn test_multi_template_escaped_literal_braces_in_jq_commands() {
+    for (source, expected) in [
+        (r"jq -n '\{\}'", "jq -n '{}'"),
+        (
+            r"jq -n --arg key '{split:/:0}' '\{name: $key\}'",
+            "jq -n --arg key 'alpha' '{name: $key}'",
+        ),
+        (r"\{{}\}", "{alpha/beta}"),
+    ] {
+        let template = MultiTemplate::parse_with_options(source, brace_escape_options()).unwrap();
+        assert_eq!(template.template_string(), source);
+        assert_eq!(template.format("alpha/beta").unwrap(), expected);
+    }
+}
+
+#[test]
+fn test_multi_template_backslashes_in_literal_text() {
+    for (source, expected) in [
+        (r"\n \\n \", r"\n \\n \"),
+        (r"\\{upper}", r"\ALPHA"),
+        (r"\\\{upper\\\}", r"\{upper\}"),
+        (r"${VAR:-\{\}}", r"${VAR:-\{\}}"),
+    ] {
+        let template = MultiTemplate::parse_with_options(source, brace_escape_options()).unwrap();
+        assert_eq!(template.format("alpha").unwrap(), expected, "{source}");
+    }
+}
+
+#[test]
+fn test_brace_escapes_preserve_shell_expansions() {
+    for expansion in [
+        r"${VAR:-a\}b\}c}",
+        r"${VAR:-'\{a}b\}c'}",
+        r#"${VAR:-"\{a}b\}c"}"#,
+        r#"${VAR:-"${ALT:-"a}b\}c"}"}"#,
+        r"${VAR:-$'can\'t'}",
+    ] {
+        let source = format!("{expansion} {}", r"\{{}\}");
+        let template = MultiTemplate::parse_with_options(&source, brace_escape_options()).unwrap();
+        assert_eq!(
+            template.format("alpha").unwrap(),
+            format!("{expansion} {{alpha}}")
+        );
+    }
+}
+
+#[test]
+#[allow(deprecated)]
+fn test_multi_template_default_backslashes_keep_legacy_behavior() {
+    let source = r#"jq -n '" }" | test("\\}")'"#;
+    for template in [
+        MultiTemplate::parse(source),
+        MultiTemplate::parse_with_debug(source, None),
+        MultiTemplate::parse_with_options(source, ParseOptions::default()),
+    ] {
+        assert_eq!(template.unwrap().format("alpha").unwrap(), source);
+    }
+
+    let template = MultiTemplate::parse(r"\{upper}").unwrap();
+    assert_eq!(template.format("alpha").unwrap(), r"\ALPHA");
+}
+
+#[test]
+fn test_multi_template_unescaped_docker_braces_still_fail_parsing() {
+    let source = "docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}'";
+    assert!(MultiTemplate::parse(source).is_err());
 }
 
 #[test]
@@ -79,9 +154,10 @@ fn test_multi_template_empty_sections() {
 
 #[test]
 fn test_multi_template_debug_mode() {
-    // Test debug mode functionality in multi-templates
+    let mut options = ParseOptions::default();
+    options.debug = Some(true);
     let template =
-        MultiTemplate::parse_with_debug("Debug: {!upper} Normal: {lower}", Some(true)).unwrap();
+        MultiTemplate::parse_with_options("Debug: {!upper} Normal: {lower}", options).unwrap();
     assert!(template.is_debug());
     let result = template.format("TeSt").unwrap();
     assert_eq!(result, "Debug: TEST Normal: test");
