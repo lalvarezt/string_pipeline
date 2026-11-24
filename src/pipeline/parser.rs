@@ -136,8 +136,19 @@ pub(super) fn parse_multi_template_with_options(
     let mut current_literal = String::new();
     let mut chars = template.chars().peekable();
     let mut debug = false;
+    let mut outer_quote = None;
+    let mut outer_escaped = false;
 
     while let Some(ch) = chars.next() {
+        if options.escape_braces && !std::mem::take(&mut outer_escaped) {
+            match (outer_quote, ch) {
+                (Some(delimiter), _) if ch == delimiter => outer_quote = None,
+                (Some('\''), _) => {}
+                (_, '\\') => outer_escaped = true,
+                (None, delimiter @ ('\'' | '"')) => outer_quote = Some(delimiter),
+                _ => {}
+            }
+        }
         if options.escape_braces && matches!(ch, '{' | '}') && chars.next_if_eq(&ch).is_some() {
             current_literal.push(ch);
         } else if ch == '{' {
@@ -167,6 +178,9 @@ pub(super) fn parse_multi_template_with_options(
                     };
                     current_literal.push(inner_ch);
                     if fallback.is_some() {
+                        // Apostrophes in double-quoted parameter words are literal.
+                        let single_quotes =
+                            outer_quote != Some('"') && quoted_expansions.is_empty();
                         match (quote, inner_ch) {
                             (Some(Single | AnsiC), '\'') | (Some(Double), '"') => {
                                 quote = None;
@@ -177,7 +191,7 @@ pub(super) fn parse_multi_template_with_options(
                                 current_literal.extend(chars.next());
                                 continue;
                             }
-                            (None, '\'') => {
+                            (None, '\'') if single_quotes => {
                                 quote = Some(Single);
                                 continue;
                             }
@@ -185,7 +199,7 @@ pub(super) fn parse_multi_template_with_options(
                                 quote = Some(Double);
                                 continue;
                             }
-                            (None, '$') if chars.next_if_eq(&'\'').is_some() => {
+                            (None, '$') if single_quotes && chars.next_if_eq(&'\'').is_some() => {
                                 current_literal.push('\'');
                                 quote = Some(AnsiC);
                                 continue;
