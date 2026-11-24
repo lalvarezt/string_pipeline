@@ -50,6 +50,7 @@ fn test_multi_template_backslashes_in_literal_text() {
 fn test_brace_escapes_preserve_shell_expansions() {
     for expansion in [
         r"${OUTER:-${INNER:-x}}",
+        r#""${OUTER:-${INNER:-don't}}""#,
         r"${VAR:-'a}}}b'}",
         r"${VAR:-a\}b\}c}",
         r"${VAR:-'\{a}b\}c'}",

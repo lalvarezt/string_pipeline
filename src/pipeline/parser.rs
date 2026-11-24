@@ -146,13 +146,27 @@ pub(super) fn parse_multi_template_with_options(
                 // This is a shell variable expansion, treat as literal text
                 current_literal.push(ch);
 
-                // Find the matching closing brace for the shell variable
+                let mut fallback = options
+                    .escape_braces
+                    .then(|| (chars.clone(), current_literal.len()));
                 let mut brace_count = 1;
                 let mut quote = None;
                 let mut quoted_expansions = Vec::new();
-                while let Some(inner_ch) = chars.next() {
+                loop {
+                    let Some(inner_ch) = chars.next() else {
+                        // Shell quoting can depend on text outside the expansion.
+                        let Some((start, literal_len)) = fallback.take() else {
+                            return Err("Unclosed shell variable brace".to_string());
+                        };
+                        chars = start;
+                        current_literal.truncate(literal_len);
+                        brace_count = 1;
+                        quote = None;
+                        quoted_expansions.clear();
+                        continue;
+                    };
                     current_literal.push(inner_ch);
-                    if options.escape_braces {
+                    if fallback.is_some() {
                         match (quote, inner_ch) {
                             (Some(Single | AnsiC), '\'') | (Some(Double), '"') => {
                                 quote = None;
@@ -199,10 +213,6 @@ pub(super) fn parse_multi_template_with_options(
                             break; // Found matching closing brace for shell variable
                         }
                     }
-                }
-
-                if brace_count > 0 {
-                    return Err("Unclosed shell variable brace".to_string());
                 }
             } else {
                 // Found start of template section
