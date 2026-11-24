@@ -138,22 +138,8 @@ pub(super) fn parse_multi_template_with_options(
     let mut debug = false;
 
     while let Some(ch) = chars.next() {
-        if options.escape_braces && ch == '\\' {
-            let mut backslashes = 1;
-            while chars.next_if_eq(&'\\').is_some() {
-                backslashes += 1;
-            }
-
-            // Only runs immediately before a brace participate in escaping.
-            if let Some(brace @ ('{' | '}')) = chars.peek().copied() {
-                current_literal.extend(std::iter::repeat_n('\\', backslashes / 2));
-                if backslashes % 2 == 1 {
-                    chars.next();
-                    current_literal.push(brace);
-                }
-            } else {
-                current_literal.extend(std::iter::repeat_n('\\', backslashes));
-            }
+        if options.escape_braces && matches!(ch, '{' | '}') && chars.next_if_eq(&ch).is_some() {
+            current_literal.push(ch);
         } else if ch == '{' {
             // Check if this is a shell variable expansion ${...}
             if current_literal.ends_with('$') {

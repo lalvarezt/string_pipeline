@@ -17,12 +17,15 @@ fn test_multi_template_literal_text_only() {
 #[test]
 fn test_multi_template_escaped_literal_braces_in_jq_commands() {
     for (source, expected) in [
-        (r"jq -n '\{\}'", "jq -n '{}'"),
+        ("jq -n '{{}}'", "jq -n '{}'"),
         (
-            r"jq -n --arg key '{split:/:0}' '\{name: $key\}'",
+            "jq -n --arg key '{split:/:0}' '{{name: $key}}'",
             "jq -n --arg key 'alpha' '{name: $key}'",
         ),
-        (r"\{{}\}", "{alpha/beta}"),
+        ("{{}}", "{}"),
+        ("{{{}}}", "{alpha/beta}"),
+        ("{{{upper}}}", "{ALPHA/BETA}"),
+        ("{upper}}}", "ALPHA/BETA}"),
     ] {
         let template = MultiTemplate::parse_with_options(source, brace_escape_options()).unwrap();
         assert_eq!(template.template_string(), source);
@@ -34,8 +37,8 @@ fn test_multi_template_escaped_literal_braces_in_jq_commands() {
 fn test_multi_template_backslashes_in_literal_text() {
     for (source, expected) in [
         (r"\n \\n \", r"\n \\n \"),
-        (r"\\{upper}", r"\ALPHA"),
-        (r"\\\{upper\\\}", r"\{upper\}"),
+        (r"\\{upper}", r"\\ALPHA"),
+        (r"\{{upper}}", r"\{upper}"),
         (r"${VAR:-\{\}}", r"${VAR:-\{\}}"),
     ] {
         let template = MultiTemplate::parse_with_options(source, brace_escape_options()).unwrap();
@@ -46,13 +49,15 @@ fn test_multi_template_backslashes_in_literal_text() {
 #[test]
 fn test_brace_escapes_preserve_shell_expansions() {
     for expansion in [
+        r"${OUTER:-${INNER:-x}}",
+        r"${VAR:-'a}}}b'}",
         r"${VAR:-a\}b\}c}",
         r"${VAR:-'\{a}b\}c'}",
         r#"${VAR:-"\{a}b\}c"}"#,
         r#"${VAR:-"${ALT:-"a}b\}c"}"}"#,
         r"${VAR:-$'can\'t'}",
     ] {
-        let source = format!("{expansion} {}", r"\{{}\}");
+        let source = format!("{expansion} {}", "{{{}}}");
         let template = MultiTemplate::parse_with_options(&source, brace_escape_options()).unwrap();
         assert_eq!(
             template.format("alpha").unwrap(),
@@ -78,9 +83,12 @@ fn test_multi_template_default_backslashes_keep_legacy_behavior() {
 }
 
 #[test]
-fn test_multi_template_unescaped_docker_braces_still_fail_parsing() {
+fn test_multi_template_docker_braces() {
     let source = "docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}'";
     assert!(MultiTemplate::parse(source).is_err());
+    let escaped = "docker images --format '{{{{.Repository}}}}:{{{{.Tag}}}} {{{{.ID}}}}'";
+    let template = MultiTemplate::parse_with_options(escaped, brace_escape_options()).unwrap();
+    assert_eq!(template.format("alpha").unwrap(), source);
 }
 
 #[test]

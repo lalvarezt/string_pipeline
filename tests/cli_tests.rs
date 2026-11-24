@@ -171,7 +171,7 @@ fn test_template_file_multi_template() {
 
 #[test]
 fn test_template_file_with_brace_escapes() {
-    let source = r"jq -n --arg key '{split:/:0}' '\{name: $key\}'";
+    let source = "jq -n --arg key '{split:/:0}' '{{name: $key}}'";
     let file = create_temp_file(source);
     let path = file.path().to_str().unwrap();
 

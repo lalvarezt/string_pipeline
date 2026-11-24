@@ -158,7 +158,7 @@ enum CachePolicy {
 #[derive(Debug, Clone, Default)]
 #[non_exhaustive]
 pub struct ParseOptions {
-    /// Interpret brace escapes in literal text. Disabled by default.
+    /// Interpret doubled braces as literal braces. Disabled by default.
     pub escape_braces: bool,
     /// Override debug mode. Use `None` to follow the template's debug markers.
     pub debug: Option<bool>,
@@ -389,12 +389,16 @@ impl MultiTemplate {
     ///
     /// let mut options = ParseOptions::default();
     /// options.escape_braces = true;
-    /// let template = MultiTemplate::parse_with_options(r"\{{upper}\}", options).unwrap();
+    /// let template = MultiTemplate::parse_with_options("{{{upper}}}", options).unwrap();
     /// assert_eq!(template.format("hello").unwrap(), "{HELLO}");
     /// ```
     pub fn parse_with_options(template: &str, options: ParseOptions) -> Result<Self, String> {
-        // Re-use the single-block shortcut when applicable.
-        if let Some(mut single) = Self::try_single_block(template)? {
+        let single = if options.escape_braces && template.starts_with("{{") {
+            None
+        } else {
+            Self::try_single_block(template)?
+        };
+        if let Some(mut single) = single {
             if let Some(dbg_override) = options.debug {
                 single.debug = dbg_override;
             }

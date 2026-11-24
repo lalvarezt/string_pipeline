@@ -35,7 +35,7 @@ struct Cli {
     #[arg(short = 'd', long = "debug")]
     debug: bool,
 
-    /// Enable brace escapes in literal template text
+    /// Enable doubled-brace escapes in literal template text
     #[arg(short = 'e', long)]
     escape: bool,
 
@@ -208,8 +208,8 @@ CACHING:
   split only once, with subsequent operations reusing the cached split result.
 
 LITERAL BRACE ESCAPING:
-  Use -e or --escape to emit literal braces with \\{{ and \\}}.
-  -e '\\{{{{upper}}\\}}' prints '{{HELLO}}' for input 'hello'.
+  Use -e or --escape to emit literal braces with {{{{ and }}}}.
+  -e '{{{{{{upper}}}}}}' prints '{{HELLO}}' for input 'hello'.
 
 ARGUMENT ESCAPING:
   \\:  - Literal colon
