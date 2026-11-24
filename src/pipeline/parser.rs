@@ -162,7 +162,9 @@ pub(super) fn parse_multi_template_with_options(
                     .then(|| (chars.clone(), current_literal.len()));
                 let mut brace_count = 1;
                 let mut quote = None;
-                let mut quoted_expansions = Vec::new();
+                let mut double_quoted = outer_quote == Some('"');
+                let mut single_quotes = !double_quoted || is_shell_pattern_word(chars.clone());
+                let mut nested_expansions = Vec::new();
                 loop {
                     let Some(inner_ch) = chars.next() else {
                         // Shell quoting can depend on text outside the expansion.
@@ -173,14 +175,11 @@ pub(super) fn parse_multi_template_with_options(
                         current_literal.truncate(literal_len);
                         brace_count = 1;
                         quote = None;
-                        quoted_expansions.clear();
+                        nested_expansions.clear();
                         continue;
                     };
                     current_literal.push(inner_ch);
                     if fallback.is_some() {
-                        // Apostrophes in double-quoted parameter words are literal.
-                        let single_quotes =
-                            outer_quote != Some('"') && quoted_expansions.is_empty();
                         match (quote, inner_ch) {
                             (Some(Single | AnsiC), '\'') | (Some(Double), '"') => {
                                 quote = None;
@@ -204,10 +203,21 @@ pub(super) fn parse_multi_template_with_options(
                                 quote = Some(AnsiC);
                                 continue;
                             }
-                            (Some(Double), '$') if chars.next_if_eq(&'{').is_some() => {
+                            (outer @ (None | Some(Double)), '$')
+                                if (double_quoted || matches!(outer, Some(Double)))
+                                    && chars.next_if_eq(&'{').is_some() =>
+                            {
                                 current_literal.push('{');
                                 brace_count += 1;
-                                quoted_expansions.push(brace_count);
+                                nested_expansions.push((
+                                    brace_count,
+                                    outer,
+                                    double_quoted,
+                                    single_quotes,
+                                ));
+                                double_quoted |= matches!(outer, Some(Double));
+                                single_quotes =
+                                    !double_quoted || is_shell_pattern_word(chars.clone());
                                 quote = None;
                                 continue;
                             }
@@ -218,9 +228,14 @@ pub(super) fn parse_multi_template_with_options(
                     if inner_ch == '{' {
                         brace_count += 1;
                     } else if inner_ch == '}' {
-                        if quoted_expansions.last() == Some(&brace_count) {
-                            quoted_expansions.pop();
-                            quote = Some(Double);
+                        if let Some(&(_, outer, outer_double, outer_single)) = nested_expansions
+                            .last()
+                            .filter(|(depth, ..)| *depth == brace_count)
+                        {
+                            nested_expansions.pop();
+                            quote = outer;
+                            double_quoted = outer_double;
+                            single_quotes = outer_single;
                         }
                         brace_count -= 1;
                         if brace_count == 0 {
@@ -285,6 +300,20 @@ pub(super) fn parse_multi_template_with_options(
     }
 
     Ok((sections, debug))
+}
+
+// POSIX prefix and suffix patterns still recognize single quotes inside a
+// double-quoted expansion.
+fn is_shell_pattern_word(mut chars: impl Iterator<Item = char>) -> bool {
+    let operator = match chars.next() {
+        Some(first) if first.is_ascii_digit() => chars.find(|ch| !ch.is_ascii_digit()),
+        Some(first) if first.is_ascii_alphabetic() || first == '_' => {
+            chars.find(|ch| !ch.is_ascii_alphanumeric() && *ch != '_')
+        }
+        Some('@' | '*' | '#' | '?' | '-' | '$' | '!') => chars.next(),
+        _ => None,
+    };
+    matches!(operator, Some('#' | '%'))
 }
 
 /// Parses a single operation from a parse tree node.

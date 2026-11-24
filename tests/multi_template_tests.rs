@@ -80,6 +80,18 @@ fn test_brace_escapes_render_between_double_quoted_shell_expansions() {
 }
 
 #[test]
+fn test_brace_escapes_preserve_quoted_shell_patterns() {
+    for expansion in [r"${VAR#'}}}'}", r"${VAR%'}}}'}", r"${OUTER:-${VAR#'}}}'}}"] {
+        let source = format!(r#""{expansion} {{upper}}""#);
+        let template = MultiTemplate::parse_with_options(&source, brace_escape_options()).unwrap();
+        assert_eq!(
+            template.format("alpha").unwrap(),
+            format!(r#""{expansion} ALPHA""#)
+        );
+    }
+}
+
+#[test]
 #[allow(deprecated)]
 fn test_multi_template_default_backslashes_keep_legacy_behavior() {
     let source = r#"jq -n '" }" | test("\\}")'"#;
